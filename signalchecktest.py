@@ -14,8 +14,8 @@ st.set_page_config(page_title="Signal Check", layout="wide")
 st.title("Signal Check")
 st.write("RSI Threshold Statistics")
 
-def calculate_rsi(prices: pd.Series, window: int = 14) -> pd.Series:
-    """Calculate RSI using Wilder's smoothing method"""
+def calculate_rsi(prices: pd.Series, window: int = 14, method: str = "wilders") -> pd.Series:
+    """Calculate RSI using specified method (Wilder's smoothing or simple moving average)"""
     if len(prices) < window + 1:
         return pd.Series(index=prices.index, dtype=float)
     
@@ -25,12 +25,17 @@ def calculate_rsi(prices: pd.Series, window: int = 14) -> pd.Series:
     gains = delta.where(delta > 0, 0)
     losses = -delta.where(delta < 0, 0)
     
-    # Wilder's smoothing: use exponential moving average with alpha = 1/window
-    alpha = 1.0 / window
-    
-    # Calculate smoothed average gains and losses
-    avg_gains = gains.ewm(alpha=alpha, adjust=False).mean()
-    avg_losses = losses.ewm(alpha=alpha, adjust=False).mean()
+    if method == "wilders":
+        # Wilder's smoothing: use exponential moving average with alpha = 1/window
+        alpha = 1.0 / window
+        
+        # Calculate smoothed average gains and losses
+        avg_gains = gains.ewm(alpha=alpha, adjust=False).mean()
+        avg_losses = losses.ewm(alpha=alpha, adjust=False).mean()
+    else:
+        # Simple moving average method
+        avg_gains = gains.rolling(window=window).mean()
+        avg_losses = losses.rolling(window=window).mean()
     
     # Calculate relative strength
     rs = avg_gains / avg_losses
@@ -80,10 +85,10 @@ def get_stock_data(ticker: str, start_date=None, end_date=None) -> pd.Series:
         st.error(f"Error fetching data for {ticker}: {str(e)}")
         return None
 
-def analyze_rsi_signals(signal_prices: pd.Series, target_prices: pd.Series, rsi_threshold: float, comparison: str = "less_than", rsi_period: int = 14) -> Dict:
+def analyze_rsi_signals(signal_prices: pd.Series, target_prices: pd.Series, rsi_threshold: float, comparison: str = "less_than", rsi_period: int = 14, rsi_method: str = "wilders") -> Dict:
     """Analyze RSI signals for a specific threshold"""
-    # Calculate RSI for the SIGNAL ticker using specified period
-    signal_rsi = calculate_rsi(signal_prices, window=rsi_period)
+    # Calculate RSI for the SIGNAL ticker using specified period and method
+    signal_rsi = calculate_rsi(signal_prices, window=rsi_period, method=rsi_method)
     
     # Generate buy signals based on SIGNAL RSI threshold and comparison
     if comparison == "less_than":
@@ -341,7 +346,7 @@ def validate_data_quality(data: pd.Series, ticker: str) -> Tuple[bool, List[str]
     return True, messages
 
 def run_rsi_analysis(signal_ticker: str, target_ticker: str, rsi_min: float, rsi_max: float, comparison: str, 
-                    start_date=None, end_date=None, rsi_period: int = 14, benchmark_ticker: str = "SPY") -> Tuple[pd.DataFrame, pd.Series, List[str]]:
+                    start_date=None, end_date=None, rsi_period: int = 14, rsi_method: str = "wilders", benchmark_ticker: str = "SPY") -> Tuple[pd.DataFrame, pd.Series, List[str]]:
     """Run comprehensive RSI analysis across the specified range"""
     
     # Fetch data with quality validation
@@ -393,14 +398,14 @@ def run_rsi_analysis(signal_ticker: str, target_ticker: str, rsi_min: float, rsi
     total_thresholds = len(rsi_thresholds)
     
     for i, threshold in enumerate(rsi_thresholds):
-        analysis = analyze_rsi_signals(signal_data, target_data, threshold, comparison, rsi_period)
+        analysis = analyze_rsi_signals(signal_data, target_data, threshold, comparison, rsi_period, rsi_method)
         
         # Calculate statistical significance
         strategy_equity_curve = analysis['equity_curve']
         if len(strategy_equity_curve) > 0:
             # Create benchmark equity curve that follows the same RSI conditions
             # This ensures we're comparing strategy vs benchmark under the same conditions
-            signal_rsi = calculate_rsi(signal_data, window=rsi_period)
+            signal_rsi = calculate_rsi(signal_data, window=rsi_period, method=rsi_method)
             
             # Generate buy signals for benchmark (same as strategy)
             if comparison == "less_than":
@@ -461,7 +466,7 @@ def run_rsi_analysis(signal_ticker: str, target_ticker: str, rsi_min: float, rsi
             risk_metrics = calculate_additional_metrics(analysis['returns'], analysis['equity_curve'], analysis['annualized_return'])
         else:
             # Calculate benchmark average return even when strategy has no trades
-            signal_rsi = calculate_rsi(signal_data, window=rsi_period)
+            signal_rsi = calculate_rsi(signal_data, window=rsi_period, method=rsi_method)
             
             # Generate buy signals for benchmark (same as strategy)
             if comparison == "less_than":
@@ -557,6 +562,8 @@ def run_rsi_analysis(signal_ticker: str, target_ticker: str, rsi_min: float, rsi
     
     return pd.DataFrame(results), benchmark, all_messages
 
+
+
 # Streamlit Interface
 st.sidebar.header("📊 Configuration")
 
@@ -566,6 +573,12 @@ signal_ticker = st.sidebar.text_input("Signal Ticker", value="QQQ", help="The ti
 # RSI Period selection
 rsi_period = st.sidebar.number_input("RSI Period (Days)", min_value=1, max_value=50, value=10, 
                                     help="How many days to look back when calculating RSI. 10 is more sensitive to recent changes than the standard 14. Lower numbers make RSI more responsive to recent market movements.")
+
+# RSI Calculation Method
+rsi_method = st.sidebar.selectbox("RSI Calculation Method", 
+                                 ["wilders", "simple"], 
+                                 format_func=lambda x: "Wilder's Smoothing" if x == "wilders" else "Simple Moving Average",
+                                 help="Wilder's smoothing is more responsive to recent changes and is the original method. Simple moving average is more traditional but less responsive.")
 
 # Conditional target ticker default based on RSI condition
 comparison = st.sidebar.selectbox("RSI Condition", 
@@ -623,7 +636,7 @@ st.sidebar.markdown("---")
 if st.sidebar.button("🚀 Run RSI Analysis", type="primary", use_container_width=True):
     if rsi_min < rsi_max and (not use_date_range or (start_date and end_date and start_date < end_date)):
         try:
-            results_df, benchmark, data_messages = run_rsi_analysis(signal_ticker, target_ticker, rsi_min, rsi_max, comparison, start_date, end_date, rsi_period, benchmark_ticker)
+            results_df, benchmark, data_messages = run_rsi_analysis(signal_ticker, target_ticker, rsi_min, rsi_max, comparison, start_date, end_date, rsi_period, rsi_method, benchmark_ticker)
             
             if results_df is not None and benchmark is not None and not results_df.empty:
                 # Store analysis results in session state
@@ -656,6 +669,7 @@ with col1:
     st.write(f"**Target Ticker:** {target_ticker} (buy/sell based on signals)")
     st.write(f"**Benchmark:** {benchmark_ticker} ({'S&P 500' if benchmark_ticker == 'SPY' else 'Cash Equivalent'})")
     st.write(f"**RSI Period:** {rsi_period}-day RSI")
+    st.write(f"**RSI Method:** {'Wilder\'s Smoothing' if rsi_method == 'wilders' else 'Simple Moving Average'}")
     st.write(f"**RSI Condition:** {signal_ticker} RSI {'≤' if comparison == 'less_than' else '≥'} threshold")
     st.write(f"**RSI Range:** {rsi_min} - {rsi_max}")
     if use_date_range and start_date and end_date:
