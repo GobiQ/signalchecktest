@@ -574,11 +574,8 @@ signal_ticker = st.sidebar.text_input("Signal Ticker", value="QQQ", help="The ti
 rsi_period = st.sidebar.number_input("RSI Period (Days)", min_value=1, max_value=50, value=10, 
                                     help="How many days to look back when calculating RSI. 10 is more sensitive to recent changes than the standard 14. Lower numbers make RSI more responsive to recent market movements.")
 
-# RSI Calculation Method
-rsi_method = st.sidebar.selectbox("RSI Calculation Method", 
-                                 ["wilders", "simple"], 
-                                 format_func=lambda x: "Wilder's Smoothing" if x == "wilders" else "Simple Moving Average",
-                                 help="Wilder's smoothing is more responsive to recent changes and is the original method. This is the method utilized by TradingView and uses exponential smoothing. Simple moving average is more traditional but less responsive.")
+# RSI Calculation Method - Fixed to Wilder's method
+rsi_method = "wilders"
 
 # Conditional target ticker default based on RSI condition
 comparison = st.sidebar.selectbox("RSI Condition", 
@@ -669,7 +666,7 @@ with col1:
     st.write(f"**Target Ticker:** {target_ticker} (buy/sell based on signals)")
     st.write(f"**Benchmark:** {benchmark_ticker} ({'S&P 500' if benchmark_ticker == 'SPY' else 'Cash Equivalent'})")
     st.write(f"**RSI Period:** {rsi_period}-day RSI")
-    st.write(f"**RSI Method:** {'Wilder\'s Smoothing' if rsi_method == 'wilders' else 'Simple Moving Average'}")
+    st.write(f"**RSI Method:** Wilder's Smoothing")
     st.write(f"**RSI Condition:** {signal_ticker} RSI {'≤' if comparison == 'less_than' else '≥'} threshold")
     st.write(f"**RSI Range:** {rsi_min} - {rsi_max}")
     if use_date_range and start_date and end_date:
