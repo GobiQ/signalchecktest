@@ -578,7 +578,7 @@ rsi_period = st.sidebar.number_input("RSI Period (Days)", min_value=1, max_value
 rsi_method = st.sidebar.selectbox("RSI Calculation Method", 
                                  ["wilders", "simple"], 
                                  format_func=lambda x: "Wilder's Smoothing" if x == "wilders" else "Simple Moving Average",
-                                 help="Wilder's smoothing is more responsive to recent changes and is the original method. Simple moving average is more traditional but less responsive.")
+                                 help="Wilder's smoothing is more responsive to recent changes and is the original method. This is the method utilized by TradingView and uses exponential smoothing. Simple moving average is more traditional but less responsive.")
 
 # Conditional target ticker default based on RSI condition
 comparison = st.sidebar.selectbox("RSI Condition", 
