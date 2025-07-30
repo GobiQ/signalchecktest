@@ -1158,6 +1158,106 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
             mime="text/csv"
         )
         
+        # RSI vs Sortino Ratio Chart
+        st.subheader("📊 RSI Threshold vs Sortino Ratio")
+        st.info("💡 **What this shows:** This chart displays how the Sortino ratio (risk-adjusted return) varies across different RSI thresholds. Higher Sortino ratios indicate better risk-adjusted performance. Look for peaks in the chart to identify optimal RSI thresholds.")
+        
+        fig_sortino_rsi = go.Figure()
+        
+        # Add points for significant signals (green)
+        significant_data = valid_signals[valid_signals['significant'] == True]
+        if not significant_data.empty:
+            fig_sortino_rsi.add_trace(go.Scatter(
+                x=significant_data['RSI_Threshold'],
+                y=significant_data['Sortino_Ratio'],
+                mode='markers+lines',
+                name='Significant Signals',
+                marker=dict(color='green', size=8),
+                line=dict(color='green', width=2),
+                hovertemplate='<b>RSI %{x}</b><br>' +
+                            'Sortino Ratio: %{y:.2f}<br>' +
+                            'Significant: ✓<extra></extra>'
+            ))
+        
+        # Add points for non-significant signals (red)
+        non_significant_data = valid_signals[valid_signals['significant'] == False]
+        if not non_significant_data.empty:
+            fig_sortino_rsi.add_trace(go.Scatter(
+                x=non_significant_data['RSI_Threshold'],
+                y=non_significant_data['Sortino_Ratio'],
+                mode='markers+lines',
+                name='Non-Significant Signals',
+                marker=dict(color='red', size=8),
+                line=dict(color='red', width=2),
+                hovertemplate='<b>RSI %{x}</b><br>' +
+                            'Sortino Ratio: %{y:.2f}<br>' +
+                            'Significant: ✗<extra></extra>'
+            ))
+        
+        # Add reference line at y=0
+        fig_sortino_rsi.add_hline(y=0, line_dash="dash", line_color="gray", 
+                                 annotation_text="No Risk-Adjusted Return")
+        
+        fig_sortino_rsi.update_layout(
+            title="Sortino Ratio vs RSI Threshold",
+            xaxis_title="RSI Threshold",
+            yaxis_title="Sortino Ratio",
+            hovermode='closest',
+            xaxis=dict(range=[rsi_min, rsi_max]),
+            showlegend=True
+        )
+        
+        st.plotly_chart(fig_sortino_rsi, use_container_width=True, key="sortino_rsi_chart")
+        
+        # RSI vs Cumulative Return Chart
+        st.subheader("📊 RSI Threshold vs Cumulative Return")
+        st.info("💡 **What this shows:** This chart displays how the total cumulative return varies across different RSI thresholds. Higher cumulative returns indicate better overall performance. Look for peaks in the chart to identify optimal RSI thresholds.")
+        
+        fig_return_rsi = go.Figure()
+        
+        # Add points for significant signals (green)
+        if not significant_data.empty:
+            fig_return_rsi.add_trace(go.Scatter(
+                x=significant_data['RSI_Threshold'],
+                y=significant_data['Total_Return'],
+                mode='markers+lines',
+                name='Significant Signals',
+                marker=dict(color='green', size=8),
+                line=dict(color='green', width=2),
+                hovertemplate='<b>RSI %{x}</b><br>' +
+                            'Cumulative Return: %{y:.3%}<br>' +
+                            'Significant: ✓<extra></extra>'
+            ))
+        
+        # Add points for non-significant signals (red)
+        if not non_significant_data.empty:
+            fig_return_rsi.add_trace(go.Scatter(
+                x=non_significant_data['RSI_Threshold'],
+                y=non_significant_data['Total_Return'],
+                mode='markers+lines',
+                name='Non-Significant Signals',
+                marker=dict(color='red', size=8),
+                line=dict(color='red', width=2),
+                hovertemplate='<b>RSI %{x}</b><br>' +
+                            'Cumulative Return: %{y:.3%}<br>' +
+                            'Significant: ✗<extra></extra>'
+            ))
+        
+        # Add reference line at y=0
+        fig_return_rsi.add_hline(y=0, line_dash="dash", line_color="gray", 
+                                annotation_text="No Return")
+        
+        fig_return_rsi.update_layout(
+            title="Cumulative Return vs RSI Threshold",
+            xaxis_title="RSI Threshold",
+            yaxis_title="Cumulative Return (%)",
+            hovermode='closest',
+            xaxis=dict(range=[rsi_min, rsi_max]),
+            showlegend=True
+        )
+        
+        st.plotly_chart(fig_return_rsi, use_container_width=True, key="return_rsi_chart")
+        
         # Top significant signals
         if len(significant_signals) > 0:
             st.subheader("🏆 Top Statistically Significant Signals")
