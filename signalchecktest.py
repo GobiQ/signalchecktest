@@ -1170,10 +1170,10 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
             fig_sortino_rsi.add_trace(go.Scatter(
                 x=significant_data['RSI_Threshold'],
                 y=significant_data['Sortino_Ratio'],
-                mode='markers+lines',
+                mode='markers',
                 name='Significant Signals',
                 marker=dict(color='green', size=8),
-                line=dict(color='green', width=2),
+                line=dict(width=0),  # Explicitly disable lines
                 hovertemplate='<b>RSI %{x}</b><br>' +
                             'Sortino Ratio: %{y:.2f}<br>' +
                             'Significant: ✓<extra></extra>'
@@ -1185,10 +1185,10 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
             fig_sortino_rsi.add_trace(go.Scatter(
                 x=non_significant_data['RSI_Threshold'],
                 y=non_significant_data['Sortino_Ratio'],
-                mode='markers+lines',
+                mode='markers',
                 name='Non-Significant Signals',
                 marker=dict(color='red', size=8),
-                line=dict(color='red', width=2),
+                line=dict(width=0),  # Explicitly disable lines
                 hovertemplate='<b>RSI %{x}</b><br>' +
                             'Sortino Ratio: %{y:.2f}<br>' +
                             'Significant: ✗<extra></extra>'
@@ -1220,10 +1220,10 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
             fig_return_rsi.add_trace(go.Scatter(
                 x=significant_data['RSI_Threshold'],
                 y=significant_data['Total_Return'],
-                mode='markers+lines',
+                mode='markers',
                 name='Significant Signals',
                 marker=dict(color='green', size=8),
-                line=dict(color='green', width=2),
+                line=dict(width=0),  # Explicitly disable lines
                 hovertemplate='<b>RSI %{x}</b><br>' +
                             'Cumulative Return: %{y:.3%}<br>' +
                             'Significant: ✓<extra></extra>'
@@ -1234,10 +1234,10 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
             fig_return_rsi.add_trace(go.Scatter(
                 x=non_significant_data['RSI_Threshold'],
                 y=non_significant_data['Total_Return'],
-                mode='markers+lines',
+                mode='markers',
                 name='Non-Significant Signals',
                 marker=dict(color='red', size=8),
-                line=dict(color='red', width=2),
+                line=dict(width=0),  # Explicitly disable lines
                 hovertemplate='<b>RSI %{x}</b><br>' +
                             'Cumulative Return: %{y:.3%}<br>' +
                             'Significant: ✗<extra></extra>'
