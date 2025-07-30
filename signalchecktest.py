@@ -165,6 +165,7 @@ def analyze_rsi_signals(signal_prices: pd.Series, target_prices: pd.Series, rsi_
             'total_trades': 0,
             'win_rate': 0,
             'avg_return': 0,
+            'median_return': 0,
             'returns': [],
             'avg_hold_days': 0,
             'sortino_ratio': 0,
@@ -537,7 +538,7 @@ def run_rsi_analysis(signal_ticker: str, target_ticker: str, rsi_min: float, rsi
             'Total_Trades': analysis['total_trades'],
             'Win_Rate': analysis['win_rate'],
             'Avg_Return': analysis['avg_return'],
-            'Median_Return': analysis['median_return'],
+            'Median_Return': analysis.get('median_return', 0),  # Use get() with default value
             'Benchmark_Avg_Return': benchmark_avg_return,
             'Benchmark_Median_Return': benchmark_median_return,
             'Avg_Hold_Days': analysis['avg_hold_days'],
@@ -1313,4 +1314,3 @@ if 'data_messages' in st.session_state and st.session_state['data_messages']:
     st.subheader("📊 Data Quality Information")
     for message in st.session_state['data_messages']:
         st.info(message)
- 
