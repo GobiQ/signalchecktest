@@ -15,8 +15,9 @@ try:
     # Configure QuantStats
     qs.extend_pandas()
     QUANTSTATS_AVAILABLE = True
+    st.success("✅ QuantStats loaded successfully!")
 except ImportError as e:
-    st.warning("⚠️ QuantStats not available. Some advanced metrics will not be calculated. Install with: pip install quantstats>=0.0.62")
+    st.warning(f"⚠️ QuantStats import error: {str(e)}. Install with: pip install quantstats>=0.0.62")
     QUANTSTATS_AVAILABLE = False
 except Exception as e:
     st.warning(f"⚠️ QuantStats import failed: {str(e)}. Using fallback calculations.")
@@ -477,71 +478,8 @@ def validate_data_quality(data: pd.Series, ticker: str) -> Tuple[bool, List[str]
     
     return True, messages
 
-def generate_quantstats_report(equity_curve: pd.Series, benchmark_curve: pd.Series, strategy_name: str = "Strategy") -> Dict:
-    """Generate comprehensive QuantStats report for a strategy"""
-    if not QUANTSTATS_AVAILABLE:
-        st.warning("QuantStats not available. Cannot generate detailed report.")
-        return {}
-    
-    try:
-        # Convert equity curves to returns
-        strategy_returns = equity_curve.pct_change().dropna()
-        benchmark_returns = benchmark_curve.pct_change().dropna()
-        
-        # Align returns on common dates
-        common_dates = strategy_returns.index.intersection(benchmark_returns.index)
-        strategy_returns = strategy_returns[common_dates]
-        benchmark_returns = benchmark_returns[common_dates]
-        
-        if len(strategy_returns) == 0:
-            return {}
-        
-        # Generate QuantStats metrics
-        report = {
-            'sharpe': qs.stats.sharpe(strategy_returns),
-            'sortino': qs.stats.sortino(strategy_returns),
-            'calmar': qs.stats.calmar(strategy_returns),
-            'max_drawdown': qs.stats.max_drawdown(equity_curve),
-            'volatility': qs.stats.volatility(strategy_returns),
-            'var_95': qs.stats.var(strategy_returns, 0.05),
-            'cvar_95': qs.stats.cvar(strategy_returns, 0.05),
-            'beta': qs.stats.beta(strategy_returns, benchmark_returns),
-            'alpha': qs.stats.alpha(strategy_returns, benchmark_returns),
-            'information_ratio': qs.stats.information_ratio(strategy_returns, benchmark_returns),
-            'treynor_ratio': qs.stats.treynor(strategy_returns, benchmark_returns),
-            'omega_ratio': qs.stats.omega(strategy_returns),
-            'gain_to_pain_ratio': qs.stats.gain_to_pain(strategy_returns),
-            'win_rate': qs.stats.win_rate(strategy_returns),
-            'win_loss_ratio': qs.stats.win_loss_ratio(strategy_returns),
-            'profit_factor': qs.stats.profit_factor(strategy_returns),
-            'expectancy': qs.stats.expectancy(strategy_returns),
-            'consecutive_wins': qs.stats.consecutive_wins(strategy_returns),
-            'consecutive_losses': qs.stats.consecutive_losses(strategy_returns),
-            'avg_win': qs.stats.avg_win(strategy_returns),
-            'avg_loss': qs.stats.avg_loss(strategy_returns),
-            'best': qs.stats.best(strategy_returns),
-            'worst': qs.stats.worst(strategy_returns),
-            'skew': qs.stats.skew(strategy_returns),
-            'kurtosis': qs.stats.kurtosis(strategy_returns),
-            'tail_ratio': qs.stats.tail_ratio(strategy_returns),
-            'common_sense_ratio': qs.stats.common_sense_ratio(strategy_returns),
-            'calmar_ratio': qs.stats.calmar(strategy_returns),
-            'mar_ratio': qs.stats.mar(strategy_returns),
-            'p_value': qs.stats.p_value(strategy_returns, benchmark_returns),
-            'p_value_less': qs.stats.p_value_less(strategy_returns, benchmark_returns),
-            'p_value_greater': qs.stats.p_value_greater(strategy_returns, benchmark_returns)
-        }
-        
-        # Clean up NaN values
-        for key, value in report.items():
-            if np.isnan(value):
-                report[key] = 0.0
-        
-        return report
-        
-    except Exception as e:
-        st.warning(f"Could not generate QuantStats report: {str(e)}")
-        return {}
+# QuantStats report generation removed to avoid import issues
+# Basic QuantStats metrics are still available in the main analysis functions
 
 def run_rsi_analysis(signal_ticker: str, target_ticker: str, rsi_min: float, rsi_max: float, comparison: str, 
                     start_date=None, end_date=None, rsi_period: int = 14, rsi_method: str = "wilders", benchmark_ticker: str = "SPY") -> Tuple[pd.DataFrame, pd.Series, List[str]]:
@@ -1608,87 +1546,8 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
         else:
             st.warning("No signals reached statistical significance (p < 0.05)")
         
-        # QuantStats Reports for Top Performers
-        if len(significant_signals) > 0:
-            st.subheader("📊 QuantStats Analysis for Top Performers")
-            st.info("💡 **What this shows:** Detailed QuantStats analysis for the top performing strategies. This provides comprehensive risk and performance metrics using industry-standard calculations.")
-            
-            # Get the best performing strategy for detailed analysis
-            best_strategy = original_significant_signals.nlargest(1, 'Total_Return').iloc[0]
-            
-            if 'equity_curve' in best_strategy and best_strategy['equity_curve'] is not None:
-                # Generate QuantStats report
-                quantstats_report = generate_quantstats_report(
-                    best_strategy['equity_curve'], 
-                    benchmark, 
-                    f"RSI {best_strategy['RSI_Threshold']}"
-                )
-                
-                if quantstats_report:
-                    # Display key metrics in columns
-                    col1, col2, col3, col4 = st.columns(4)
-                    
-                    with col1:
-                        st.metric("Sharpe Ratio", f"{quantstats_report.get('sharpe', 0):.3f}")
-                        st.metric("Sortino Ratio", f"{quantstats_report.get('sortino', 0):.3f}")
-                        st.metric("Calmar Ratio", f"{quantstats_report.get('calmar', 0):.3f}")
-                        st.metric("Max Drawdown", f"{quantstats_report.get('max_drawdown', 0):.3%}")
-                    
-                    with col2:
-                        st.metric("Volatility", f"{quantstats_report.get('volatility', 0):.3%}")
-                        st.metric("VaR (95%)", f"{quantstats_report.get('var_95', 0):.3%}")
-                        st.metric("CVaR (95%)", f"{quantstats_report.get('cvar_95', 0):.3%}")
-                        st.metric("Beta", f"{quantstats_report.get('beta', 0):.3f}")
-                    
-                    with col3:
-                        st.metric("Alpha", f"{quantstats_report.get('alpha', 0):.3%}")
-                        st.metric("Information Ratio", f"{quantstats_report.get('information_ratio', 0):.3f}")
-                        st.metric("Treynor Ratio", f"{quantstats_report.get('treynor_ratio', 0):.3f}")
-                        st.metric("Omega Ratio", f"{quantstats_report.get('omega_ratio', 0):.3f}")
-                    
-                    with col4:
-                        st.metric("Gain-to-Pain", f"{quantstats_report.get('gain_to_pain_ratio', 0):.3f}")
-                        st.metric("Win Rate", f"{quantstats_report.get('win_rate', 0):.3%}")
-                        st.metric("Profit Factor", f"{quantstats_report.get('profit_factor', 0):.3f}")
-                        st.metric("Expectancy", f"{quantstats_report.get('expectancy', 0):.3%}")
-                    
-                    # Additional metrics
-                    with st.expander("📊 Additional QuantStats Metrics"):
-                        col5, col6, col7, col8 = st.columns(4)
-                        
-                        with col5:
-                            st.metric("Win/Loss Ratio", f"{quantstats_report.get('win_loss_ratio', 0):.3f}")
-                            st.metric("Avg Win", f"{quantstats_report.get('avg_win', 0):.3%}")
-                            st.metric("Avg Loss", f"{quantstats_report.get('avg_loss', 0):.3%}")
-                            st.metric("Best Day", f"{quantstats_report.get('best', 0):.3%}")
-                        
-                        with col6:
-                            st.metric("Worst Day", f"{quantstats_report.get('worst', 0):.3%}")
-                            st.metric("Skewness", f"{quantstats_report.get('skew', 0):.3f}")
-                            st.metric("Kurtosis", f"{quantstats_report.get('kurtosis', 0):.3f}")
-                            st.metric("Tail Ratio", f"{quantstats_report.get('tail_ratio', 0):.3f}")
-                        
-                        with col7:
-                            st.metric("Common Sense Ratio", f"{quantstats_report.get('common_sense_ratio', 0):.3f}")
-                            st.metric("MAR Ratio", f"{quantstats_report.get('mar_ratio', 0):.3f}")
-                            st.metric("Consecutive Wins", f"{quantstats_report.get('consecutive_wins', 0):.0f}")
-                            st.metric("Consecutive Losses", f"{quantstats_report.get('consecutive_losses', 0):.0f}")
-                        
-                        with col8:
-                            st.metric("P-Value (Equal)", f"{quantstats_report.get('p_value', 0):.4f}")
-                            st.metric("P-Value (Less)", f"{quantstats_report.get('p_value_less', 0):.4f}")
-                            st.metric("P-Value (Greater)", f"{quantstats_report.get('p_value_greater', 0):.4f}")
-                    
-                    # Download QuantStats report
-                    st.subheader("📥 Download QuantStats Report")
-                    report_df = pd.DataFrame([quantstats_report])
-                    csv_report = report_df.to_csv(index=False)
-                    st.download_button(
-                        label="📥 Download QuantStats Report as CSV",
-                        data=csv_report,
-                        file_name=f"quantstats_report_RSI_{best_strategy['RSI_Threshold']}_{datetime.now().strftime('%Y%m%d')}.csv",
-                        mime="text/csv"
-                    )
+        # Note: QuantStats detailed reports removed to avoid import issues
+        # Basic QuantStats metrics are still available in the main results table
 
     # Statistical interpretation guide
     with st.expander("📚 Statistical Significance Guide"):
