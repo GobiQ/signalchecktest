@@ -888,9 +888,14 @@ benchmark_ticker = st.sidebar.selectbox("Benchmark",
                                        help="Choose your benchmark for comparison: SPY represents the S&P 500 index, BIL represents cash (money market), TQQQ represents 3x leveraged Nasdaq-100. This is what your signal will be compared against.")
 
 # Allow custom benchmark input
-custom_benchmark = st.sidebar.text_input("Custom Benchmark Ticker (optional)", 
-                                        placeholder="e.g., QQQ, VTI, etc.",
-                                        help="Enter a custom ticker symbol to use as benchmark. Leave empty to use the selected benchmark above.")
+use_custom_benchmark = st.sidebar.checkbox("Use custom benchmark ticker", help="Check this to specify a custom ticker symbol instead of using the selected benchmark above.")
+
+if use_custom_benchmark:
+    custom_benchmark = st.sidebar.text_input("Custom Benchmark Ticker", 
+                                            placeholder="e.g., QQQ, VTI, etc.",
+                                            help="Enter a custom ticker symbol to use as benchmark.")
+else:
+    custom_benchmark = ""
 
 # Set default RSI threshold based on condition
 if comparison == "less_than":
