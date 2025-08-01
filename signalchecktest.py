@@ -782,7 +782,7 @@ def run_rsi_analysis(signal_ticker: str, target_ticker: str, rsi_min: float, rsi
 st.sidebar.header("📊 Configuration")
 
 # QuantStats Configuration
-use_quantstats = st.sidebar.checkbox("Enable QuantStats Integration", value=True, help="Enable enhanced financial analysis using QuantStats library. When disabled, the app will use fallback calculations.")
+use_quantstats = st.sidebar.checkbox("Enable QuantStats Integration", value=True, help="Enable use of QuantStats library. When disabled, the app will use fallback calculations.")
 
 # Preconditions System
 st.sidebar.subheader("Preconditions", help="Preconditions add additional RSI conditions that must ALL be true before the main signal is considered. This allows for more complex multi-condition strategies.")
