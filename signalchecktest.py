@@ -701,8 +701,12 @@ with tab1:
         if signal_type == "Custom Indicator":
             st.subheader("📊 Signal Configuration")
             
-            # Signal ticker
-            signal_ticker = st.text_input("Signal Ticker", value="SPY", help="The ticker to analyze for the signal")
+            # Signal ticker selection
+            col1, col2 = st.columns(2)
+            with col1:
+                signal_ticker1 = st.text_input("Signal Ticker 1", value="SPY", help="First ticker to analyze")
+            with col2:
+                signal_ticker2 = st.text_input("Signal Ticker 2", value="QQQ", help="Second ticker to analyze (optional)")
             
             # Signal logic builder
             st.write("**Is true if:**")
@@ -764,23 +768,24 @@ with tab1:
             
             # Display the signal logic
             if indicator1 not in ["Current Price"] and indicator2 not in ["Current Price", "Static Value"]:
-                st.info(f"**Signal Logic:** {indicator1}({days1}) {operator} {indicator2}({days2})")
+                st.info(f"**Signal Logic:** {signal_ticker1} {indicator1}({days1}) {operator} {signal_ticker2} {indicator2}({days2})")
             elif indicator1 not in ["Current Price"] and indicator2 == "Static Value":
-                st.info(f"**Signal Logic:** {indicator1}({days1}) {operator} {static_value}")
+                st.info(f"**Signal Logic:** {signal_ticker1} {indicator1}({days1}) {operator} {static_value}")
             elif indicator1 not in ["Current Price"]:
-                st.info(f"**Signal Logic:** {indicator1}({days1}) {operator} {indicator2}")
+                st.info(f"**Signal Logic:** {signal_ticker1} {indicator1}({days1}) {operator} {signal_ticker2} {indicator2}")
             elif indicator2 not in ["Current Price", "Static Value"]:
-                st.info(f"**Signal Logic:** {indicator1} {operator} {indicator2}({days2})")
+                st.info(f"**Signal Logic:** {signal_ticker1} {indicator1} {operator} {signal_ticker2} {indicator2}({days2})")
             elif indicator2 == "Static Value":
-                st.info(f"**Signal Logic:** {indicator1} {operator} {static_value}")
+                st.info(f"**Signal Logic:** {signal_ticker1} {indicator1} {operator} {static_value}")
             else:
-                st.info(f"**Signal Logic:** {indicator1} {operator} {indicator2}")
+                st.info(f"**Signal Logic:** {signal_ticker1} {indicator1} {operator} {signal_ticker2} {indicator2}")
             
             if st.button("Add Signal", type="primary"):
                 signal = {
                     'name': signal_name,
                     'type': signal_type,
-                    'signal_ticker': signal_ticker,
+                    'signal_ticker1': signal_ticker1,
+                    'signal_ticker2': signal_ticker2,
                     'indicator1': indicator1,
                     'indicator2': indicator2,
                     'operator': operator,
@@ -858,7 +863,7 @@ with tab1:
                             indicator2_text = str(signal['static_value'])
                         else:
                             indicator2_text = f"{signal['indicator2']}({signal['days2']})" if signal['days2'] else signal['indicator2']
-                        st.caption(f"{signal['signal_ticker']}: {indicator1_text} {signal['operator']} {indicator2_text}")
+                        st.caption(f"{signal['signal_ticker1']} {indicator1_text} {signal['operator']} {signal['signal_ticker2']} {indicator2_text}")
                     elif signal['type'] == "RSI Threshold":
                         st.caption(f"{signal['signal_ticker']} RSI {signal['rsi_period']}-day {signal['comparison']} {signal['rsi_threshold']} → {signal['target_ticker']}")
                     else:
@@ -1108,7 +1113,8 @@ with tab4:
                 all_tickers = set()
                 for signal in st.session_state.signals:
                     if signal['type'] == "Custom Indicator":
-                        all_tickers.add(signal['signal_ticker'])
+                        all_tickers.add(signal['signal_ticker1'])
+                        all_tickers.add(signal['signal_ticker2'])
                     elif signal['type'] == "RSI Threshold":
                         all_tickers.add(signal['signal_ticker'])
                         all_tickers.add(signal['target_ticker'])
@@ -1133,15 +1139,20 @@ with tab4:
                 signal_results = {}
                 for signal in st.session_state.signals:
                     if signal['type'] == "Custom Indicator":
-                        signal_ticker = signal['signal_ticker']
+                        signal_ticker1 = signal['signal_ticker1']
+                        signal_ticker2 = signal['signal_ticker2']
                         
-                        indicator1_values = calculate_indicator(data[signal_ticker], signal['indicator1'], signal['days1'])
+                        # Calculate first indicator
+                        indicator1_values = calculate_indicator(data[signal_ticker1], signal['indicator1'], signal['days1'])
                         
+                        # Calculate second indicator
                         if signal['indicator2'] == "Static Value":
                             # Create a series of static values
-                            indicator2_values = pd.Series(signal['static_value'], index=data[signal_ticker].index)
+                            indicator2_values = pd.Series(signal['static_value'], index=data[signal_ticker1].index)
                         else:
-                            indicator2_values = calculate_indicator(data[signal_ticker], signal['indicator2'], signal['days2'])
+                            # Use second ticker for second indicator (or same ticker if they're the same)
+                            ticker_for_indicator2 = signal_ticker2 if signal_ticker2 != signal_ticker1 else signal_ticker1
+                            indicator2_values = calculate_indicator(data[ticker_for_indicator2], signal['indicator2'], signal['days2'])
                         
                         signals = evaluate_signal_condition(indicator1_values, indicator2_values, signal['operator'])
                         
