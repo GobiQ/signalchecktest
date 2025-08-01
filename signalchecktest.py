@@ -1882,8 +1882,17 @@ with col2:
     if st.session_state.get('preconditions'):
         st.write("**Preconditions (ALL must be true):**")
         for precondition in st.session_state.preconditions:
-            comparison_symbol = "≤" if precondition['comparison'] == "less_than" else "≥"
-            st.write(f"  • {precondition['signal_ticker']} RSI {comparison_symbol} {precondition['threshold']}")
+            if precondition.get('type') == 'comparison':
+                # RSI comparison precondition
+                signal_period = precondition.get('signal_rsi_period', 10)
+                comparison_period = precondition.get('comparison_rsi_period', 10)
+                comparison_operator = precondition.get('comparison_operator', 'less_than')
+                operator_symbol = ">" if comparison_operator == "greater_than" else "<"
+                st.write(f"  • {precondition['signal_ticker']} {signal_period}d RSI {operator_symbol} {precondition['comparison_ticker']} {comparison_period}d RSI")
+            else:
+                # RSI threshold precondition (legacy format)
+                comparison_symbol = "≤" if precondition.get('comparison') == "less_than" else "≥"
+                st.write(f"  • {precondition['signal_ticker']} RSI {comparison_symbol} {precondition.get('threshold', 'N/A')}")
         st.write("**Main Signal:**")
     
     if analysis_mode == "RSI Threshold":
