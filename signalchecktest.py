@@ -1150,7 +1150,7 @@ with tab3:
                             condition_parts.append(signal_text)
                     
                     condition_text = " ".join(condition_parts)
-                    st.caption(f"IF {condition_text} THEN {strategy['output_allocation']} ELSE {strategy['else_allocation']}")
+                    st.markdown(f"**IF** {condition_text} **THEN** {strategy['output_allocation']} **ELSE** {strategy['else_allocation']}")
                 with col2:
                     if st.button("🗑️", key=f"delete_strategy_{i}"):
                         st.session_state.strategies.pop(i)
@@ -1173,7 +1173,19 @@ with tab4:
     # Quick stats
     if st.session_state.output_allocations:
         st.subheader("📊 Quick Stats")
-        total_allocation = sum([alloc['total_weight'] for alloc in st.session_state.output_allocations.values()])
+        
+        # Calculate unique allocations used in strategies
+        strategy_allocations = set()
+        for strategy in st.session_state.strategies:
+            strategy_allocations.add(strategy['output_allocation'])
+            strategy_allocations.add(strategy['else_allocation'])
+        
+        # Calculate total allocation only for allocations used in strategies
+        total_allocation = 0
+        for alloc_name in strategy_allocations:
+            if alloc_name in st.session_state.output_allocations:
+                total_allocation += st.session_state.output_allocations[alloc_name]['total_weight']
+        
         col1, col2, col3 = st.columns(3)
         with col1:
             st.metric("Total Allocations", f"{total_allocation}%")
@@ -1207,10 +1219,8 @@ with tab4:
                             <span>Condition</span>
                         </div>
                         <p>
-                            IF {f"NOT {strategy['signal1']}" if strategy['signal1_negated'] else strategy['signal1']} 
-                            {strategy['logic_operator']} 
-                            {f"NOT {strategy['signal2']}" if strategy['signal2_negated'] else strategy['signal2']} 
-                            THEN {strategy['output_allocation']}
+                            <strong>IF</strong> {" ".join([f"{f'NOT {signal_config["signal"]}' if signal_config['negated'] else signal_config['signal']}{f' {signal_config["operator"]}' if i > 0 else ''}" for i, signal_config in enumerate(strategy['signals'])])} 
+                            <strong>THEN</strong> {strategy['output_allocation']} <strong>ELSE</strong> {strategy['else_allocation']}
                         </p>
                     </div>
                 </div>
