@@ -1915,8 +1915,6 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
     benchmark = st.session_state['benchmark']
     
     st.success("✅ Analysis completed successfully!")
-else:
-    st.info("ℹ️ No analysis results found. Please run the analysis first.")
     
     # Check for data quality issues
     insufficient_data_count = results_df.get('insufficient_data', pd.Series([False] * len(results_df))).sum()
@@ -2117,21 +2115,25 @@ else:
         
             # Create filter columns
             col1, col2, col3, col4 = st.columns(4)
-    else:
-        # RSI Comparison mode - show simple table without filters
-        st.subheader("📊 Results Table")
-        # Create a simple display without filters
-        filtered_df = display_df.copy()
-        # Define empty column variables to avoid NameError
-        col1, col2, col3, col4 = None, None, None, None
-        # Skip the filter section entirely for RSI Comparison mode
-        rsi_min_filter, rsi_max_filter = 0, 100
-        confidence_min_filter, confidence_max_filter = 0.0, 100.0
-        min_trades_filter, min_win_rate_filter = 0, 0.0
-        min_avg_return_filter, min_total_return_filter = -100.0, -100.0
-        min_annualized_return_filter, min_sortino_filter = -100.0, -10.0
-        significance_filter, max_p_value_filter = "All", 1.0
-        if col2 is not None:  # Only show filters in RSI Threshold mode
+            
+            with col1:
+                rsi_min_filter = st.number_input(
+                    "Min RSI Threshold:",
+                    min_value=0.0,
+                    max_value=100.0,
+                    value=0.0,
+                    step=0.5,
+                    help="Minimum RSI threshold to include in results."
+                )
+                rsi_max_filter = st.number_input(
+                    "Max RSI Threshold:",
+                    min_value=0.0,
+                    max_value=100.0,
+                    value=100.0,
+                    step=0.5,
+                    help="Maximum RSI threshold to include in results."
+                )
+            
             with col2:
                 confidence_min_filter = st.number_input(
                     "Min Confidence Level (%):",
@@ -2149,6 +2151,7 @@ else:
                     step=1.0,
                     help="Maximum confidence level to include in results."
                 )
+            
             with col3:
                 min_trades_filter = st.number_input(
                     "Min Total Trades:",
@@ -2164,6 +2167,7 @@ else:
                     step=1.0,
                     help="Minimum win rate percentage to include in results."
                 )
+            
             with col4:
                 min_avg_return_filter = st.number_input(
                     "Min Avg Return (%):",
@@ -2181,7 +2185,9 @@ else:
                     step=0.1,
                     help="Minimum total return percentage to include in results."
                 )
+            
             col5, col6, col7, col8 = st.columns(4)
+            
             with col5:
                 min_annualized_return_filter = st.number_input(
                     "Min Annualized Return (%):",
@@ -2191,6 +2197,7 @@ else:
                     step=0.1,
                     help="Minimum annualized return percentage to include in results."
                 )
+            
             with col6:
                 min_sortino_filter = st.number_input(
                     "Min Sortino Ratio:",
@@ -2200,6 +2207,7 @@ else:
                     step=0.1,
                     help="Minimum Sortino ratio to include in results."
                 )
+            
             with col7:
                 significance_filter = st.selectbox(
                     "Significance:",
@@ -2214,51 +2222,59 @@ else:
                     step=0.001,
                     help="Maximum p-value to include in results (lower = more significant)."
                 )
+            
             with col8:
                 if st.button("Clear All Filters", type="secondary"):
                     st.rerun()
-        
-        # Apply filters to the display dataframe (outside of columns)
-        filtered_df = display_df.copy()
-        
-        # Only apply RSI threshold filters in RSI Threshold mode
-        if 'RSI_Threshold' in filtered_df.columns:
+            
+            # Apply filters to the display dataframe
+            filtered_df = display_df.copy()
+            
+            # Only apply RSI threshold filters in RSI Threshold mode
+            if 'RSI_Threshold' in filtered_df.columns:
+                filtered_df = filtered_df[
+                    (filtered_df['RSI_Threshold'] >= rsi_min_filter) & 
+                    (filtered_df['RSI_Threshold'] <= rsi_max_filter)
+                ]
+            
             filtered_df = filtered_df[
-                (filtered_df['RSI_Threshold'] >= rsi_min_filter) & 
-                (filtered_df['RSI_Threshold'] <= rsi_max_filter)
+                (filtered_df['Confidence_Level'].str.replace('%', '').astype(float) >= confidence_min_filter) & 
+                (filtered_df['Confidence_Level'].str.replace('%', '').astype(float) <= confidence_max_filter)
             ]
-        filtered_df = filtered_df[
-            (filtered_df['Confidence_Level'].str.replace('%', '').astype(float) >= confidence_min_filter) & 
-            (filtered_df['Confidence_Level'].str.replace('%', '').astype(float) <= confidence_max_filter)
-        ]
-        filtered_df = filtered_df[filtered_df['Total_Trades'] >= min_trades_filter]
-        filtered_df = filtered_df[
-            filtered_df['Win_Rate'].str.replace('%', '').astype(float) >= min_win_rate_filter
-        ]
-        filtered_df = filtered_df[
-            filtered_df['Avg_Return'].str.replace('%', '').astype(float) >= min_avg_return_filter
-        ]
-        filtered_df = filtered_df[
-            filtered_df['Total_Return'].str.replace('%', '').astype(float) >= min_total_return_filter
-        ]
-        filtered_df = filtered_df[
-            filtered_df['Annualized_Return'].str.replace('%', '').astype(float) >= min_annualized_return_filter
-        ]
-        filtered_df = filtered_df[
-            filtered_df['Sortino_Ratio'].apply(lambda x: float(x) if x != "∞" else 999) >= min_sortino_filter
-        ]
-        if significance_filter == "Significant Only":
-            filtered_df = filtered_df[filtered_df['Significant'] == "✓"]
-        elif significance_filter == "Non-Significant Only":
-            filtered_df = filtered_df[filtered_df['Significant'] == "✗"]
-        filtered_df = filtered_df[
-            filtered_df['P_Value'].astype(float) <= max_p_value_filter
-        ]
-        
-        # Display the filtered results table (outside of columns)
-        st.subheader(f"📊 RSI Analysis Results ({len(filtered_df)} signals)")
+            filtered_df = filtered_df[filtered_df['Total_Trades'] >= min_trades_filter]
+            filtered_df = filtered_df[
+                filtered_df['Win_Rate'].str.replace('%', '').astype(float) >= min_win_rate_filter
+            ]
+            filtered_df = filtered_df[
+                filtered_df['Avg_Return'].str.replace('%', '').astype(float) >= min_avg_return_filter
+            ]
+            filtered_df = filtered_df[
+                filtered_df['Total_Return'].str.replace('%', '').astype(float) >= min_total_return_filter
+            ]
+            filtered_df = filtered_df[
+                filtered_df['Annualized_Return'].str.replace('%', '').astype(float) >= min_annualized_return_filter
+            ]
+            filtered_df = filtered_df[
+                filtered_df['Sortino_Ratio'].apply(lambda x: float(x) if x != "∞" else 999) >= min_sortino_filter
+            ]
+            if significance_filter == "Significant Only":
+                filtered_df = filtered_df[filtered_df['Significant'] == "✓"]
+            elif significance_filter == "Non-Significant Only":
+                filtered_df = filtered_df[filtered_df['Significant'] == "✗"]
+            filtered_df = filtered_df[
+                filtered_df['P_Value'].astype(float) <= max_p_value_filter
+            ]
+            
+            # Display the filtered results table
+            st.subheader(f"📊 RSI Analysis Results ({len(filtered_df)} signals)")
+            st.dataframe(filtered_df[display_cols], use_container_width=True)
+    else:
+        # RSI Comparison mode - show simple table without filters
+        st.subheader("📊 Results Table")
+        # Create a simple display without filters
+        filtered_df = display_df.copy()
         st.dataframe(filtered_df[display_cols], use_container_width=True)
-
+    
     # Find best strategies (needed for subsequent sections)
     # Handle different display modes
     if 'RSI_Threshold' in display_df.columns:
@@ -2271,11 +2287,109 @@ else:
         # Statistical Significance Analysis - Full analysis for RSI Threshold mode
         with st.expander("📊 Statistical Significance Analysis", expanded=True):
             st.subheader("📊 Statistical Significance Analysis")
+            
+            # Get benchmark info
+            stored_benchmark_ticker = st.session_state.get('benchmark_ticker', 'SPY')
+            benchmark_description = {
+                "SPY": "S&P 500",
+                "BIL": "Cash Equivalent", 
+                "TQQQ": "3x Nasdaq-100"
+            }.get(stored_benchmark_ticker, "Custom Benchmark")
+            benchmark_name = f"{stored_benchmark_ticker} ({benchmark_description})"
+            
+            # Get significant signals
+            significant_signals = filtered_df[filtered_df['Significant'] == "✓"]
+            valid_signals = filtered_df[filtered_df['Total_Trades'] > 0]
+            
+            if len(significant_signals) > 0:
+                st.success(f"✅ **{len(significant_signals)} Statistically Significant Signals Found**")
+                st.write(f"Your RSI strategy shows statistically significant outperformance against {benchmark_name} for {len(significant_signals)} RSI thresholds.")
+                
+                # Show confidence level distribution
+                st.subheader("📊 Confidence Level Distribution")
+                st.info("💡 **What this shows:** This chart displays how confidence levels vary across different RSI thresholds. Higher confidence levels indicate stronger statistical evidence that your strategy outperforms the benchmark.")
+                
+                # Create confidence level chart
+                fig_confidence = go.Figure()
+                
+                # Add points for significant signals (green)
+                significant_data = valid_signals[valid_signals['Significant'] == "✓"]
+                if not significant_data.empty:
+                    fig_confidence.add_trace(go.Scatter(
+                        x=significant_data['RSI_Threshold'],
+                        y=significant_data['Confidence_Level'].str.replace('%', '').astype(float),
+                        mode='markers',
+                        name='Significant Signals',
+                        marker=dict(color='green', size=8),
+                        hovertemplate='<b>RSI %{x}</b><br>' +
+                                    'Confidence: %{y:.1f}%<br>' +
+                                    'Significant: ✓<extra></extra>'
+                    ))
+                
+                # Add points for non-significant signals (red)
+                non_significant_data = valid_signals[valid_signals['Significant'] == "✗"]
+                if not non_significant_data.empty:
+                    fig_confidence.add_trace(go.Scatter(
+                        x=non_significant_data['RSI_Threshold'],
+                        y=non_significant_data['Confidence_Level'].str.replace('%', '').astype(float),
+                        mode='markers',
+                        name='Non-Significant Signals',
+                        marker=dict(color='red', size=8),
+                        hovertemplate='<b>RSI %{x}</b><br>' +
+                                    'Confidence: %{y:.1f}%<br>' +
+                                    'Significant: ✗<extra></extra>'
+                    ))
+                
+                # Add reference lines
+                fig_confidence.add_hline(y=95, line_dash="dash", line_color="red", 
+                                       annotation_text="95% Confidence")
+                fig_confidence.add_hline(y=80, line_dash="dash", line_color="orange", 
+                                       annotation_text="80% Confidence")
+                
+                fig_confidence.update_layout(
+                    title="Confidence Level vs RSI Threshold",
+                    xaxis_title="RSI Threshold",
+                    yaxis_title="Confidence Level (%)",
+                    hovermode='closest',
+                    xaxis=dict(range=[0, 100]),
+                    showlegend=True
+                )
+                
+                st.plotly_chart(fig_confidence, use_container_width=True, key="confidence_chart")
+                
+                st.write(f"""
+
+                **📊 Improved Statistical Analysis:**
+                The confidence levels now show more realistic variation across RSI thresholds. The analysis properly calculates statistical significance for both outperformance and underperformance, avoiding artificial binary outcomes.
+                
+                **⚠️ Note on Extreme RSI Values:**
+                At the extreme ends of RSI thresholds (very low or very high values), there are often not enough historical events to generate statistically confident results. This is why confidence levels may drop off at these extremes - the sample size becomes too small for reliable statistical analysis.
+                
+                **What This Chart Tells You:**
+                
+                **📊 X-Axis (RSI Threshold):**
+                - Shows different RSI levels tested
+                - Helps identify which RSI ranges are most effective
+                
+                **📈 Y-Axis (Confidence Level):**
+                - Higher values = stronger statistical evidence
+                - Above 95% = highly significant (strong evidence)
+                - 80-95% = borderline significant (moderate evidence)
+                - 60-80% = weak evidence
+                - Below 60% = very weak or no evidence
+                
+                **🎯 Interpretation:**
+                - **High confidence (95%+)**: Very strong evidence the signal works
+                - **Moderate confidence (80-95%)**: Good evidence, worth considering
+                - **Low confidence (<80%)**: Weak evidence, results may be due to chance
+                - **Extreme RSI values**: Often show low confidence due to insufficient historical data
+
+                """)
+            
+            else:
+                st.warning("No signals reached statistical significance (p < 0.05)")
     else:
-        # RSI Comparison mode - show simple table and simplified analysis
-        st.dataframe(filtered_df[display_cols], use_container_width=True)
-        
-        # Statistical Significance Analysis - Simplified for RSI Comparison mode
+        # RSI Comparison mode - show simplified analysis
         st.subheader("📊 Statistical Significance Analysis")
         
         # Get benchmark info
@@ -2291,7 +2405,7 @@ else:
         result = filtered_df.iloc[0]
         
         # Display significance explanation
-        if result['significant']:
+        if result['Significant'] == "✓":
             st.success(f"✅ **Statistically Significant Result**")
             st.write(f"Your RSI comparison strategy shows statistically significant outperformance against {benchmark_name}.")
             st.write(f"**Confidence Level:** {result['Confidence_Level']}")
@@ -2358,582 +2472,270 @@ else:
             st.plotly_chart(fig_equity, use_container_width=True)
         else:
             st.warning("⚠️ Equity curve data not available for display.")
-            st.write(f"""
-
-            **📊 Improved Statistical Analysis:**
-            The confidence levels now show more realistic variation across RSI thresholds. The analysis properly calculates statistical significance for both outperformance and underperformance, avoiding artificial binary outcomes.
-            
-            **⚠️ Note on Extreme RSI Values:**
-            At the extreme ends of RSI thresholds (very low or very high values), there are often not enough historical events to generate statistically confident results. This is why confidence levels may drop off at these extremes - the sample size becomes too small for reliable statistical analysis.
-            
-            **What This Chart Tells You:**
-            
-            **📊 X-Axis (RSI Threshold):**
-            - Shows different RSI levels tested
-            - Helps identify which RSI ranges are most effective
-            
-            **📈 Y-Axis (Confidence Level):**
-            - Higher values = stronger statistical evidence
-            - Above 95% = highly significant (strong evidence)
-            - 80-95% = borderline significant (moderate evidence)
-            - 60-80% = weak evidence
-            - Below 60% = very weak or no evidence
-            
-            **🎯 Interpretation:**
-            - **High confidence (95%+)**: Very strong evidence the signal works
-            - **Moderate confidence (80-95%)**: Good evidence, worth considering
-            - **Low confidence (<80%)**: Weak evidence, results may be due to chance
-            - **Extreme RSI values**: Often show low confidence due to insufficient historical data
-
-            """)
+    
+    # Add additional charts for RSI Threshold mode only
+    if 'RSI_Threshold' in display_df.columns and len(filtered_df) > 0:
+        # Get significant signals for charts
+        significant_signals = filtered_df[filtered_df['Significant'] == "✓"]
+        valid_signals = filtered_df[filtered_df['Total_Trades'] > 0]
         
-        # Total Return vs Confidence Level Analysis
-        with st.expander("📊 Total Return vs Confidence Level Analysis", expanded=False):
-            st.subheader("📊 Total Return vs Confidence Level Analysis")
-            st.info(f"💡 **What this shows:** This scatter plot shows the relationship between total return performance and statistical confidence. Each point represents a signal - the position shows how much money the signal made (total return) and how confident we are in the results (confidence level).")
+        if len(valid_signals) > 0:
+            # RSI vs Sortino Ratio Chart
+            st.subheader("📊 RSI Threshold vs Sortino Ratio")
+            st.info("💡 **What this shows:** This chart displays how the Sortino ratio (risk-adjusted return) varies across different RSI thresholds. Higher Sortino ratios indicate better risk-adjusted performance. Look for peaks in the chart to identify optimal RSI thresholds.")
             
-            # Create scatter plot for total return vs confidence level
-            fig_total_return = go.Figure()
+            fig_sortino_rsi = go.Figure()
             
             # Add points for significant signals (green)
-            significant_data = valid_signals[valid_signals['significant'] == True]
+            significant_data = valid_signals[valid_signals['Significant'] == "✓"]
             if not significant_data.empty:
-                fig_total_return.add_trace(go.Scatter(
-                    x=significant_data['confidence_level'],
-                    y=significant_data['Total_Return'],
+                fig_sortino_rsi.add_trace(go.Scatter(
+                    x=significant_data['RSI_Threshold'],
+                    y=significant_data['Sortino_Ratio'].apply(lambda x: float(x) if x != "∞" else 999),
                     mode='markers',
                     name='Significant Signals',
                     marker=dict(color='green', size=8),
-                    hovertemplate='<b>Signal %{text}</b><br>' +
-                                'Total Return: %{y:.3%}<br>' +
-                                'Confidence: %{x:.1f}%<br>' +
-                                'Significant: ✓<extra></extra>',
-                    text=[f"{row.get('RSI_Threshold', row.get('Signal_Ticker', 'N/A'))}" for _, row in significant_data.iterrows()]
+                    line=dict(width=0),  # Explicitly disable lines
+                    hovertemplate='<b>RSI %{x}</b><br>' +
+                                'Sortino Ratio: %{y:.2f}<br>' +
+                                'Significant: ✓<extra></extra>'
                 ))
             
             # Add points for non-significant signals (red)
-            non_significant_data = valid_signals[valid_signals['significant'] == False]
+            non_significant_data = valid_signals[valid_signals['Significant'] == "✗"]
             if not non_significant_data.empty:
-                fig_total_return.add_trace(go.Scatter(
-                    x=non_significant_data['confidence_level'],
-                    y=non_significant_data['Total_Return'],
+                fig_sortino_rsi.add_trace(go.Scatter(
+                    x=non_significant_data['RSI_Threshold'],
+                    y=non_significant_data['Sortino_Ratio'].apply(lambda x: float(x) if x != "∞" else 999),
                     mode='markers',
                     name='Non-Significant Signals',
                     marker=dict(color='red', size=8),
-                    hovertemplate='<b>Signal %{text}</b><br>' +
-                                'Total Return: %{y:.3%}<br>' +
-                                'Confidence: %{x:.1f}%<br>' +
-                                'Significant: ✗<extra></extra>',
-                    text=[f"{row.get('RSI_Threshold', row.get('Signal_Ticker', 'N/A'))}" for _, row in non_significant_data.iterrows()]
-                ))
-            
-            # Add reference lines
-            fig_total_return.add_hline(y=0, line_dash="dash", line_color="gray", 
-                                     annotation_text="No Return")
-            fig_total_return.add_vline(x=95, line_dash="dash", line_color="red", 
-                                     annotation_text="95% Confidence")
-            
-            fig_total_return.update_layout(
-                title="Total Return vs Confidence Level",
-                xaxis_title="Confidence Level (%)",
-                yaxis_title="Total Return (%)",
-                hovermode='closest'
-            )
-            
-            st.plotly_chart(fig_total_return, use_container_width=True, key="total_return_chart")
-        
-        # Sortino Ratio vs Confidence Level Analysis
-        with st.expander("📊 Sortino Ratio vs Confidence Level Analysis", expanded=False):
-            st.subheader("📊 Sortino Ratio vs Confidence Level Analysis")
-            st.info(f"💡 **What this shows:** This scatter plot shows the relationship between risk-adjusted returns (Sortino ratio) and statistical confidence. Each point represents a signal - the position shows how good the risk-adjusted returns are (Sortino ratio) and how confident we are in the results (confidence level).")
-            
-            # Create scatter plot for sortino ratio vs confidence level
-            fig_sortino = go.Figure()
-            
-            # Add points for significant signals (green)
-            significant_data = valid_signals[valid_signals['significant'] == True]
-            if not significant_data.empty:
-                fig_sortino.add_trace(go.Scatter(
-                    x=significant_data['confidence_level'],
-                    y=significant_data['Sortino_Ratio'],
-                    mode='markers',
-                    name='Significant Signals',
-                    marker=dict(color='green', size=8),
-                    hovertemplate='<b>RSI %{text}</b><br>' +
+                    line=dict(width=0),  # Explicitly disable lines
+                    hovertemplate='<b>RSI %{x}</b><br>' +
                                 'Sortino Ratio: %{y:.2f}<br>' +
-                                'Confidence: %{x:.1f}%<br>' +
-                                'Significant: ✓<extra></extra>',
-                    text=[f"{row['RSI_Threshold']}" for _, row in significant_data.iterrows()]
+                                'Significant: ✗<extra></extra>'
                 ))
             
-            # Add points for non-significant signals (red)
-            non_significant_data = valid_signals[valid_signals['significant'] == False]
-            if not non_significant_data.empty:
-                fig_sortino.add_trace(go.Scatter(
-                    x=non_significant_data['confidence_level'],
-                    y=non_significant_data['Sortino_Ratio'],
-                    mode='markers',
-                    name='Non-Significant Signals',
-                    marker=dict(color='red', size=8),
-                    hovertemplate='<b>RSI %{text}</b><br>' +
-                                'Sortino Ratio: %{y:.2f}<br>' +
-                                'Confidence: %{x:.1f}%<br>' +
-                                'Significant: ✗<extra></extra>',
-                    text=[f"{row['RSI_Threshold']}" for _, row in non_significant_data.iterrows()]
-                ))
+            # Add reference line at y=0
+            fig_sortino_rsi.add_hline(y=0, line_dash="dash", line_color="gray", 
+                                     annotation_text="No Risk-Adjusted Return")
             
-            # Add reference lines
-            fig_sortino.add_hline(y=0, line_dash="dash", line_color="gray", 
-                                    annotation_text="No Risk-Adjusted Return")
-            fig_sortino.add_vline(x=95, line_dash="dash", line_color="red", 
-                                    annotation_text="95% Confidence")
-            
-            fig_sortino.update_layout(
-                title="Sortino Ratio vs Confidence Level",
-                xaxis_title="Confidence Level (%)",
+            fig_sortino_rsi.update_layout(
+                title="Sortino Ratio vs RSI Threshold",
+                xaxis_title="RSI Threshold",
                 yaxis_title="Sortino Ratio",
-                hovermode='closest'
+                hovermode='closest',
+                xaxis=dict(range=[0, 100]),
+                showlegend=True
             )
             
-            st.plotly_chart(fig_sortino, use_container_width=True, key="sortino_chart")
-        
-        # Download results
-        st.subheader("📥 Download Results")
-        st.info("💡 **What this does:** Download your analysis results as a CSV file that you can open in Excel or other spreadsheet programs. This includes all the performance metrics for every RSI threshold tested.")
-        # Use the original column names from results_df for CSV download
-        download_cols = ['RSI_Threshold', 'Total_Trades', 'Win_Rate', 'Avg_Return', 'Median_Return', 'Benchmark_Avg_Return', 'Benchmark_Median_Return',
-                       'Total_Return', 'annualized_return', 'Sortino_Ratio', 'sharpe_ratio', 'calmar_ratio', 'Final_Equity', 'Avg_Hold_Days', 
-                       'Return_Std', 'Best_Return', 'Worst_Return', 'max_drawdown', 'var_95', 'beta', 'alpha', 'information_ratio', 'confidence_level', 'significant', 'effect_size']
-        csv = st.session_state['results_df'][download_cols].to_csv(index=False)
-        filename_suffix = f"_{start_date}_{end_date}" if use_date_range and start_date and end_date else "_max_range"
-        st.download_button(
-            label="📥 Download Results as CSV",
-            data=csv,
-            file_name=f"rsi_analysis_{signal_ticker}_{target_ticker}{filename_suffix}_{datetime.now().strftime('%Y%m%d')}.csv",
-            mime="text/csv"
-        )
-        
-        # RSI vs Sortino Ratio Chart
-        st.subheader("📊 RSI Threshold vs Sortino Ratio")
-        st.info("💡 **What this shows:** This chart displays how the Sortino ratio (risk-adjusted return) varies across different RSI thresholds. Higher Sortino ratios indicate better risk-adjusted performance. Look for peaks in the chart to identify optimal RSI thresholds.")
-        
-        fig_sortino_rsi = go.Figure()
-        
-        # Add points for significant signals (green)
-        significant_data = valid_signals[valid_signals['significant'] == True]
-        if not significant_data.empty:
-            fig_sortino_rsi.add_trace(go.Scatter(
-                x=significant_data['RSI_Threshold'],
-                y=significant_data['Sortino_Ratio'],
-                mode='markers',
-                name='Significant Signals',
-                marker=dict(color='green', size=8),
-                line=dict(width=0),  # Explicitly disable lines
-                hovertemplate='<b>RSI %{x}</b><br>' +
-                            'Sortino Ratio: %{y:.2f}<br>' +
-                            'Significant: ✓<extra></extra>'
-            ))
-        
-        # Add points for non-significant signals (red)
-        non_significant_data = valid_signals[valid_signals['significant'] == False]
-        if not non_significant_data.empty:
-            fig_sortino_rsi.add_trace(go.Scatter(
-                x=non_significant_data['RSI_Threshold'],
-                y=non_significant_data['Sortino_Ratio'],
-                mode='markers',
-                name='Non-Significant Signals',
-                marker=dict(color='red', size=8),
-                line=dict(width=0),  # Explicitly disable lines
-                hovertemplate='<b>RSI %{x}</b><br>' +
-                            'Sortino Ratio: %{y:.2f}<br>' +
-                            'Significant: ✗<extra></extra>'
-            ))
-        
-        # Add reference line at y=0
-        fig_sortino_rsi.add_hline(y=0, line_dash="dash", line_color="gray", 
-                                 annotation_text="No Risk-Adjusted Return")
-        
-        fig_sortino_rsi.update_layout(
-            title="Sortino Ratio vs RSI Threshold",
-            xaxis_title="RSI Threshold",
-            yaxis_title="Sortino Ratio",
-            hovermode='closest',
-            xaxis=dict(range=[0, 100]),
-            showlegend=True
-        )
-        
-        st.plotly_chart(fig_sortino_rsi, use_container_width=True, key="sortino_rsi_chart")
-        
-        # RSI vs Cumulative Return Chart
-        st.subheader("📊 RSI Threshold vs Cumulative Return")
-        st.info("💡 **What this shows:** This chart displays how the total cumulative return varies across different RSI thresholds. Higher cumulative returns indicate better overall performance. Look for peaks in the chart to identify optimal RSI thresholds.")
-        
-        # Use original numerical data for consistency
-        original_filtered_data = st.session_state['results_df'][st.session_state['results_df']['RSI_Threshold'].isin(filtered_df['RSI_Threshold'])]
-        original_significant_data = original_filtered_data[original_filtered_data['significant'] == True]
-        original_non_significant_data = original_filtered_data[original_filtered_data['significant'] == False]
-        
-        fig_return_rsi = go.Figure()
-        
-        # Add points for significant signals (green)
-        if not original_significant_data.empty:
-            fig_return_rsi.add_trace(go.Scatter(
-                x=original_significant_data['RSI_Threshold'],
-                y=original_significant_data['Total_Return'],
-                mode='markers',
-                name='Significant Signals',
-                marker=dict(color='green', size=8),
-                line=dict(width=0),  # Explicitly disable lines
-                hovertemplate='<b>RSI %{x}</b><br>' +
-                            'Cumulative Return: %{y:.3%}<br>' +
-                            'Significant: ✓<extra></extra>'
-            ))
-        
-        # Add points for non-significant signals (red)
-        if not original_non_significant_data.empty:
-            fig_return_rsi.add_trace(go.Scatter(
-                x=original_non_significant_data['RSI_Threshold'],
-                y=original_non_significant_data['Total_Return'],
-                mode='markers',
-                name='Non-Significant Signals',
-                marker=dict(color='red', size=8),
-                line=dict(width=0),  # Explicitly disable lines
-                hovertemplate='<b>RSI %{x}</b><br>' +
-                            'Cumulative Return: %{y:.3%}<br>' +
-                            'Significant: ✗<extra></extra>'
-            ))
-        
-        # Add reference line at y=0
-        fig_return_rsi.add_hline(y=0, line_dash="dash", line_color="gray", 
-                                annotation_text="No Return")
-        
-        fig_return_rsi.update_layout(
-            title="Cumulative Return vs RSI Threshold",
-            xaxis_title="RSI Threshold",
-            yaxis_title="Cumulative Return (%)",
-            hovermode='closest',
-            xaxis=dict(range=[0, 100]),
-            yaxis=dict(tickformat='.1%'),
-            showlegend=True
-        )
-        
-        st.plotly_chart(fig_return_rsi, use_container_width=True, key="return_rsi_chart")
-        
-        # RSI vs Max Drawdown Chart
-        st.subheader("📊 RSI Threshold vs Max Drawdown")
-        st.info("💡 **What this shows:** This chart displays how the maximum drawdown (worst single trade loss) varies across different RSI thresholds. Lower drawdown values indicate better risk management. Look for valleys in the chart to identify RSI thresholds with lower risk.")
-        
-        fig_drawdown_rsi = go.Figure()
-        
-        # Add points for significant signals (green)
-        if not significant_data.empty:
-            fig_drawdown_rsi.add_trace(go.Scatter(
-                x=significant_data['RSI_Threshold'],
-                y=significant_data['Worst_Return'],
-                mode='markers',
-                name='Significant Signals',
-                marker=dict(color='green', size=8),
-                line=dict(width=0),  # Explicitly disable lines
-                hovertemplate='<b>RSI %{x}</b><br>' +
-                            'Max Drawdown: %{y:.1f}<br>' +
-                            'Significant: ✓<extra></extra>'
-            ))
-        
-        # Add points for non-significant signals (red)
-        if not non_significant_data.empty:
-            fig_drawdown_rsi.add_trace(go.Scatter(
-                x=non_significant_data['RSI_Threshold'],
-                y=non_significant_data['Worst_Return'],
-                mode='markers',
-                name='Non-Significant Signals',
-                marker=dict(color='red', size=8),
-                line=dict(width=0),  # Explicitly disable lines
-                hovertemplate='<b>RSI %{x}</b><br>' +
-                            'Max Drawdown: %{y:.1f}<br>' +
-                            'Significant: ✗<extra></extra>'
-            ))
-        
-        # Add reference line at y=0
-        fig_drawdown_rsi.add_hline(y=0, line_dash="dash", line_color="gray", 
-                                  annotation_text="No Loss")
-        
-        fig_drawdown_rsi.update_layout(
-            title="Max Drawdown vs RSI Threshold",
-            xaxis_title="RSI Threshold",
-            yaxis_title="Max Drawdown (%)",
-            hovermode='closest',
-            xaxis=dict(range=[0, 100]),
-            showlegend=True
-        )
-        
-        st.plotly_chart(fig_drawdown_rsi, use_container_width=True, key="drawdown_rsi_chart")
-        
-        # Top significant signals
-        if len(significant_signals) > 0:
-            st.subheader("🏆 Top Statistically Significant Signals")
+            st.plotly_chart(fig_sortino_rsi, use_container_width=True, key="sortino_rsi_chart")
             
-            # Sort by total return (highest cumulative return) instead of confidence level
-            # Use the original results_df for sorting since it has numerical values
-            original_significant_signals = st.session_state['results_df'][st.session_state['results_df']['significant'] == True].copy()
-            top_significant = original_significant_signals.nlargest(5, 'Total_Return')
+            # RSI vs Cumulative Return Chart
+            st.subheader("📊 RSI Threshold vs Cumulative Return")
+            st.info("💡 **What this shows:** This chart displays how the total cumulative return varies across different RSI thresholds. Higher cumulative returns indicate better overall performance. Look for peaks in the chart to identify optimal RSI thresholds.")
             
-            # Multiple Signal Comparison for Significant Signals
-            st.subheader("📊 Highest Cumulative Return Significant Signals Comparison")
-            st.info(f"💡 **What this shows:** This chart compares the top 5 signals with the highest cumulative returns among statistically significant signals against {benchmark_name} buy-and-hold. Each line represents a different RSI threshold that showed significant outperformance. The signals are ranked by total return, showing the highest cumulative return signals first.")
+            # Use original numerical data for consistency
+            original_filtered_data = st.session_state['results_df'][st.session_state['results_df']['RSI_Threshold'].isin(filtered_df['RSI_Threshold'])]
+            original_significant_data = original_filtered_data[original_filtered_data['significant'] == True]
+            original_non_significant_data = original_filtered_data[original_filtered_data['significant'] == False]
             
-            # Create comparison chart with all significant signals
-            fig_comparison = go.Figure()
+            fig_return_rsi = go.Figure()
             
-            # Add benchmark buy-and-hold
-            fig_comparison.add_trace(go.Scatter(
-                x=benchmark.index,
-                y=benchmark.values,
-                mode='lines',
-                name=f"{benchmark_name} Buy & Hold",
-                line=dict(color='red', width=2, dash='dash')
-            ))
+            # Add points for significant signals (green)
+            if not original_significant_data.empty:
+                fig_return_rsi.add_trace(go.Scatter(
+                    x=original_significant_data['RSI_Threshold'],
+                    y=original_significant_data['Total_Return'],
+                    mode='markers',
+                    name='Significant Signals',
+                    marker=dict(color='green', size=8),
+                    line=dict(width=0),  # Explicitly disable lines
+                    hovertemplate='<b>RSI %{x}</b><br>' +
+                                'Cumulative Return: %{y:.3%}<br>' +
+                                'Significant: ✓<extra></extra>'
+                ))
             
-            # Add significant signals with their corresponding benchmark curves
-            colors = ['blue', 'green', 'purple', 'orange', 'brown', 'pink', 'gray', 'olive']
-            for i, (idx, row) in enumerate(top_significant.iterrows()):
-                # Debug: Check if equity curve exists
-                if 'equity_curve' in row and row['equity_curve'] is not None:
-                    color = colors[i % len(colors)]
-                    
-                    # Add strategy equity curve
-                    fig_comparison.add_trace(go.Scatter(
-                        x=row['equity_curve'].index,
-                        y=row['equity_curve'].values,
-                        mode='lines',
-                        name=f"RSI {row['RSI_Threshold']} Strategy (Cumulative: {row['Total_Return']:.3%}, Annualized: {row['annualized_return']:.3%})",
-                        line=dict(color=color, width=2)
-                    ))
-                    
-                    # Add corresponding benchmark equity curve under same conditions
-                    # We need to calculate the benchmark equity curve for this specific RSI threshold
-                    signal_data = st.session_state.get('signal_data')
-                    benchmark_data = st.session_state.get('benchmark_data')
-                    rsi_period = st.session_state.get('rsi_period', 14)
-                    comparison = st.session_state.get('comparison', 'less_than')
-                    
-                    if signal_data is not None and benchmark_data is not None:
-                        # Calculate RSI for the signal
-                        signal_rsi = calculate_rsi(signal_data, window=rsi_period, method="wilders")
+            # Add points for non-significant signals (red)
+            if not original_non_significant_data.empty:
+                fig_return_rsi.add_trace(go.Scatter(
+                    x=original_non_significant_data['RSI_Threshold'],
+                    y=original_non_significant_data['Total_Return'],
+                    mode='markers',
+                    name='Non-Significant Signals',
+                    marker=dict(color='red', size=8),
+                    line=dict(width=0),  # Explicitly disable lines
+                    hovertemplate='<b>RSI %{x}</b><br>' +
+                                'Cumulative Return: %{y:.3%}<br>' +
+                                'Significant: ✗<extra></extra>'
+                ))
+            
+            # Add reference line at y=0
+            fig_return_rsi.add_hline(y=0, line_dash="dash", line_color="gray", 
+                                    annotation_text="No Return")
+            
+            fig_return_rsi.update_layout(
+                title="Cumulative Return vs RSI Threshold",
+                xaxis_title="RSI Threshold",
+                yaxis_title="Cumulative Return (%)",
+                hovermode='closest',
+                xaxis=dict(range=[0, 100]),
+                yaxis=dict(tickformat='.1%'),
+                showlegend=True
+            )
+            
+            st.plotly_chart(fig_return_rsi, use_container_width=True, key="return_rsi_chart")
+            
+            # Top significant signals comparison charts
+            if len(significant_signals) > 0:
+                st.subheader("🏆 Top Statistically Significant Signals")
+                
+                # Sort by total return (highest cumulative return) instead of confidence level
+                # Use the original results_df for sorting since it has numerical values
+                original_significant_signals = st.session_state['results_df'][st.session_state['results_df']['significant'] == True].copy()
+                top_significant = original_significant_signals.nlargest(5, 'Total_Return')
+                
+                # Multiple Signal Comparison for Significant Signals
+                st.subheader("📊 Highest Cumulative Return Significant Signals Comparison")
+                st.info(f"💡 **What this shows:** This chart compares the top 5 signals with the highest cumulative returns among statistically significant signals against {benchmark_name} buy-and-hold. Each line represents a different RSI threshold that showed significant outperformance. The signals are ranked by total return, showing the highest cumulative return signals first.")
+                
+                # Create comparison chart with all significant signals
+                fig_comparison = go.Figure()
+                
+                # Add benchmark buy-and-hold
+                fig_comparison.add_trace(go.Scatter(
+                    x=benchmark.index,
+                    y=benchmark.values,
+                    mode='lines',
+                    name=f"{benchmark_name} Buy & Hold",
+                    line=dict(color='red', width=2, dash='dash')
+                ))
+                
+                # Add significant signals with their corresponding benchmark curves
+                colors = ['blue', 'green', 'purple', 'orange', 'brown', 'pink', 'gray', 'olive']
+                for i, (idx, row) in enumerate(top_significant.iterrows()):
+                    # Debug: Check if equity curve exists
+                    if 'equity_curve' in row and row['equity_curve'] is not None:
+                        color = colors[i % len(colors)]
                         
-                        # Generate buy signals for benchmark (same as strategy)
-                        if comparison == "less_than":
-                            benchmark_signals = (signal_rsi <= row['RSI_Threshold']).astype(int)
-                        else:  # greater_than
-                            benchmark_signals = (signal_rsi >= row['RSI_Threshold']).astype(int)
-                        
-                        # Calculate benchmark equity curve using benchmark prices (same logic as strategy)
-                        benchmark_equity_curve = pd.Series(1.0, index=benchmark_data.index)
-                        current_equity = 1.0
-                        in_position = False
-                        entry_equity = 1.0
-                        entry_price = None
-                        
-                        for date in benchmark_data.index:
-                            current_signal = benchmark_signals[date] if date in benchmark_signals.index else 0
-                            current_price = benchmark_data[date]
-                            
-                            if current_signal == 1 and not in_position:
-                                # Enter position
-                                in_position = True
-                                entry_equity = current_equity
-                                entry_price = current_price
-                                
-                            elif current_signal == 0 and in_position:
-                                # Exit position
-                                trade_return = (current_price - entry_price) / entry_price
-                                current_equity = entry_equity * (1 + trade_return)
-                                in_position = False
-                            
-                            # Update equity curve
-                            if in_position:
-                                current_equity = entry_equity * (current_price / entry_price)
-                            
-                            benchmark_equity_curve[date] = current_equity
-                        
-                        # Handle case where we're still in position at the end
-                        if in_position:
-                            final_price = benchmark_data.iloc[-1]
-                            trade_return = (final_price - entry_price) / entry_price
-                            current_equity = entry_equity * (1 + trade_return)
-                            benchmark_equity_curve.iloc[-1] = current_equity
-                        
-                        # Add benchmark equity curve under same conditions
+                        # Add strategy equity curve
                         fig_comparison.add_trace(go.Scatter(
-                            x=benchmark_equity_curve.index,
-                            y=benchmark_equity_curve.values,
+                            x=row['equity_curve'].index,
+                            y=row['equity_curve'].values,
                             mode='lines',
-                            name=f"RSI {row['RSI_Threshold']} Benchmark (same conditions)",
-                            line=dict(color=color, width=1, dash='dot'),
-                            visible='legendonly'  # Hidden by default
+                            name=f"RSI {row['RSI_Threshold']} Strategy (Cumulative: {row['Total_Return']:.3%}, Annualized: {row['annualized_return']:.3%})",
+                            line=dict(color=color, width=2)
                         ))
-                else:
-                    st.warning(f"No equity curve found for RSI {row['RSI_Threshold']}")
-            
-            # Find the shortest time period among visible curves for default scaling
-            shortest_period = None
-            shortest_duration = float('inf')
-            
-            # Check strategy curves (these are always visible)
-            for i, (idx, row) in enumerate(top_significant.iterrows()):
-                if 'equity_curve' in row and row['equity_curve'] is not None:
-                    curve_duration = (row['equity_curve'].index[-1] - row['equity_curve'].index[0]).days
-                    if curve_duration < shortest_duration:
-                        shortest_duration = curve_duration
-                        shortest_period = row['equity_curve']
-            
-            # If no strategy curves found, use benchmark
-            if shortest_period is None:
-                shortest_period = benchmark
-            
-            fig_comparison.update_layout(
-                title=f"Highest Cumulative Return Significant Signals Comparison vs {benchmark_name}",
-                xaxis_title="Date",
-                yaxis_title="Equity Value",
-                hovermode='x unified',
-                legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01),
-                xaxis=dict(range=[shortest_period.index[0], shortest_period.index[-1]])  # Scale to shortest period
-            )
-            st.plotly_chart(fig_comparison, use_container_width=True, key="most_profitable_comparison")
-            
-            # Highest Sortino Significant Signals Comparison
-            st.subheader("📊 Highest Sortino Significant Signals Comparison")
-            st.info(f"💡 **What this shows:** This chart compares the top 5 signals with the highest Sortino ratios (best risk-adjusted returns) among statistically significant signals against {benchmark_name} buy-and-hold. Each line represents a different RSI threshold that showed significant outperformance with excellent risk-adjusted performance. The signals are ranked by Sortino ratio, showing the best risk-adjusted returns first.")
-            
-            # Sort by Sortino ratio (best risk-adjusted returns) instead of annualized return
-            # Use the original results_df for sorting since it has numerical values
-            original_significant_signals = st.session_state['results_df'][st.session_state['results_df']['significant'] == True].copy()
-            top_sortino_significant = original_significant_signals.nlargest(5, 'Sortino_Ratio')
-            
-            # Create comparison chart with highest Sortino signals
-            fig_sortino_comparison = go.Figure()
-            
-            # Add benchmark buy-and-hold
-            fig_sortino_comparison.add_trace(go.Scatter(
-                x=benchmark.index,
-                y=benchmark.values,
-                mode='lines',
-                name=f"{benchmark_name} Buy & Hold",
-                line=dict(color='red', width=2, dash='dash')
-            ))
-            
-            # Add significant signals with highest Sortino ratios and their corresponding benchmark curves
-            colors = ['blue', 'green', 'purple', 'orange', 'brown', 'pink', 'gray', 'olive']
-            for i, (idx, row) in enumerate(top_sortino_significant.iterrows()):
-                # Debug: Check if equity curve exists
-                if 'equity_curve' in row and row['equity_curve'] is not None:
-                    color = colors[i % len(colors)]
-                    
-                    # Add strategy equity curve
-                    fig_sortino_comparison.add_trace(go.Scatter(
-                        x=row['equity_curve'].index,
-                        y=row['equity_curve'].values,
-                        mode='lines',
-                        name=f"RSI {row['RSI_Threshold']} Strategy (Cumulative: {row['Total_Return']:.3%}, Annualized: {row['annualized_return']:.3%}, Sortino: {row['Sortino_Ratio']:.2f})",
-                        line=dict(color=color, width=2)
-                    ))
-                    
-                    # Add corresponding benchmark equity curve under same conditions
-                    # We need to calculate the benchmark equity curve for this specific RSI threshold
-                    signal_data = st.session_state.get('signal_data')
-                    benchmark_data = st.session_state.get('benchmark_data')
-                    rsi_period = st.session_state.get('rsi_period', 14)
-                    comparison = st.session_state.get('comparison', 'less_than')
-                    
-                    if signal_data is not None and benchmark_data is not None:
-                        # Calculate RSI for the signal
-                        signal_rsi = calculate_rsi(signal_data, window=rsi_period, method="wilders")
                         
-                        # Generate buy signals for benchmark (same as strategy)
-                        if comparison == "less_than":
-                            benchmark_signals = (signal_rsi <= row['RSI_Threshold']).astype(int)
-                        else:  # greater_than
-                            benchmark_signals = (signal_rsi >= row['RSI_Threshold']).astype(int)
+                        # Add corresponding benchmark equity curve under same conditions
+                        # We need to calculate the benchmark equity curve for this specific RSI threshold
+                        signal_data = st.session_state.get('signal_data')
+                        benchmark_data = st.session_state.get('benchmark_data')
+                        rsi_period = st.session_state.get('rsi_period', 14)
+                        comparison = st.session_state.get('comparison', 'less_than')
                         
-                        # Calculate benchmark equity curve using benchmark prices (same logic as strategy)
-                        benchmark_equity_curve = pd.Series(1.0, index=benchmark_data.index)
-                        current_equity = 1.0
-                        in_position = False
-                        entry_equity = 1.0
-                        entry_price = None
-                        
-                        for date in benchmark_data.index:
-                            current_signal = benchmark_signals[date] if date in benchmark_signals.index else 0
-                            current_price = benchmark_data[date]
+                        if signal_data is not None and benchmark_data is not None:
+                            # Calculate RSI for the signal
+                            signal_rsi = calculate_rsi(signal_data, window=rsi_period, method="wilders")
                             
-                            if current_signal == 1 and not in_position:
-                                # Enter position
-                                in_position = True
-                                entry_equity = current_equity
-                                entry_price = current_price
+                            # Generate buy signals for benchmark (same as strategy)
+                            if comparison == "less_than":
+                                benchmark_signals = (signal_rsi <= row['RSI_Threshold']).astype(int)
+                            else:  # greater_than
+                                benchmark_signals = (signal_rsi >= row['RSI_Threshold']).astype(int)
+                            
+                            # Calculate benchmark equity curve using benchmark prices (same logic as strategy)
+                            benchmark_equity_curve = pd.Series(1.0, index=benchmark_data.index)
+                            current_equity = 1.0
+                            in_position = False
+                            entry_equity = 1.0
+                            entry_price = None
+                            
+                            for date in benchmark_data.index:
+                                current_signal = benchmark_signals[date] if date in benchmark_signals.index else 0
+                                current_price = benchmark_data[date]
                                 
-                            elif current_signal == 0 and in_position:
-                                # Exit position
-                                trade_return = (current_price - entry_price) / entry_price
-                                current_equity = entry_equity * (1 + trade_return)
-                                in_position = False
+                                if current_signal == 1 and not in_position:
+                                    # Enter position
+                                    in_position = True
+                                    entry_equity = current_equity
+                                    entry_price = current_price
+                                    
+                                elif current_signal == 0 and in_position:
+                                    # Exit position
+                                    trade_return = (current_price - entry_price) / entry_price
+                                    current_equity = entry_equity * (1 + trade_return)
+                                    in_position = False
+                                
+                                # Update equity curve
+                                if in_position:
+                                    current_equity = entry_equity * (current_price / entry_price)
+                                
+                                benchmark_equity_curve[date] = current_equity
                             
-                            # Update equity curve
+                            # Handle case where we're still in position at the end
                             if in_position:
-                                current_equity = entry_equity * (current_price / entry_price)
+                                final_price = benchmark_data.iloc[-1]
+                                trade_return = (final_price - entry_price) / entry_price
+                                current_equity = entry_equity * (1 + trade_return)
+                                benchmark_equity_curve.iloc[-1] = current_equity
                             
-                            benchmark_equity_curve[date] = current_equity
-                        
-                        # Handle case where we're still in position at the end
-                        if in_position:
-                            final_price = benchmark_data.iloc[-1]
-                            trade_return = (final_price - entry_price) / entry_price
-                            current_equity = entry_equity * (1 + trade_return)
-                            benchmark_equity_curve.iloc[-1] = current_equity
-                        
-                        # Add benchmark equity curve under same conditions
-                        fig_sortino_comparison.add_trace(go.Scatter(
-                            x=benchmark_equity_curve.index,
-                            y=benchmark_equity_curve.values,
-                            mode='lines',
-                            name=f"RSI {row['RSI_Threshold']} Benchmark (same conditions)",
-                            line=dict(color=color, width=1, dash='dot'),
-                            visible='legendonly'  # Hidden by default
-                        ))
-                else:
-                    st.warning(f"No equity curve found for RSI {row['RSI_Threshold']}")
-            
-            # Find the shortest time period among visible curves for default scaling
-            shortest_period = None
-            shortest_duration = float('inf')
-            
-            # Check strategy curves (these are always visible)
-            for i, (idx, row) in enumerate(top_sortino_significant.iterrows()):
-                if 'equity_curve' in row and row['equity_curve'] is not None:
-                    curve_duration = (row['equity_curve'].index[-1] - row['equity_curve'].index[0]).days
-                    if curve_duration < shortest_duration:
-                        shortest_duration = curve_duration
-                        shortest_period = row['equity_curve']
-            
-            # If no strategy curves found, use benchmark
-            if shortest_period is None:
-                shortest_period = benchmark
-            
-            fig_sortino_comparison.update_layout(
-                title=f"Highest Sortino Significant Signals Comparison vs {benchmark_name}",
-                xaxis_title="Date",
-                yaxis_title="Equity Value",
-                hovermode='x unified',
-                legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01),
-                xaxis=dict(range=[shortest_period.index[0], shortest_period.index[-1]])  # Scale to shortest period
-            )
-            st.plotly_chart(fig_sortino_comparison, use_container_width=True, key="highest_sortino_comparison")
-            
-        else:
-            st.warning("No signals reached statistical significance (p < 0.05)")
-        
-        # Note: QuantStats detailed reports removed to avoid import issues
-        # Basic QuantStats metrics are still available in the main results table
-
+                            # Add benchmark equity curve under same conditions
+                            fig_comparison.add_trace(go.Scatter(
+                                x=benchmark_equity_curve.index,
+                                y=benchmark_equity_curve.values,
+                                mode='lines',
+                                name=f"RSI {row['RSI_Threshold']} Benchmark (same conditions)",
+                                line=dict(color=color, width=1, dash='dot'),
+                                visible='legendonly'  # Hidden by default
+                            ))
+                    else:
+                        st.warning(f"No equity curve found for RSI {row['RSI_Threshold']}")
+                
+                # Find the shortest time period among visible curves for default scaling
+                shortest_period = None
+                shortest_duration = float('inf')
+                
+                # Check strategy curves (these are always visible)
+                for i, (idx, row) in enumerate(top_significant.iterrows()):
+                    if 'equity_curve' in row and row['equity_curve'] is not None:
+                        curve_duration = (row['equity_curve'].index[-1] - row['equity_curve'].index[0]).days
+                        if curve_duration < shortest_duration:
+                            shortest_duration = curve_duration
+                            shortest_period = row['equity_curve']
+                
+                # If no strategy curves found, use benchmark
+                if shortest_period is None:
+                    shortest_period = benchmark
+                
+                fig_comparison.update_layout(
+                    title=f"Highest Cumulative Return Significant Signals Comparison vs {benchmark_name}",
+                    xaxis_title="Date",
+                    yaxis_title="Equity Value",
+                    hovermode='x unified',
+                    legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01),
+                    xaxis=dict(range=[shortest_period.index[0], shortest_period.index[-1]])  # Scale to shortest period
+                )
+                st.plotly_chart(fig_comparison, use_container_width=True, key="most_profitable_comparison")
+            else:
+                st.warning("No signals reached statistical significance (p < 0.05)")
+    
+    # Download results
+    st.subheader("📥 Download Results")
+    st.info("💡 **What this does:** Download your analysis results as a CSV file that you can open in Excel or other spreadsheet programs. This includes all the performance metrics for every RSI threshold tested.")
+    # Use the original column names from results_df for CSV download
+    download_cols = ['RSI_Threshold', 'Total_Trades', 'Win_Rate', 'Avg_Return', 'Median_Return', 'Benchmark_Avg_Return', 'Benchmark_Median_Return',
+                   'Total_Return', 'annualized_return', 'Sortino_Ratio', 'sharpe_ratio', 'calmar_ratio', 'Final_Equity', 'Avg_Hold_Days', 
+                   'Return_Std', 'Best_Return', 'Worst_Return', 'max_drawdown', 'var_95', 'beta', 'alpha', 'information_ratio', 'confidence_level', 'significant', 'effect_size']
+    csv = st.session_state['results_df'][download_cols].to_csv(index=False)
+    filename_suffix = f"_{start_date}_{end_date}" if use_date_range and start_date and end_date else "_max_range"
+    st.download_button(
+        label="📥 Download Results as CSV",
+        data=csv,
+        file_name=f"rsi_analysis_{signal_ticker}_{target_ticker}{filename_suffix}_{datetime.now().strftime('%Y%m%d')}.csv",
+        mime="text/csv"
+    )
+    
     # Statistical interpretation guide
     with st.expander("📚 Statistical Significance Guide"):
         st.write("""
@@ -2981,6 +2783,9 @@ else:
         - **High Win Rate**: Signal wins more often than it loses
         - **Good Sortino Ratio**: Signal has good risk-adjusted returns
         """)
+
+else:
+    st.info("ℹ️ No analysis results found. Please run the analysis first.")
 
 st.write("---")
 st.write("💡 **Tip:** Try different ticker combinations and RSI conditions to find optimal signal thresholds")
