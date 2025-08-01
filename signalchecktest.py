@@ -1646,12 +1646,21 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
             st.write(f"• {extreme_rsi_count} RSI thresholds are at extreme values (may have limited historical occurrences)")
         st.write("**Recommendation:** Focus on RSI thresholds with more trades and higher confidence levels for more reliable results.")
     
-    # Display results table
-    st.subheader("📊 RSI Analysis Results")
-    st.info("💡 **What this shows:** This table displays all the RSI thresholds tested and their performance metrics. Each row represents a different RSI level and shows how well that strategy performed.")
-    
-    # Format the dataframe for display
-    display_df = results_df.copy()
+    # Display results based on analysis mode
+    if 'RSI_Threshold' in results_df.columns:
+        # RSI Threshold mode - show full analysis with filters and charts
+        st.subheader("📊 RSI Analysis Results")
+        st.info("💡 **What this shows:** This table displays all the RSI thresholds tested and their performance metrics. Each row represents a different RSI level and shows how well that strategy performed.")
+        
+        # Format the dataframe for display
+        display_df = results_df.copy()
+    else:
+        # RSI Comparison mode - show simplified results
+        st.subheader("📊 RSI Comparison Results")
+        st.info("💡 **What this shows:** This table displays the performance of your RSI comparison strategy against the benchmark.")
+        
+        # Format the dataframe for display
+        display_df = results_df.copy()
     
     # Check if required columns exist before formatting
     required_columns = ['Win_Rate', 'Avg_Return', 'Median_Return', 'Benchmark_Avg_Return', 'Benchmark_Median_Return', 'Total_Return', 'annualized_return', 
@@ -1707,12 +1716,19 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
         st.error(f"Missing display columns: {missing_display_cols}")
         st.stop()
     
-    # Add filter options for the results table
-    with st.expander("📊 Table of Results", expanded=False):
-        st.subheader("🔍 Filter Results")
-    
-        # Create filter columns
-        col1, col2, col3, col4 = st.columns(4)
+    # Display table based on analysis mode
+    if 'RSI_Threshold' in display_df.columns:
+        # RSI Threshold mode - show filterable table
+        with st.expander("📊 Table of Results", expanded=False):
+            st.subheader("🔍 Filter Results")
+        
+            # Create filter columns
+            col1, col2, col3, col4 = st.columns(4)
+    else:
+        # RSI Comparison mode - show simple table without filters
+        st.subheader("📊 Results Table")
+        # Create a simple display without filters
+        filtered_df = display_df.copy()
         with col1:
             # Only show RSI threshold filters in RSI Threshold mode
             if 'RSI_Threshold' in display_df.columns:
@@ -1866,14 +1882,25 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
         st.dataframe(filtered_df[display_cols], use_container_width=True)
 
     # Find best strategies (needed for subsequent sections)
-    best_sortino_idx = filtered_df['Sortino_Ratio'].idxmax()
-    best_annualized_idx = filtered_df['annualized_return'].idxmax()
-    best_winrate_idx = filtered_df['Win_Rate'].idxmax()
-    best_total_return_idx = filtered_df['Total_Return'].idxmax()
-    
-    # Statistical Significance Analysis
-    with st.expander("📊 Statistical Significance Analysis", expanded=True):
+    # Handle different display modes
+    if 'RSI_Threshold' in display_df.columns:
+        # RSI Threshold mode - show full analysis
+        best_sortino_idx = filtered_df['Sortino_Ratio'].idxmax()
+        best_annualized_idx = filtered_df['annualized_return'].idxmax()
+        best_winrate_idx = filtered_df['Win_Rate'].idxmax()
+        best_total_return_idx = filtered_df['Total_Return'].idxmax()
+        
+        # Statistical Significance Analysis - Full analysis for RSI Threshold mode
+        with st.expander("📊 Statistical Significance Analysis", expanded=True):
+            st.subheader("📊 Statistical Significance Analysis")
+    else:
+        # RSI Comparison mode - show simple table and simplified analysis
+        st.dataframe(filtered_df[display_cols], use_container_width=True)
+        
+        # Statistical Significance Analysis - Simplified for RSI Comparison mode
         st.subheader("📊 Statistical Significance Analysis")
+        
+        # Get benchmark info
         stored_benchmark_ticker = st.session_state.get('benchmark_ticker', 'SPY')
         benchmark_description = {
             "SPY": "S&P 500",
@@ -1882,84 +1909,65 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
         }.get(stored_benchmark_ticker, "Custom Benchmark")
         benchmark_name = f"{stored_benchmark_ticker} ({benchmark_description})"
         
-        # Use all signals for the chart (including those with 0 trades)
-        valid_signals = filtered_df.copy()
+        # Get the single result for RSI Comparison mode
+        result = filtered_df.iloc[0]
         
-        # Add summary of statistical analysis
-        if not valid_signals.empty:
-            signals_with_trades = valid_signals[valid_signals['Total_Trades'] > 0]
-            significant_count = len(valid_signals[valid_signals['significant'] == True])
-            total_signals = len(valid_signals)
-            signals_with_trades_count = len(signals_with_trades)
-            st.success(f"📊 **Analysis Summary:** Found {significant_count} statistically significant signals out of {total_signals} total signals ({signals_with_trades_count} with trades).")
+        # Display significance explanation
+        if result['significant']:
+            st.success(f"✅ **Statistically Significant Result**")
+            st.write(f"Your RSI comparison strategy shows statistically significant outperformance against {benchmark_name}.")
+            st.write(f"**Confidence Level:** {result['Confidence_Level']}")
+            st.write(f"**P-Value:** {result['P_Value']}")
+            st.write(f"**Effect Size:** {result['Effect_Size']}")
+            st.write("**Interpretation:** The results are unlikely to be due to chance, suggesting your strategy has genuine predictive value.")
         else:
-            st.warning("⚠️ **No signals found.** This means none of the RSI thresholds generated any results during the analysis period.")
+            st.warning(f"⚠️ **Not Statistically Significant**")
+            st.write(f"Your RSI comparison strategy does not show statistically significant outperformance against {benchmark_name}.")
+            st.write(f"**Confidence Level:** {result['Confidence_Level']}")
+            st.write(f"**P-Value:** {result['P_Value']}")
+            st.write(f"**Effect Size:** {result['Effect_Size']}")
+            st.write("**Interpretation:** The results may be due to chance, and the strategy's predictive value is uncertain.")
         
-        if not valid_signals.empty:
-            # Create significance summary
-            significant_signals = valid_signals[valid_signals['significant'] == True]
+        # Show equity curve comparison
+        st.subheader("📈 Equity Curve Comparison")
+        st.info("💡 **What this shows:** This chart compares your strategy's performance against the benchmark over time.")
+        
+        # Create equity curve chart
+        if 'equity_curve' in results_df.columns and 'benchmark_equity_curve' in results_df.columns:
+            strategy_curve = results_df.iloc[0]['equity_curve']
+            benchmark_curve = results_df.iloc[0]['benchmark_equity_curve']
             
-            # Confidence Level vs RSI Threshold Analysis
-            st.subheader("📊 Confidence Level vs RSI Threshold Analysis")
-            st.info(f"💡 **What This Section Shows:** This section determines whether your signal's performance is statistically significant - meaning the results are likely not due to chance. It compares your signal against {benchmark_name} under the same conditions to see if your target ticker choice is actually better.")
+            fig_equity = go.Figure()
             
-            # Create scatter plot for confidence vs RSI threshold
-            fig_confidence_rsi = go.Figure()
+            # Add strategy equity curve
+            fig_equity.add_trace(go.Scatter(
+                x=strategy_curve.index,
+                y=strategy_curve.values,
+                mode='lines',
+                name=f'Strategy ({result["Signal_Ticker"]} vs {result["Comparison_Ticker"]})',
+                line=dict(color='blue', width=2)
+            ))
             
-            # Add points for significant signals (green)
-            significant_data = valid_signals[valid_signals['significant'] == True]
-            if not significant_data.empty:
-                # Use appropriate x-axis column based on analysis mode
-                x_column = 'RSI_Threshold' if 'RSI_Threshold' in significant_data.columns else 'Signal_Ticker'
-                fig_confidence_rsi.add_trace(go.Scatter(
-                    x=significant_data[x_column],
-                    y=significant_data['confidence_level'],
-                    mode='markers',
-                    name='Significant Signals (≥95%)',
-                    marker=dict(
-                        color='green',
-                        size=abs(significant_data['effect_size']) * 20 + 5,  # Scale effect size for visibility
-                        sizemin=5,
-                        sizemode='area',
-                        opacity=0.7
-                    ),
-                    hovertemplate='<b>RSI %{x}</b><br>' +
-                                'Confidence: %{y:.1f}%<br>' +
-                                'Effect Size: %{marker.size:.1f}<br>' +
-                                'Significant: ✓<extra></extra>'
-                ))
+            # Add benchmark equity curve
+            fig_equity.add_trace(go.Scatter(
+                x=benchmark_curve.index,
+                y=benchmark_curve.values,
+                mode='lines',
+                name=f'Benchmark ({stored_benchmark_ticker})',
+                line=dict(color='red', width=2)
+            ))
             
-            # Add points for borderline significant signals (yellow)
-            borderline_data = valid_signals[(valid_signals['confidence_level'] >= 85) & (valid_signals['confidence_level'] < 95)]
-            if not borderline_data.empty:
-                fig_confidence_rsi.add_trace(go.Scatter(
-                    x=borderline_data['RSI_Threshold'],
-                    y=borderline_data['confidence_level'],
-                    mode='markers',
-                    name='Borderline Signals (85-95%)',
-                    marker=dict(
-                        color='yellow',
-                        size=abs(borderline_data['effect_size']) * 20 + 5,  # Scale effect size for visibility
-                        sizemin=5,
-                        sizemode='area',
-                        opacity=0.7
-                    ),
-                    hovertemplate='<b>RSI %{x}</b><br>' +
-                                'Confidence: %{y:.1f}%<br>' +
-                                'Effect Size: %{marker.size:.1f}<br>' +
-                                'Borderline: ⚠<extra></extra>'
-                ))
+            fig_equity.update_layout(
+                title="Strategy vs Benchmark Performance",
+                xaxis_title="Date",
+                yaxis_title="Cumulative Return",
+                hovermode='x unified',
+                showlegend=True
+            )
             
-            # Add points for non-significant signals (red)
-            non_significant_data = valid_signals[valid_signals['confidence_level'] < 85]
-            if not non_significant_data.empty:
-                fig_confidence_rsi.add_trace(go.Scatter(
-                    x=non_significant_data[x_column],
-                    y=non_significant_data['confidence_level'],
-                    mode='markers',
-                    name='Non-Significant Signals (<85%)',
-                    marker=dict(
-                        color='red',
+            st.plotly_chart(fig_equity, use_container_width=True)
+        else:
+            st.warning("⚠️ Equity curve data not available for display.")
                         size=abs(non_significant_data['effect_size']) * 20 + 5,  # Scale effect size for visibility
                         sizemin=5,
                         sizemode='area',
