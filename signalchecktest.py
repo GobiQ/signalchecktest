@@ -784,16 +784,6 @@ st.sidebar.header("📊 Configuration")
 # QuantStats Configuration
 use_quantstats = st.sidebar.checkbox("Enable QuantStats Integration", value=True, help="Enable enhanced financial analysis using QuantStats library. When disabled, the app will use fallback calculations.")
 
-# Input fields with help tooltips
-signal_ticker = st.sidebar.text_input("Signal Ticker", value="QQQ", help="The ticker that generates RSI signals. This is the stock/ETF whose RSI we'll use to decide when to buy/sell the target ticker.")
-
-# RSI Period selection
-rsi_period = st.sidebar.number_input("RSI Period (Days)", min_value=1, max_value=50, value=10, 
-                                    help="How many days to look back when calculating RSI. 10 is more sensitive to recent changes than the standard 14. Lower numbers make RSI more responsive to recent market movements.")
-
-# RSI Calculation Method - Fixed to Wilder's method
-rsi_method = "wilders"
-
 # Preconditions System
 st.sidebar.subheader("🔍 Preconditions", help="Preconditions add additional RSI conditions that must ALL be true before the main signal is considered. This allows for more complex multi-condition strategies.")
 
@@ -853,6 +843,16 @@ if st.session_state.preconditions:
         st.session_state.preconditions = []
         st.rerun()
 
+# Input fields with help tooltips
+signal_ticker = st.sidebar.text_input("Signal Ticker", value="QQQ", help="The ticker that generates RSI signals. This is the stock/ETF whose RSI we'll use to decide when to buy/sell the target ticker.")
+
+# RSI Period selection
+rsi_period = st.sidebar.number_input("RSI Period (Days)", min_value=1, max_value=50, value=10, 
+                                    help="How many days to look back when calculating RSI. 10 is more sensitive to recent changes than the standard 14. Lower numbers make RSI more responsive to recent market movements.")
+
+# RSI Calculation Method - Fixed to Wilder's method
+rsi_method = "wilders"
+
 # Conditional target ticker default based on RSI condition
 comparison = st.sidebar.selectbox("RSI Condition", 
                                ["greater_than", "less_than"], 
@@ -883,6 +883,19 @@ custom_benchmark = st.sidebar.text_input("Custom Benchmark Ticker (optional)",
                                         placeholder="e.g., QQQ, VTI, etc.",
                                         help="Enter a custom ticker symbol to use as benchmark. Leave empty to use the selected benchmark above.")
 
+if comparison == "less_than":
+    default_min, default_max = 5, 37
+    st.sidebar.write("Buy signals: Signal RSI ≤ threshold")
+else:
+    default_min, default_max = 70, 100
+    st.sidebar.write("Buy signals: Signal RSI ≥ threshold")
+
+rsi_min = st.sidebar.number_input("RSI Range Min", min_value=0.0, max_value=100.0, value=float(default_min), step=0.5, help="The lowest RSI threshold to test. For 'RSI ≤ threshold', try 20-40. For 'RSI ≥ threshold', try 60-80.")
+rsi_max = st.sidebar.number_input("RSI Range Max", min_value=0.0, max_value=100.0, value=float(default_max), step=0.5, help="The highest RSI threshold to test. The app will test every 0.5 between min and max.")
+
+if rsi_min >= rsi_max:
+    st.sidebar.error("RSI Min must be less than RSI Max")
+
 # Date range selection
 st.sidebar.subheader("📅 Date Range")
 use_date_range = st.sidebar.checkbox("Use custom date range", help="Check this to specify your own start and end dates. If unchecked, the app will use all available data.")
@@ -900,19 +913,6 @@ if use_date_range:
 else:
     start_date, end_date = None, None
     st.sidebar.info("Using maximum available data")
-
-if comparison == "less_than":
-    default_min, default_max = 5, 37
-    st.sidebar.write("Buy signals: Signal RSI ≤ threshold")
-else:
-    default_min, default_max = 70, 100
-    st.sidebar.write("Buy signals: Signal RSI ≥ threshold")
-
-rsi_min = st.sidebar.number_input("RSI Range Min", min_value=0.0, max_value=100.0, value=float(default_min), step=0.5, help="The lowest RSI threshold to test. For 'RSI ≤ threshold', try 20-40. For 'RSI ≥ threshold', try 60-80.")
-rsi_max = st.sidebar.number_input("RSI Range Max", min_value=0.0, max_value=100.0, value=float(default_max), step=0.5, help="The highest RSI threshold to test. The app will test every 0.5 between min and max.")
-
-if rsi_min >= rsi_max:
-    st.sidebar.error("RSI Min must be less than RSI Max")
 
 # Add the Run Analysis button to the sidebar
 st.sidebar.markdown("---")
