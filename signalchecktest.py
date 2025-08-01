@@ -230,11 +230,34 @@ def analyze_rsi_comparison_signals(signal_prices: pd.Series, comparison_prices: 
             'information_ratio': 0.0
         }
     
+    # Calculate additional metrics for display compatibility
+    if len(trades) > 0:
+        returns_array = np.array(trades)
+        avg_return = np.mean(returns_array)
+        median_return = np.median(returns_array)
+        return_std = np.std(returns_array)
+        best_return = np.max(returns_array)
+        worst_return = np.min(returns_array)
+        final_equity = current_equity
+    else:
+        avg_return = 0.0
+        median_return = 0.0
+        return_std = 0.0
+        best_return = 0.0
+        worst_return = 0.0
+        final_equity = 1.0
+    
     return {
         'equity_curve': equity_curve,
         'total_return': total_return,
         'annualized_return': annualized_return,
         'trades': trades,
+        'avg_return': avg_return,
+        'median_return': median_return,
+        'return_std': return_std,
+        'best_return': best_return,
+        'worst_return': worst_return,
+        'final_equity': final_equity,
         **additional_metrics
     }
 
@@ -785,7 +808,7 @@ def run_rsi_comparison_analysis(signal_ticker: str, comparison_ticker: str, targ
         analysis['annualized_return'], benchmark_annualized
     )
     
-    # Create results DataFrame
+    # Create results DataFrame with all required columns
     results_df = pd.DataFrame({
         'Signal_Ticker': [signal_ticker],
         'Comparison_Ticker': [comparison_ticker],
@@ -815,7 +838,21 @@ def run_rsi_comparison_analysis(signal_ticker: str, comparison_ticker: str, targ
         'Power': [significance_results['power']],
         'significant': [significance_results['significant']],
         'equity_curve': [analysis['equity_curve']],
-        'benchmark_equity_curve': [benchmark_equity_curve]
+        'benchmark_equity_curve': [benchmark_equity_curve],
+        # Add missing columns that the display expects
+        'Avg_Return': [analysis.get('avg_return', 0.0)],
+        'Median_Return': [analysis.get('median_return', 0.0)],
+        'Return_Std': [analysis.get('return_std', 0.0)],
+        'Best_Return': [analysis.get('best_return', 0.0)],
+        'Worst_Return': [analysis.get('worst_return', 0.0)],
+        'Final_Equity': [analysis.get('final_equity', 1.0)],
+        'confidence_level': [significance_results['confidence_level']],
+        'effect_size': [significance_results['effect_size']],
+        'p_value': [significance_results['p_value']],
+        'sharpe_ratio': [analysis['sharpe_ratio']],
+        'calmar_ratio': [analysis['calmar_ratio']],
+        'max_drawdown': [analysis['max_drawdown']],
+        'var_95': [analysis['var_95']]
     })
     
     return results_df, benchmark, data_messages
