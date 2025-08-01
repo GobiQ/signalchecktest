@@ -1729,116 +1729,101 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
         st.subheader("📊 Results Table")
         # Create a simple display without filters
         filtered_df = display_df.copy()
-        with col1:
-            # Only show RSI threshold filters in RSI Threshold mode
-            if 'RSI_Threshold' in display_df.columns:
-                rsi_min_filter = st.number_input(
-                    "Min RSI Threshold:",
-                    min_value=float(display_df['RSI_Threshold'].min()),
-                    max_value=float(display_df['RSI_Threshold'].max()),
-                    value=float(display_df['RSI_Threshold'].min()),
-                    step=0.5,
-                    help="Minimum RSI threshold to include in results."
+        # Define empty column variables to avoid NameError
+        col1, col2, col3, col4 = None, None, None, None
+        # Skip the filter section entirely for RSI Comparison mode
+        rsi_min_filter, rsi_max_filter = 0, 100
+        confidence_min_filter, confidence_max_filter = 0.0, 100.0
+        min_trades_filter, min_win_rate_filter = 0, 0.0
+        min_avg_return_filter, min_total_return_filter = -100.0, -100.0
+        min_annualized_return_filter, min_sortino_filter = -100.0, -10.0
+        significance_filter, max_p_value_filter = "All", 1.0
+        if col2 is not None:  # Only show filters in RSI Threshold mode
+            with col2:
+                confidence_min_filter = st.number_input(
+                    "Min Confidence Level (%):",
+                    min_value=0.0,
+                    max_value=100.0,
+                    value=0.0,
+                    step=1.0,
+                    help="Minimum confidence level to include in results."
                 )
-                rsi_max_filter = st.number_input(
-                    "Max RSI Threshold:",
-                    min_value=float(display_df['RSI_Threshold'].min()),
-                    max_value=float(display_df['RSI_Threshold'].max()),
-                    value=float(display_df['RSI_Threshold'].max()),
-                    step=0.5,
-                    help="Maximum RSI threshold to include in results."
+                confidence_max_filter = st.number_input(
+                    "Max Confidence Level (%):",
+                    min_value=0.0,
+                    max_value=100.0,
+                    value=100.0,
+                    step=1.0,
+                    help="Maximum confidence level to include in results."
                 )
-            else:
-                # In RSI Comparison mode, show different filters
-                st.write("**RSI Comparison Mode**")
-                st.write("No RSI threshold filters available")
-                rsi_min_filter = 0
-                rsi_max_filter = 100
-        with col2:
-            confidence_min_filter = st.number_input(
-                "Min Confidence Level (%):",
-                min_value=0.0,
-                max_value=100.0,
-                value=0.0,
-                step=1.0,
-                help="Minimum confidence level to include in results."
-            )
-            confidence_max_filter = st.number_input(
-                "Max Confidence Level (%):",
-                min_value=0.0,
-                max_value=100.0,
-                value=100.0,
-                step=1.0,
-                help="Maximum confidence level to include in results."
-            )
-        with col3:
-            min_trades_filter = st.number_input(
-                "Min Total Trades:",
-                min_value=0,
-                value=0,
-                help="Minimum number of trades to include in results."
-            )
-            min_win_rate_filter = st.number_input(
-                "Min Win Rate (%):",
-                min_value=0.0,
-                max_value=100.0,
-                value=0.0,
-                step=1.0,
-                help="Minimum win rate percentage to include in results."
-            )
-        with col4:
-            min_avg_return_filter = st.number_input(
-                "Min Avg Return (%):",
-                min_value=-100.0,
-                max_value=100.0,
-                value=-100.0,
-                step=0.1,
-                help="Minimum average return percentage to include in results."
-            )
-            min_total_return_filter = st.number_input(
-                "Min Total Return (%):",
-                min_value=-100.0,
-                max_value=100.0,
-                value=-100.0,
-                step=0.1,
-                help="Minimum total return percentage to include in results."
-            )
-        col5, col6, col7, col8 = st.columns(4)
-        with col5:
-            min_annualized_return_filter = st.number_input(
-                "Min Annualized Return (%):",
-                min_value=-100.0,
-                max_value=100.0,
-                value=-100.0,
-                step=0.1,
-                help="Minimum annualized return percentage to include in results."
-            )
-        with col6:
-            min_sortino_filter = st.number_input(
-                "Min Sortino Ratio:",
-                min_value=-10.0,
-                max_value=10.0,
-                value=-10.0,
-                step=0.1,
-                help="Minimum Sortino ratio to include in results."
-            )
-        with col7:
-            significance_filter = st.selectbox(
-                "Significance:",
-                ["All", "Significant Only", "Non-Significant Only"],
-                help="Filter by statistical significance."
-            )
-            max_p_value_filter = st.number_input(
-                "Max P-Value:",
-                min_value=0.0,
-                max_value=1.0,
-                value=1.0,
-                step=0.001,
-                help="Maximum p-value to include in results (lower = more significant)."
-            )
-        with col8:
-            if st.button("Clear All Filters", type="secondary"):
-                st.rerun()
+            with col3:
+                min_trades_filter = st.number_input(
+                    "Min Total Trades:",
+                    min_value=0,
+                    value=0,
+                    help="Minimum number of trades to include in results."
+                )
+                min_win_rate_filter = st.number_input(
+                    "Min Win Rate (%):",
+                    min_value=0.0,
+                    max_value=100.0,
+                    value=0.0,
+                    step=1.0,
+                    help="Minimum win rate percentage to include in results."
+                )
+            with col4:
+                min_avg_return_filter = st.number_input(
+                    "Min Avg Return (%):",
+                    min_value=-100.0,
+                    max_value=100.0,
+                    value=-100.0,
+                    step=0.1,
+                    help="Minimum average return percentage to include in results."
+                )
+                min_total_return_filter = st.number_input(
+                    "Min Total Return (%):",
+                    min_value=-100.0,
+                    max_value=100.0,
+                    value=-100.0,
+                    step=0.1,
+                    help="Minimum total return percentage to include in results."
+                )
+            col5, col6, col7, col8 = st.columns(4)
+            with col5:
+                min_annualized_return_filter = st.number_input(
+                    "Min Annualized Return (%):",
+                    min_value=-100.0,
+                    max_value=100.0,
+                    value=-100.0,
+                    step=0.1,
+                    help="Minimum annualized return percentage to include in results."
+                )
+            with col6:
+                min_sortino_filter = st.number_input(
+                    "Min Sortino Ratio:",
+                    min_value=-10.0,
+                    max_value=10.0,
+                    value=-10.0,
+                    step=0.1,
+                    help="Minimum Sortino ratio to include in results."
+                )
+            with col7:
+                significance_filter = st.selectbox(
+                    "Significance:",
+                    ["All", "Significant Only", "Non-Significant Only"],
+                    help="Filter by statistical significance."
+                )
+                max_p_value_filter = st.number_input(
+                    "Max P-Value:",
+                    min_value=0.0,
+                    max_value=1.0,
+                    value=1.0,
+                    step=0.001,
+                    help="Maximum p-value to include in results (lower = more significant)."
+                )
+            with col8:
+                if st.button("Clear All Filters", type="secondary"):
+                    st.rerun()
         
         # Apply filters to the display dataframe (outside of columns)
         filtered_df = display_df.copy()
