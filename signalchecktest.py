@@ -105,6 +105,18 @@ def get_stock_data(ticker: str, start_date=None, end_date=None, exclusions=None)
             st.error(f"No data found for ticker: {ticker}")
             return None
         
+        # Normalize timezone information to avoid alignment issues
+        if data.index.tz is not None:
+            try:
+                data.index = data.index.tz_localize(None)
+            except Exception as e:
+                # If tz_localize fails, try tz_convert to UTC then remove timezone
+                try:
+                    data.index = data.index.tz_convert('UTC').tz_localize(None)
+                except Exception:
+                    # If all else fails, convert to naive timestamps
+                    data.index = pd.to_datetime(data.index).tz_localize(None)
+        
         # Apply exclusions if provided
         if exclusions:
             for exclusion in exclusions:
@@ -769,14 +781,34 @@ def run_rsi_comparison_analysis(signal_ticker: str, comparison_ticker: str, targ
     """
     Run RSI comparison analysis: when signal RSI < comparison RSI, buy target, else hold cash
     """
+    # Show progress for data fetching
+    progress_text = st.empty()
+    progress_bar = st.progress(0)
+    
     # Get data for all required tickers
+    progress_text.text("Fetching signal ticker data...")
+    progress_bar.progress(0.1)
     signal_data = get_stock_data(signal_ticker, start_date, end_date, exclusions)
+    
+    progress_text.text("Fetching comparison ticker data...")
+    progress_bar.progress(0.2)
     comparison_data = get_stock_data(comparison_ticker, start_date, end_date, exclusions)
+    
+    progress_text.text("Fetching target ticker data...")
+    progress_bar.progress(0.3)
     target_data = get_stock_data(target_ticker, start_date, end_date, exclusions)
+    
+    progress_text.text("Fetching benchmark data...")
+    progress_bar.progress(0.4)
     benchmark_data = get_stock_data(benchmark_ticker, start_date, end_date, exclusions)
+    
+    progress_text.text("Fetching buy-and-hold benchmark data...")
+    progress_bar.progress(0.5)
     buyhold_data = get_stock_data(buyhold_benchmark, start_date, end_date, exclusions)
     
     # Validate data quality
+    progress_text.text("Validating data quality...")
+    progress_bar.progress(0.6)
     data_messages = []
     for ticker, data in [(signal_ticker, signal_data), (comparison_ticker, comparison_data), 
                          (target_ticker, target_data), (benchmark_ticker, benchmark_data), (buyhold_benchmark, buyhold_data)]:
@@ -785,11 +817,17 @@ def run_rsi_comparison_analysis(signal_ticker: str, comparison_ticker: str, targ
             data_messages.extend(messages)
     
     if data_messages:
+        progress_bar.progress(1.0)
+        progress_text.text("Analysis completed with data quality issues.")
         return pd.DataFrame(), pd.Series(), pd.Series(), data_messages
     
     # Get common date range
+    progress_text.text("Aligning data on common dates...")
+    progress_bar.progress(0.7)
     common_dates = signal_data.index.intersection(comparison_data.index).intersection(target_data.index).intersection(benchmark_data.index).intersection(buyhold_data.index)
     if len(common_dates) < 30:
+        progress_bar.progress(1.0)
+        progress_text.text("Analysis completed - insufficient data.")
         return pd.DataFrame(), pd.Series(), pd.Series(), [f"Insufficient overlapping data. Only {len(common_dates)} common dates found."]
     
     signal_data = signal_data[common_dates]
@@ -803,6 +841,8 @@ def run_rsi_comparison_analysis(signal_ticker: str, comparison_ticker: str, targ
     buyhold_benchmark = buyhold_data / buyhold_data.iloc[0]  # Normalize to start at 1.0
     
     # Get precondition data if needed
+    progress_text.text("Processing preconditions...")
+    progress_bar.progress(0.8)
     precondition_data = {}
     if preconditions:
         unique_tickers = set()
@@ -823,6 +863,8 @@ def run_rsi_comparison_analysis(signal_ticker: str, comparison_ticker: str, targ
                     precondition_data[ticker] = ticker_data[common_dates]
     
     # Run single RSI comparison analysis
+    progress_text.text("Running RSI comparison analysis...")
+    progress_bar.progress(0.9)
     analysis = analyze_rsi_comparison_signals(signal_data, comparison_data, target_data, rsi_period, rsi_method, comparison, use_quantstats, preconditions, precondition_data)
     
     # Create benchmark equity curve that follows the same RSI conditions
@@ -977,6 +1019,9 @@ def run_rsi_comparison_analysis(signal_ticker: str, comparison_ticker: str, targ
         'var_95': [analysis['var_95']]
     })
     
+    progress_bar.progress(1.0)
+    progress_text.text("Analysis completed successfully!")
+    
     return results_df, benchmark, buyhold_benchmark, data_messages
 
 def run_rsi_analysis(signal_ticker: str, target_ticker: str, rsi_threshold: float, comparison: str, 
@@ -1046,9 +1091,11 @@ def run_rsi_analysis(signal_ticker: str, target_ticker: str, rsi_threshold: floa
     results = []
     
     progress_bar = st.progress(0)
+    progress_text = st.empty()
     total_thresholds = len(rsi_thresholds)
     
     for i, threshold in enumerate(rsi_thresholds):
+        progress_text.text(f"Analyzing RSI threshold {threshold:.1f} ({i+1}/{total_thresholds})")
         analysis = analyze_rsi_signals(signal_data, target_data, threshold, comparison, rsi_period, rsi_method, use_quantstats, preconditions, precondition_data)
         
         # Calculate statistical significance
@@ -1265,6 +1312,8 @@ def run_rsi_analysis(signal_ticker: str, target_ticker: str, rsi_threshold: floa
         })
         
         progress_bar.progress((i + 1) / total_thresholds)
+    
+    progress_text.text("Analysis completed successfully!")
     
     return pd.DataFrame(results), benchmark, all_messages
 
