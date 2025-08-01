@@ -1295,7 +1295,27 @@ if st.session_state.preconditions:
                     comparison_period = precondition.get('comparison_rsi_period', 10)
                     target_ticker = precondition.get('target_ticker', 'TQQQ')
                     fallback_ticker = precondition.get('fallback_ticker', 'BIL')
-                    st.write(f"• {precondition['signal_ticker']} {signal_period}d RSI < {precondition['comparison_ticker']} {comparison_period}d RSI → {target_ticker} / {fallback_ticker}")
+                    comparison_operator = precondition.get('comparison_operator', 'less_than')
+                    
+                    # Format comparison operator
+                    operator_symbol = ">" if comparison_operator == "greater_than" else "<"
+                    
+                    # Format target and fallback display
+                    if target_ticker == "Main Signal":
+                        target_display = "Main Signal Output"
+                    elif target_ticker.startswith("Precondition"):
+                        target_display = f"{target_ticker} Output"
+                    else:
+                        target_display = target_ticker
+                    
+                    if fallback_ticker == "Main Signal":
+                        fallback_display = "Main Signal Output"
+                    elif fallback_ticker.startswith("Precondition"):
+                        fallback_display = f"{fallback_ticker} Output"
+                    else:
+                        fallback_display = fallback_ticker
+                    
+                    st.write(f"• {precondition['signal_ticker']} {signal_period}d RSI {operator_symbol} {precondition['comparison_ticker']} {comparison_period}d RSI → {target_display} / {fallback_display}")
                 else:
                     # Handle legacy format or threshold type
                     comparison_text = "≤" if precondition.get('comparison') == 'less_than' else "≥"
@@ -1387,10 +1407,41 @@ with st.sidebar.expander("➕ Add Precondition", expanded=False):
         # Target and fallback tickers
         col1, col2 = st.columns(2)
         with col1:
-            precondition_target_ticker = st.text_input("Precondition Target Ticker", 
-                                                      value="TQQQ", 
-                                                      key="precondition_target_ticker",
-                                                      help="The target ticker for this RSI comparison precondition.")
+            # Create options for target ticker (same as fallback)
+            target_options = ["Main Signal Output", "Custom Ticker"]
+            # Add existing preconditions as options
+            if st.session_state.get('preconditions'):
+                for i, existing_precondition in enumerate(st.session_state.preconditions):
+                    if existing_precondition.get('type') == 'comparison':
+                        target_options.append(f"Precondition {i+1} Signal Output")
+                    elif existing_precondition.get('type') == 'threshold':
+                        target_options.append(f"Precondition {i+1} Signal Output")
+            
+            # Add future precondition options (up to 5 more preconditions)
+            current_precondition_count = len(st.session_state.get('preconditions', []))
+            for i in range(current_precondition_count + 1, current_precondition_count + 6):
+                target_options.append(f"Precondition {i} Signal Output")
+            
+            precondition_target_type = st.selectbox("Precondition Target Type", 
+                                                   target_options,
+                                                   key="precondition_target_type",
+                                                   help="Choose the target: 'Main Signal Output' = output of main RSI comparison, 'Custom Ticker' = specific ticker, 'Precondition X Signal Output' = output of another precondition.")
+            
+            if precondition_target_type == "Custom Ticker":
+                precondition_target_ticker = st.text_input("Precondition Target Ticker", 
+                                                          value="TQQQ", 
+                                                          key="precondition_target_ticker",
+                                                          help="The custom target ticker for this RSI comparison precondition.")
+            else:
+                # Convert back to internal format
+                if precondition_target_type == "Main Signal Output":
+                    precondition_target_ticker = "Main Signal"
+                elif precondition_target_type.endswith(" Signal Output"):
+                    # Extract precondition number
+                    precondition_num = precondition_target_type.split()[1]
+                    precondition_target_ticker = f"Precondition {precondition_num} Signal"
+                else:
+                    precondition_target_ticker = precondition_target_type
         with col2:
             # Create options for fallback ticker
             fallback_options = ["Main Signal Output", "Custom Ticker"]
