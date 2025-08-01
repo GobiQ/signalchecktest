@@ -493,6 +493,8 @@ if 'backtest_results' not in st.session_state:
     st.session_state.backtest_results = None
 if 'selected_signal' not in st.session_state:
     st.session_state.selected_signal = None
+if 'strategy_signals' not in st.session_state:
+    st.session_state.strategy_signals = [{'signal': '', 'negated': False, 'operator': 'AND'}]
 
 # Helper functions
 def calculate_rsi(prices: pd.Series, window: int = 14, method: str = "wilders") -> pd.Series:
@@ -1011,10 +1013,13 @@ with tab2:
                         <div style="margin-top: 0.5rem;">
                 """, unsafe_allow_html=True)
                 
+                # Build components HTML
+                components_html = ""
                 for ticker_component in allocation['tickers']:
-                    st.write(f"• **{ticker_component['ticker']}**: {ticker_component['weight']}%")
+                    components_html += f"<p style='margin: 0.25rem 0;'>• <strong>{ticker_component['ticker']}</strong>: {ticker_component['weight']}%</p>"
                 
-                st.markdown("""
+                st.markdown(f"""
+                        {components_html}
                         </div>
                     </div>
                 </div>
@@ -1037,33 +1042,68 @@ with tab3:
         if st.session_state.signals and st.session_state.output_allocations:
             st.subheader("📋 Conditional Logic")
             
-            # First condition
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                signal1 = st.selectbox("Signal 1", [s['name'] for s in st.session_state.signals], key="signal1")
-                signal1_negated = st.checkbox("NOT", key="signal1_not")
-            with col2:
-                logic_operator = st.selectbox("Logic", ["AND", "OR"], key="logic_op")
-            with col3:
-                signal2 = st.selectbox("Signal 2", [s['name'] for s in st.session_state.signals], key="signal2")
-                signal2_negated = st.checkbox("NOT", key="signal2_not")
+            # Dynamic signal builder
+            st.write("**Signals:**")
             
-            # Output allocation
-            output_allocation = st.selectbox("Then Allocate To", list(st.session_state.output_allocations.keys()))
+            # Display existing signals
+            for i, signal_config in enumerate(st.session_state.strategy_signals):
+                col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
+                
+                with col1:
+                    signal_config['signal'] = st.selectbox(
+                        f"Signal {i+1}", 
+                        [""] + [s['name'] for s in st.session_state.signals], 
+                        key=f"strategy_signal_{i}"
+                    )
+                
+                with col2:
+                    signal_config['negated'] = st.checkbox("NOT", key=f"strategy_negated_{i}")
+                
+                with col3:
+                    if i > 0:  # Don't show operator for first signal
+                        signal_config['operator'] = st.selectbox(
+                            "Logic", 
+                            ["AND", "OR"], 
+                            key=f"strategy_operator_{i}"
+                        )
+                    else:
+                        st.write("")  # Empty space for alignment
+                
+                with col4:
+                    if i > 0:  # Don't show remove button for first signal
+                        if st.button("🗑️", key=f"remove_strategy_signal_{i}"):
+                            st.session_state.strategy_signals.pop(i)
+                            st.rerun()
+                    else:
+                        st.write("")  # Empty space for alignment
+            
+            # Add signal button
+            if st.button("➕ Add Signal", key="add_strategy_signal"):
+                st.session_state.strategy_signals.append({'signal': '', 'negated': False, 'operator': 'AND'})
+                st.rerun()
+            
+            # Output allocations
+            col1, col2 = st.columns(2)
+            with col1:
+                output_allocation = st.selectbox("Then Allocate To", list(st.session_state.output_allocations.keys()))
+            with col2:
+                else_allocation = st.selectbox("Else Allocate To", list(st.session_state.output_allocations.keys()))
             
             if st.button("Add Strategy", type="primary"):
-                strategy = {
-                    'name': strategy_name,
-                    'signal1': signal1,
-                    'signal1_negated': signal1_negated,
-                    'logic_operator': logic_operator,
-                    'signal2': signal2,
-                    'signal2_negated': signal2_negated,
-                    'output_allocation': output_allocation
-                }
-                st.session_state.strategies.append(strategy)
-                st.success(f"Strategy '{strategy_name}' added!")
-                st.rerun()
+                # Validate that at least one signal is selected
+                valid_signals = [s for s in st.session_state.strategy_signals if s['signal']]
+                if not valid_signals:
+                    st.error("Please select at least one signal.")
+                else:
+                    strategy = {
+                        'name': strategy_name,
+                        'signals': valid_signals.copy(),
+                        'output_allocation': output_allocation,
+                        'else_allocation': else_allocation
+                    }
+                    st.session_state.strategies.append(strategy)
+                    st.success(f"Strategy '{strategy_name}' added!")
+                    st.rerun()
         else:
             st.warning("Please create signals and allocations first.")
     
@@ -1075,9 +1115,18 @@ with tab3:
                 col1, col2 = st.columns([3, 1])
                 with col1:
                     st.write(f"**{strategy['name']}**")
-                    signal1_text = f"NOT {strategy['signal1']}" if strategy['signal1_negated'] else strategy['signal1']
-                    signal2_text = f"NOT {strategy['signal2']}" if strategy['signal2_negated'] else strategy['signal2']
-                    st.caption(f"IF {signal1_text} {strategy['logic_operator']} {signal2_text} THEN {strategy['output_allocation']}")
+                    
+                    # Build condition text
+                    condition_parts = []
+                    for i, signal_config in enumerate(strategy['signals']):
+                        signal_text = f"NOT {signal_config['signal']}" if signal_config['negated'] else signal_config['signal']
+                        if i > 0:
+                            condition_parts.append(f"{signal_config['operator']} {signal_text}")
+                        else:
+                            condition_parts.append(signal_text)
+                    
+                    condition_text = " ".join(condition_parts)
+                    st.caption(f"IF {condition_text} THEN {strategy['output_allocation']} ELSE {strategy['else_allocation']}")
                 with col2:
                     if st.button("🗑️", key=f"delete_strategy_{i}"):
                         st.session_state.strategies.pop(i)
@@ -1226,27 +1275,41 @@ with tab4:
                 combined_equity = pd.Series(1.0, index=data[benchmark_ticker].index)
                 
                 for strategy in st.session_state.strategies:
-                    # Get signal values
-                    signal1_values = signal_results[strategy['signal1']]
-                    signal2_values = signal_results[strategy['signal2']]
+                    # Get signal values and apply logic
+                    strategy_signals = None
                     
-                    # Apply negation if needed
-                    if strategy['signal1_negated']:
-                        signal1_values = (~signal1_values.astype(bool)).astype(int)
-                    if strategy['signal2_negated']:
-                        signal2_values = (~signal2_values.astype(bool)).astype(int)
+                    for i, signal_config in enumerate(strategy['signals']):
+                        signal_values = signal_results[signal_config['signal']]
+                        
+                        # Apply negation if needed
+                        if signal_config['negated']:
+                            signal_values = (~signal_values.astype(bool)).astype(int)
+                        
+                        # Combine with previous signals
+                        if strategy_signals is None:
+                            strategy_signals = signal_values
+                        else:
+                            if signal_config['operator'] == "AND":
+                                strategy_signals = (strategy_signals & signal_values).astype(int)
+                            else:  # OR
+                                strategy_signals = (strategy_signals | signal_values).astype(int)
                     
-                    # Apply logic operator
-                    if strategy['logic_operator'] == "AND":
-                        strategy_signals = (signal1_values & signal2_values).astype(int)
-                    else:  # OR
-                        strategy_signals = (signal1_values | signal2_values).astype(int)
+                    # Get allocation details for both then and else cases
+                    then_allocation = st.session_state.output_allocations[strategy['output_allocation']]
+                    else_allocation = st.session_state.output_allocations[strategy['else_allocation']]
                     
-                    # Get allocation details
-                    allocation = st.session_state.output_allocations[strategy['output_allocation']]
+                    # Calculate equity curves for both allocations
+                    then_equity = calculate_multi_ticker_equity_curve(strategy_signals, then_allocation, data)
+                    else_equity = calculate_multi_ticker_equity_curve((~strategy_signals.astype(bool)).astype(int), else_allocation, data)
                     
-                    # Calculate equity curve for this strategy using multi-ticker allocation
-                    equity_curve = calculate_multi_ticker_equity_curve(strategy_signals, allocation, data)
+                    # Combine the equity curves (when strategy is true, use then allocation; when false, use else allocation)
+                    # We need to combine the returns, not multiply the equity curves
+                    then_returns = then_equity.pct_change().fillna(0)
+                    else_returns = else_equity.pct_change().fillna(0)
+                    
+                    # Combine returns (when strategy is true, use then returns; when false, use else returns)
+                    combined_returns = then_returns + else_returns
+                    equity_curve = (1 + combined_returns).cumprod()
                     
                     # Calculate metrics
                     returns = equity_curve.pct_change().dropna()
