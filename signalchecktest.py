@@ -90,8 +90,8 @@ def calculate_sortino_ratio(returns: np.ndarray, risk_free_rate: float = 0.02, u
     
     return excess_returns.mean() / downside_deviation
 
-def get_stock_data(ticker: str, start_date=None, end_date=None) -> pd.Series:
-    """Fetch stock data using yfinance with optional date range"""
+def get_stock_data(ticker: str, start_date=None, end_date=None, exclusions=None) -> pd.Series:
+    """Fetch stock data using yfinance with optional date range and exclusions"""
     try:
         stock = yf.Ticker(ticker)
         
@@ -104,6 +104,15 @@ def get_stock_data(ticker: str, start_date=None, end_date=None) -> pd.Series:
         if data.empty:
             st.error(f"No data found for ticker: {ticker}")
             return None
+        
+        # Apply exclusions if provided
+        if exclusions:
+            for exclusion in exclusions:
+                exclusion_start = pd.Timestamp(exclusion['start'])
+                exclusion_end = pd.Timestamp(exclusion['end'])
+                # Remove data within exclusion period
+                data = data[~((data.index >= exclusion_start) & (data.index <= exclusion_end))]
+        
         return data['Close']
     except Exception as e:
         st.error(f"Error fetching data for {ticker}: {str(e)}")
@@ -488,21 +497,21 @@ def validate_data_quality(data: pd.Series, ticker: str) -> Tuple[bool, List[str]
 # Basic QuantStats metrics are still available in the main analysis functions
 
 def run_rsi_analysis(signal_ticker: str, target_ticker: str, rsi_min: float, rsi_max: float, comparison: str, 
-                    start_date=None, end_date=None, rsi_period: int = 14, rsi_method: str = "wilders", benchmark_ticker: str = "SPY", use_quantstats: bool = True, preconditions: List[Dict] = None) -> Tuple[pd.DataFrame, pd.Series, List[str]]:
-    """Run comprehensive RSI analysis across the specified range with optional preconditions"""
+                    start_date=None, end_date=None, rsi_period: int = 14, rsi_method: str = "wilders", benchmark_ticker: str = "SPY", use_quantstats: bool = True, preconditions: List[Dict] = None, exclusions: List[Dict] = None) -> Tuple[pd.DataFrame, pd.Series, List[str]]:
+    """Run comprehensive RSI analysis across the specified range with optional preconditions and exclusions"""
     
     # Fetch data with quality validation
     all_messages = []
     
     with st.spinner(f"Fetching data for {signal_ticker}..."):
-        signal_data = get_stock_data(signal_ticker, start_date, end_date)
+        signal_data = get_stock_data(signal_ticker, start_date, end_date, exclusions)
         is_valid, messages = validate_data_quality(signal_data, signal_ticker)
         all_messages.extend(messages)
         if not is_valid:
             return None, None
     
     with st.spinner(f"Fetching data for {target_ticker}..."):
-        target_data = get_stock_data(target_ticker, start_date, end_date)
+        target_data = get_stock_data(target_ticker, start_date, end_date, exclusions)
         is_valid, messages = validate_data_quality(target_data, target_ticker)
         all_messages.extend(messages)
         if not is_valid:
@@ -510,7 +519,7 @@ def run_rsi_analysis(signal_ticker: str, target_ticker: str, rsi_min: float, rsi
     
     # Fetch benchmark data for comparison - use user-selected benchmark
     with st.spinner(f"Fetching benchmark data ({benchmark_ticker})..."):
-        benchmark_data = get_stock_data(benchmark_ticker, start_date, end_date)
+        benchmark_data = get_stock_data(benchmark_ticker, start_date, end_date, exclusions)
         is_valid, messages = validate_data_quality(benchmark_data, benchmark_ticker)
         all_messages.extend(messages)
         if not is_valid:
@@ -523,7 +532,7 @@ def run_rsi_analysis(signal_ticker: str, target_ticker: str, rsi_min: float, rsi
         for ticker in unique_precondition_tickers:
             if ticker != signal_ticker:  # Don't fetch again if it's the same as main signal
                 with st.spinner(f"Fetching precondition data for {ticker}..."):
-                    ticker_data = get_stock_data(ticker, start_date, end_date)
+                    ticker_data = get_stock_data(ticker, start_date, end_date, exclusions)
                     is_valid, messages = validate_data_quality(ticker_data, ticker)
                     all_messages.extend(messages)
                     if not is_valid:
@@ -914,6 +923,88 @@ else:
     start_date, end_date = None, None
     st.sidebar.info("Using maximum available data")
 
+# Exclude date windows
+st.sidebar.subheader("🚫 Exclude Date Windows")
+use_exclusions = st.sidebar.checkbox("Exclude specific date windows", help="Check this to exclude specific periods like the COVID crash from your analysis.")
+
+if use_exclusions:
+    # Initialize exclusions in session state if not exists
+    if 'date_exclusions' not in st.session_state:
+        st.session_state.date_exclusions = []
+    
+    # Display existing exclusions
+    if st.session_state.date_exclusions:
+        st.sidebar.write("**Current Exclusions:**")
+        for i, exclusion in enumerate(st.session_state.date_exclusions):
+            with st.sidebar.container():
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.write(f"• {exclusion['start']} to {exclusion['end']}")
+                with col2:
+                    if st.button(f"🗑️", key=f"remove_exclusion_{i}"):
+                        st.session_state.date_exclusions.pop(i)
+                        st.rerun()
+    
+    # Add new exclusion
+    with st.sidebar.expander("➕ Add Exclusion Window", expanded=False):
+        st.write("**Add a new date exclusion:**")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            exclusion_start = st.date_input("Exclusion Start Date", 
+                                          value=datetime(2020, 2, 20), 
+                                          key="exclusion_start",
+                                          help="Start date of the period to exclude.")
+        with col2:
+            exclusion_end = st.date_input("Exclusion End Date", 
+                                        value=datetime(2020, 4, 7), 
+                                        key="exclusion_end",
+                                        help="End date of the period to exclude.")
+        
+        # Add exclusion button
+        if st.button("➕ Add Exclusion", key="add_exclusion"):
+            if exclusion_start < exclusion_end:
+                new_exclusion = {
+                    'start': exclusion_start,
+                    'end': exclusion_end
+                }
+                st.session_state.date_exclusions.append(new_exclusion)
+                st.rerun()
+            else:
+                st.error("Start date must be before end date")
+    
+    # Clear all exclusions button
+    if st.session_state.date_exclusions:
+        if st.sidebar.button("🗑️ Clear All Exclusions", type="secondary"):
+            st.session_state.date_exclusions = []
+            st.rerun()
+    
+    # Quick add buttons for common exclusions
+    st.sidebar.write("**Quick Add Common Exclusions:**")
+    col1, col2 = st.sidebar.columns(2)
+    with col1:
+        if st.button("COVID Crash", key="add_covid"):
+            covid_exclusion = {
+                'start': datetime(2020, 2, 20),
+                'end': datetime(2020, 4, 7)
+            }
+            if covid_exclusion not in st.session_state.date_exclusions:
+                st.session_state.date_exclusions.append(covid_exclusion)
+                st.rerun()
+    with col2:
+        if st.button("2008 Crisis", key="add_2008"):
+            crisis_exclusion = {
+                'start': datetime(2008, 9, 15),
+                'end': datetime(2009, 3, 9)
+            }
+            if crisis_exclusion not in st.session_state.date_exclusions:
+                st.session_state.date_exclusions.append(crisis_exclusion)
+                st.rerun()
+else:
+    # Clear exclusions if feature is disabled
+    if 'date_exclusions' in st.session_state:
+        st.session_state.date_exclusions = []
+
 # Add the Run Analysis button to the sidebar
 st.sidebar.markdown("---")
 
@@ -923,14 +1014,15 @@ final_benchmark_ticker = custom_benchmark.strip() if custom_benchmark.strip() el
 if st.sidebar.button("🚀 Run RSI Analysis", type="primary", use_container_width=True):
     if rsi_min < rsi_max and (not use_date_range or (start_date and end_date and start_date < end_date)):
         try:
-            results_df, benchmark, data_messages = run_rsi_analysis(signal_ticker, target_ticker, rsi_min, rsi_max, comparison, start_date, end_date, rsi_period, rsi_method, final_benchmark_ticker, use_quantstats, st.session_state.get('preconditions', []))
+            exclusions = st.session_state.get('date_exclusions', []) if use_exclusions else None
+            results_df, benchmark, data_messages = run_rsi_analysis(signal_ticker, target_ticker, rsi_min, rsi_max, comparison, start_date, end_date, rsi_period, rsi_method, final_benchmark_ticker, use_quantstats, st.session_state.get('preconditions', []), exclusions)
             
             if results_df is not None and benchmark is not None and not results_df.empty:
                 # Store analysis results in session state
                 st.session_state['results_df'] = results_df
                 st.session_state['benchmark'] = benchmark
-                st.session_state['signal_data'] = get_stock_data(signal_ticker, start_date, end_date)
-                st.session_state['benchmark_data'] = get_stock_data(final_benchmark_ticker, start_date, end_date)
+                st.session_state['signal_data'] = get_stock_data(signal_ticker, start_date, end_date, exclusions)
+                st.session_state['benchmark_data'] = get_stock_data(final_benchmark_ticker, start_date, end_date, exclusions)
                 st.session_state['rsi_period'] = rsi_period
                 st.session_state['comparison'] = comparison
                 st.session_state['benchmark_ticker'] = final_benchmark_ticker
@@ -984,6 +1076,12 @@ with col1:
         st.write(f"**Date Range:** {start_date} to {end_date}")
     else:
         st.write(f"**Date Range:** Maximum available data")
+    
+    # Display exclusions
+    if use_exclusions and st.session_state.get('date_exclusions'):
+        st.write("**Excluded Periods:**")
+        for exclusion in st.session_state.date_exclusions:
+            st.write(f"  • {exclusion['start']} to {exclusion['end']}")
 
 with col2:
     st.subheader("📋 Signal Logic")
