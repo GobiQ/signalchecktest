@@ -557,8 +557,13 @@ def run_rsi_analysis(signal_ticker: str, target_ticker: str, rsi_threshold: floa
     # Calculate benchmark returns for statistical testing
     benchmark_returns = benchmark_data.pct_change().dropna()
     
-    # Use single RSI threshold
-    rsi_thresholds = [rsi_threshold]
+    # Generate RSI thresholds based on condition
+    if comparison == "less_than":
+        # Test values from 0 to the threshold (every 0.5)
+        rsi_thresholds = np.arange(0, rsi_threshold + 0.5, 0.5)
+    else:  # greater_than
+        # Test values from the threshold to 100 (every 0.5)
+        rsi_thresholds = np.arange(rsi_threshold, 100.5, 0.5)
     
     results = []
     
@@ -1042,7 +1047,10 @@ with col1:
     
     st.write(f"**Benchmark:** {benchmark_display} ({benchmark_description})")
     st.write(f"**RSI Period:** {rsi_period}-day RSI")
-    st.write(f"**RSI Condition:** {signal_ticker} RSI {'≤' if comparison == 'less_than' else '≥'} {rsi_threshold}")
+    if comparison == "less_than":
+        st.write(f"**RSI Condition:** {signal_ticker} RSI ≤ {rsi_threshold} (testing 0 to {rsi_threshold})")
+    else:
+        st.write(f"**RSI Condition:** {signal_ticker} RSI ≥ {rsi_threshold} (testing {rsi_threshold} to 100)")
     
     if use_date_range and start_date and end_date:
         st.write(f"**Date Range:** {start_date} to {end_date}")
@@ -1416,7 +1424,7 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
                 yaxis_title="Confidence Level (%)",
                 hovermode='closest',
                 showlegend=True,
-                xaxis=dict(range=[rsi_threshold - 5, rsi_threshold + 5]),  # Set x-axis range around the threshold
+                xaxis=dict(range=[0, 100]),  # Set x-axis range to show full RSI scale
                 yaxis=dict(range=[0, 100])  # Set y-axis range to show full confidence scale
             )
             
@@ -1624,7 +1632,7 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
             xaxis_title="RSI Threshold",
             yaxis_title="Sortino Ratio",
             hovermode='closest',
-            xaxis=dict(range=[rsi_threshold - 5, rsi_threshold + 5]),
+            xaxis=dict(range=[0, 100]),
             showlegend=True
         )
         
@@ -1678,7 +1686,7 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
             xaxis_title="RSI Threshold",
             yaxis_title="Cumulative Return (%)",
             hovermode='closest',
-            xaxis=dict(range=[rsi_threshold - 5, rsi_threshold + 5]),
+            xaxis=dict(range=[0, 100]),
             yaxis=dict(tickformat='.1%'),
             showlegend=True
         )
@@ -1728,7 +1736,7 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
             xaxis_title="RSI Threshold",
             yaxis_title="Max Drawdown (%)",
             hovermode='closest',
-            xaxis=dict(range=[rsi_threshold - 5, rsi_threshold + 5]),
+            xaxis=dict(range=[0, 100]),
             showlegend=True
         )
         
