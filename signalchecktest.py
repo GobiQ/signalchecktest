@@ -1609,6 +1609,7 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
             yaxis_title="Cumulative Return (%)",
             hovermode='closest',
             xaxis=dict(range=[rsi_min, rsi_max]),
+            yaxis=dict(tickformat='.1%'),
             showlegend=True
         )
         
