@@ -1194,13 +1194,12 @@ with st.sidebar.expander("➕ Add Precondition", expanded=False):
                                     key="precondition_type",
                                     help="Choose between RSI threshold or RSI comparison precondition.")
     
-    # Precondition signal ticker (can be different from main signal)
-    precondition_signal = st.text_input("Precondition Signal Ticker", 
-                                       value="QQQ", 
-                                       key="precondition_signal",
-                                       help="The ticker whose RSI will be checked for this precondition. Can be the same as or different from the main signal ticker.")
-    
     if precondition_type == "RSI Threshold":
+        # Precondition signal ticker (only for RSI Threshold mode)
+        precondition_signal = st.text_input("Precondition Signal Ticker", 
+                                           value="QQQ", 
+                                           key="precondition_signal",
+                                           help="The ticker whose RSI will be checked for this precondition. Can be the same as or different from the main signal ticker.")
         # Precondition RSI comparison
         precondition_comparison = st.selectbox("Precondition RSI Condition", 
                                               ["less_than", "greater_than"], 
