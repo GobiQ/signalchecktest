@@ -118,6 +118,34 @@ def get_stock_data(ticker: str, start_date=None, end_date=None, exclusions=None)
         st.error(f"Error fetching data for {ticker}: {str(e)}")
         return None
 
+def resolve_fallback_ticker(fallback_option: str, main_signal_ticker: str, preconditions: List[Dict] = None, precondition_index: int = None) -> str:
+    """
+    Resolve the actual ticker symbol for a fallback option.
+    
+    Args:
+        fallback_option: The fallback option (e.g., "Main Signal", "Precondition 1 Signal", "BIL")
+        main_signal_ticker: The main signal ticker
+        preconditions: List of preconditions
+        precondition_index: Index of current precondition (to avoid self-reference)
+    
+    Returns:
+        The resolved ticker symbol
+    """
+    if fallback_option == "Main Signal":
+        return main_signal_ticker
+    elif fallback_option.startswith("Precondition"):
+        # Extract precondition number (1-based)
+        try:
+            precondition_num = int(fallback_option.split()[1]) - 1  # Convert to 0-based index
+            if preconditions and 0 <= precondition_num < len(preconditions) and precondition_num != precondition_index:
+                return preconditions[precondition_num]['signal_ticker']
+            else:
+                return "BIL"  # Default fallback if invalid reference
+        except (ValueError, IndexError):
+            return "BIL"  # Default fallback if parsing fails
+    else:
+        return fallback_option  # Custom ticker
+
 def analyze_rsi_comparison_signals(signal_prices: pd.Series, comparison_prices: pd.Series, target_prices: pd.Series, rsi_period: int = 14, rsi_method: str = "wilders", use_quantstats: bool = True, preconditions: List[Dict] = None, precondition_data: Dict[str, pd.Series] = None) -> Dict:
     """
     Analyze RSI comparison signals: when signal RSI < comparison RSI, buy target, else hold cash
@@ -659,7 +687,7 @@ def validate_data_quality(data: pd.Series, ticker: str) -> Tuple[bool, List[str]
 
 def run_rsi_comparison_analysis(signal_ticker: str, comparison_ticker: str, target_ticker: str, fallback_ticker: str = "BIL",
                                signal_rsi_period: int = 10, comparison_rsi_period: int = 10,
-                               start_date=None, end_date=None, rsi_method: str = "wilders", benchmark_ticker: str = "SPY", use_quantstats: bool = True, preconditions: List[Dict] = None, exclusions: List[Dict] = None) -> Tuple[pd.DataFrame, pd.Series, List[str]]:
+                               start_date=None, end_date=None, rsi_method: str = "wilders", benchmark_ticker: str = "SPY", buyhold_benchmark: str = "SPY", use_quantstats: bool = True, preconditions: List[Dict] = None, exclusions: List[Dict] = None) -> Tuple[pd.DataFrame, pd.Series, pd.Series, List[str]]:
     """
     Run RSI comparison analysis: when signal RSI < comparison RSI, buy target, else hold cash
     """
@@ -668,39 +696,47 @@ def run_rsi_comparison_analysis(signal_ticker: str, comparison_ticker: str, targ
     comparison_data = get_stock_data(comparison_ticker, start_date, end_date, exclusions)
     target_data = get_stock_data(target_ticker, start_date, end_date, exclusions)
     benchmark_data = get_stock_data(benchmark_ticker, start_date, end_date, exclusions)
+    buyhold_data = get_stock_data(buyhold_benchmark, start_date, end_date, exclusions)
     
     # Validate data quality
     data_messages = []
     for ticker, data in [(signal_ticker, signal_data), (comparison_ticker, comparison_data), 
-                         (target_ticker, target_data), (benchmark_ticker, benchmark_data)]:
+                         (target_ticker, target_data), (benchmark_ticker, benchmark_data), (buyhold_benchmark, buyhold_data)]:
         is_valid, messages = validate_data_quality(data, ticker)
         if not is_valid:
             data_messages.extend(messages)
     
     if data_messages:
-        return pd.DataFrame(), pd.Series(), data_messages
+        return pd.DataFrame(), pd.Series(), pd.Series(), data_messages
     
     # Get common date range
-    common_dates = signal_data.index.intersection(comparison_data.index).intersection(target_data.index).intersection(benchmark_data.index)
+    common_dates = signal_data.index.intersection(comparison_data.index).intersection(target_data.index).intersection(benchmark_data.index).intersection(buyhold_data.index)
     if len(common_dates) < 30:
-        return pd.DataFrame(), pd.Series(), [f"Insufficient overlapping data. Only {len(common_dates)} common dates found."]
+        return pd.DataFrame(), pd.Series(), pd.Series(), [f"Insufficient overlapping data. Only {len(common_dates)} common dates found."]
     
     signal_data = signal_data[common_dates]
     comparison_data = comparison_data[common_dates]
     target_data = target_data[common_dates]
     benchmark_data = benchmark_data[common_dates]
+    buyhold_data = buyhold_data[common_dates]
     
     # Create buy-and-hold benchmark
     benchmark = benchmark_data / benchmark_data.iloc[0]  # Normalize to start at 1.0
+    buyhold_benchmark = buyhold_data / buyhold_data.iloc[0]  # Normalize to start at 1.0
     
     # Get precondition data if needed
     precondition_data = {}
     if preconditions:
         unique_tickers = set()
-        for precondition in preconditions:
+        for i, precondition in enumerate(preconditions):
             unique_tickers.add(precondition['signal_ticker'])
             if precondition.get('type') == 'comparison':
                 unique_tickers.add(precondition['comparison_ticker'])
+                # Resolve fallback ticker for enhanced options
+                fallback_option = precondition.get('fallback_ticker', 'BIL')
+                resolved_fallback = resolve_fallback_ticker(fallback_option, signal_ticker, preconditions, i)
+                if resolved_fallback not in [signal_ticker, comparison_ticker, target_ticker, benchmark_ticker]:
+                    unique_tickers.add(resolved_fallback)
         
         for ticker in unique_tickers:
             if ticker not in [signal_ticker, comparison_ticker, target_ticker, benchmark_ticker]:
@@ -855,7 +891,7 @@ def run_rsi_comparison_analysis(signal_ticker: str, comparison_ticker: str, targ
         'var_95': [analysis['var_95']]
     })
     
-    return results_df, benchmark, data_messages
+    return results_df, benchmark, buyhold_benchmark, data_messages
 
 def run_rsi_analysis(signal_ticker: str, target_ticker: str, rsi_threshold: float, comparison: str, 
                     start_date=None, end_date=None, rsi_period: int = 14, rsi_method: str = "wilders", benchmark_ticker: str = "SPY", use_quantstats: bool = True, preconditions: List[Dict] = None, exclusions: List[Dict] = None) -> Tuple[pd.DataFrame, pd.Series, List[str]]:
@@ -1263,10 +1299,28 @@ with st.sidebar.expander("➕ Add Precondition", expanded=False):
                                                       key="precondition_target_ticker",
                                                       help="The target ticker for this RSI comparison precondition.")
         with col2:
-            precondition_fallback_ticker = st.text_input("Precondition Fallback Ticker", 
-                                                        value="BIL", 
-                                                        key="precondition_fallback_ticker",
-                                                        help="The fallback ticker for this RSI comparison precondition.")
+            # Create options for fallback ticker
+            fallback_options = ["Main Signal", "Custom Ticker"]
+            # Add existing preconditions as options
+            if st.session_state.get('preconditions'):
+                for i, existing_precondition in enumerate(st.session_state.preconditions):
+                    if existing_precondition.get('type') == 'comparison':
+                        fallback_options.append(f"Precondition {i+1} Signal")
+                    elif existing_precondition.get('type') == 'threshold':
+                        fallback_options.append(f"Precondition {i+1} Signal")
+            
+            precondition_fallback_type = st.selectbox("Precondition Fallback Type", 
+                                                     fallback_options,
+                                                     key="precondition_fallback_type",
+                                                     help="Choose whether the fallback should be the main signal, a custom ticker, or another precondition signal.")
+            
+            if precondition_fallback_type == "Custom Ticker":
+                precondition_fallback_ticker = st.text_input("Precondition Fallback Ticker", 
+                                                            value="BIL", 
+                                                            key="precondition_fallback_ticker",
+                                                            help="The custom fallback ticker for this RSI comparison precondition.")
+            else:
+                precondition_fallback_ticker = precondition_fallback_type
         
         # Add precondition button
         if st.button("➕ Add Precondition", key="add_precondition"):
@@ -1351,25 +1405,51 @@ if analysis_mode == "RSI Threshold":
     target_ticker = st.sidebar.text_input("Target Ticker", value=default_target, help="The ticker to buy/sell based on the signal ticker's RSI. This is what you'll actually be trading.")
 
 # Benchmark selection
+st.sidebar.subheader("📊 Benchmark Configuration")
+
+# Conditional benchmark (under same RSI conditions)
 benchmark_options = ["SPY", "BIL", "TQQQ"]
-benchmark_ticker = st.sidebar.selectbox("Benchmark", 
+benchmark_ticker = st.sidebar.selectbox("Conditional Benchmark", 
                                        benchmark_options, 
                                        format_func=lambda x: {
                                            "SPY": "SPY (S&P 500)",
                                            "BIL": "BIL (Cash Equivalent)", 
                                            "TQQQ": "TQQQ (3x Nasdaq-100)"
                                        }.get(x, x),
-                                       help="Choose your benchmark for comparison. This is what your signal will be compared against under the RSI conditions you specify.")
+                                       help="Choose your conditional benchmark. This ticker will be traded using the same RSI conditions as your strategy for fair comparison.")
 
-# Allow custom benchmark input
-use_custom_benchmark = st.sidebar.checkbox("Use custom benchmark ticker", help="Check this to specify a custom ticker symbol instead of using the selected benchmark above.")
+# Allow custom conditional benchmark input
+use_custom_benchmark = st.sidebar.checkbox("Use custom conditional benchmark ticker", help="Check this to specify a custom ticker symbol for the conditional benchmark.")
 
 if use_custom_benchmark:
-    custom_benchmark = st.sidebar.text_input("Custom Benchmark Ticker", 
+    custom_benchmark = st.sidebar.text_input("Custom Conditional Benchmark Ticker", 
                                             placeholder="e.g., QQQ, VTI, etc.",
-                                            help="Enter a custom ticker symbol to use as benchmark.")
+                                            help="Enter a custom ticker symbol to use as conditional benchmark.")
 else:
     custom_benchmark = ""
+
+# Buy-and-hold benchmark
+buyhold_options = ["SPY", "BIL", "TQQQ", "QQQ", "VTI"]
+buyhold_benchmark = st.sidebar.selectbox("Buy-and-Hold Benchmark", 
+                                         buyhold_options, 
+                                         format_func=lambda x: {
+                                             "SPY": "SPY (S&P 500)",
+                                             "BIL": "BIL (Cash Equivalent)", 
+                                             "TQQQ": "TQQQ (3x Nasdaq-100)",
+                                             "QQQ": "QQQ (Nasdaq-100)",
+                                             "VTI": "VTI (Total Market)"
+                                         }.get(x, x),
+                                         help="Choose your buy-and-hold benchmark. This ticker will be held throughout the entire period for comparison.")
+
+# Allow custom buy-and-hold benchmark input
+use_custom_buyhold = st.sidebar.checkbox("Use custom buy-and-hold benchmark ticker", help="Check this to specify a custom ticker symbol for the buy-and-hold benchmark.")
+
+if use_custom_buyhold:
+    custom_buyhold = st.sidebar.text_input("Custom Buy-and-Hold Benchmark Ticker", 
+                                           placeholder="e.g., QQQ, VTI, etc.",
+                                           help="Enter a custom ticker symbol to use as buy-and-hold benchmark.")
+else:
+    custom_buyhold = ""
 
 # RSI Threshold and Range options (only for RSI Threshold mode)
 if analysis_mode == "RSI Threshold":
@@ -1508,7 +1588,9 @@ if st.sidebar.button("🚀 Run RSI Analysis", type="primary", use_container_widt
                     results_df, benchmark, data_messages = run_rsi_analysis(signal_ticker, target_ticker, rsi_threshold, comparison, start_date, end_date, rsi_period, rsi_method, final_benchmark_ticker, use_quantstats, st.session_state.get('preconditions', []), exclusions)
             else:
                 # RSI Comparison mode
-                results_df, benchmark, data_messages = run_rsi_comparison_analysis(signal_ticker, comparison_ticker, target_ticker, fallback_ticker, signal_rsi_period, comparison_rsi_period, start_date, end_date, rsi_method, final_benchmark_ticker, use_quantstats, st.session_state.get('preconditions', []), exclusions)
+                # Get buy-and-hold benchmark
+                final_buyhold_benchmark = custom_buyhold if use_custom_buyhold and custom_buyhold.strip() else buyhold_benchmark
+                results_df, benchmark, buyhold_benchmark, data_messages = run_rsi_comparison_analysis(signal_ticker, comparison_ticker, target_ticker, fallback_ticker, signal_rsi_period, comparison_rsi_period, start_date, end_date, rsi_method, final_benchmark_ticker, final_buyhold_benchmark, use_quantstats, st.session_state.get('preconditions', []), exclusions)
             
             if results_df is not None and benchmark is not None and not results_df.empty:
                 # Store analysis results in session state
@@ -1522,6 +1604,8 @@ if st.sidebar.button("🚀 Run RSI Analysis", type="primary", use_container_widt
                 st.session_state['analysis_mode'] = analysis_mode
                 if analysis_mode == "RSI Comparison":
                     st.session_state['comparison_ticker'] = comparison_ticker
+                    st.session_state['buyhold_benchmark'] = buyhold_benchmark
+                    st.session_state['buyhold_benchmark_ticker'] = final_buyhold_benchmark
                 st.session_state['analysis_completed'] = True
                 st.session_state['data_messages'] = data_messages
                 
@@ -1546,7 +1630,18 @@ with col1:
             if 'type' in precondition and precondition['type'] == 'comparison':
                 signal_period = precondition.get('signal_rsi_period', 10)
                 comparison_period = precondition.get('comparison_rsi_period', 10)
-                st.write(f"  • {precondition['signal_ticker']} {signal_period}d RSI < {precondition['comparison_ticker']} {comparison_period}d RSI")
+                target_ticker = precondition.get('target_ticker', 'N/A')
+                fallback_ticker = precondition.get('fallback_ticker', 'N/A')
+                
+                # Format fallback display
+                if fallback_ticker == "Main Signal":
+                    fallback_display = "Main Signal"
+                elif fallback_ticker.startswith("Precondition"):
+                    fallback_display = fallback_ticker
+                else:
+                    fallback_display = fallback_ticker
+                
+                st.write(f"  • {precondition['signal_ticker']} {signal_period}d RSI < {precondition['comparison_ticker']} {comparison_period}d RSI → {target_ticker} / {fallback_display}")
             else:
                 # Handle legacy format or threshold type
                 comparison_symbol = "≤" if precondition.get('comparison') == "less_than" else "≥"
@@ -1920,6 +2015,7 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
         if 'equity_curve' in results_df.columns and 'benchmark_equity_curve' in results_df.columns:
             strategy_curve = results_df.iloc[0]['equity_curve']
             benchmark_curve = results_df.iloc[0]['benchmark_equity_curve']
+            buyhold_curve = st.session_state.get('buyhold_benchmark', pd.Series())
             
             fig_equity = go.Figure()
             
@@ -1932,14 +2028,25 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
                 line=dict(color='blue', width=2)
             ))
             
-            # Add benchmark equity curve
+            # Add conditional benchmark equity curve (under same RSI conditions)
             fig_equity.add_trace(go.Scatter(
                 x=benchmark_curve.index,
                 y=benchmark_curve.values,
                 mode='lines',
-                name=f'Benchmark ({stored_benchmark_ticker})',
+                name=f'Conditional Benchmark ({stored_benchmark_ticker} under same RSI conditions)',
                 line=dict(color='red', width=2)
             ))
+            
+            # Add buy-and-hold benchmark if available
+            if not buyhold_curve.empty:
+                buyhold_ticker = st.session_state.get('buyhold_benchmark_ticker', 'SPY')
+                fig_equity.add_trace(go.Scatter(
+                    x=buyhold_curve.index,
+                    y=buyhold_curve.values,
+                    mode='lines',
+                    name=f'Buy-and-Hold Benchmark ({buyhold_ticker})',
+                    line=dict(color='green', width=2, dash='dash')
+                ))
             
             fig_equity.update_layout(
                 title="Strategy vs Benchmark Performance",
