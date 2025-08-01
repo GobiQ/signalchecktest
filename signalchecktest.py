@@ -967,68 +967,16 @@ def run_rsi_comparison_analysis(signal_ticker: str, comparison_ticker: str, targ
     progress_bar.progress(0.9)
     analysis = analyze_rsi_comparison_signals(signal_data, comparison_data, target_data, rsi_period, rsi_method, comparison, use_quantstats, preconditions, precondition_data)
     
-    # Create benchmark equity curve that follows the same RSI conditions
-    signal_rsi = calculate_rsi(signal_data, window=rsi_period, method=rsi_method)
-    comparison_rsi = calculate_rsi(comparison_data, window=rsi_period, method=rsi_method)
+    # Calculate benchmark equity curve using identical logic to strategy but with benchmark prices
+    benchmark_equity_curve = calculate_benchmark_equity_curve(
+        signal_data, benchmark_data, 0, comparison, rsi_period, rsi_method, 
+        preconditions, precondition_data
+    )
     
-    # Generate buy signals for benchmark (same as strategy)
-    if comparison == "greater_than":
-        benchmark_base_signals = (signal_rsi > comparison_rsi).astype(int)
-    else:  # less_than (default)
-        benchmark_base_signals = (signal_rsi < comparison_rsi).astype(int)
-    
-    # Apply preconditions to benchmark signals if they exist
-    if preconditions and precondition_data:
-        benchmark_precondition_mask = pd.Series(True, index=signal_data.index)
-        
-        for precondition in preconditions:
-            # Use the new logical evaluation function with main signal output
-            precondition_condition = evaluate_precondition_logic(precondition, signal_rsi, precondition_data, rsi_period, rsi_method, benchmark_base_signals)
-            
-            benchmark_precondition_mask = benchmark_precondition_mask & precondition_condition
-        
-        benchmark_signals = benchmark_base_signals & benchmark_precondition_mask
-    else:
-        benchmark_signals = benchmark_base_signals
-    
-    # Calculate benchmark equity curve using benchmark prices (same logic as strategy)
-    benchmark_equity_curve = pd.Series(1.0, index=benchmark_data.index)
-    current_equity = 1.0
-    in_position = False
-    entry_equity = 1.0
-    entry_price = None
+    # Calculate benchmark trades for metrics
     benchmark_trades = []
-    
-    for date in benchmark_data.index:
-        current_signal = benchmark_signals[date] if date in benchmark_signals.index else 0
-        current_price = benchmark_data[date]
-        
-        if current_signal == 1 and not in_position:
-            # Enter position
-            in_position = True
-            entry_equity = current_equity
-            entry_price = current_price
-            
-        elif current_signal == 0 and in_position:
-            # Exit position
-            trade_return = (current_price - entry_price) / entry_price
-            current_equity = entry_equity * (1 + trade_return)
-            benchmark_trades.append(trade_return)
-            in_position = False
-        
-        # Update equity curve
-        if in_position:
-            current_equity = entry_equity * (current_price / entry_price)
-        
-        benchmark_equity_curve[date] = current_equity
-    
-    # Handle case where we're still in position at the end
-    if in_position:
-        final_price = benchmark_data.iloc[-1]
-        trade_return = (final_price - entry_price) / entry_price
-        current_equity = entry_equity * (1 + trade_return)
-        benchmark_trades.append(trade_return)
-        benchmark_equity_curve.iloc[-1] = current_equity
+    benchmark_returns = benchmark_equity_curve.pct_change().dropna()
+    benchmark_trades = benchmark_returns[benchmark_returns != 0].tolist()
     
     # Calculate benchmark metrics
     benchmark_avg_return = np.mean(benchmark_trades) if benchmark_trades else 0
@@ -1186,68 +1134,16 @@ def run_rsi_analysis(signal_ticker: str, target_ticker: str, rsi_threshold: floa
         # Calculate statistical significance
         strategy_equity_curve = analysis['equity_curve']
         if len(strategy_equity_curve) > 0:
-            # Create benchmark equity curve that follows the same RSI conditions
-            # This ensures we're comparing strategy vs benchmark under the same conditions
-            signal_rsi = calculate_rsi(signal_data, window=rsi_period, method=rsi_method)
+            # Calculate benchmark equity curve using identical logic to strategy but with benchmark prices
+            benchmark_equity_curve = calculate_benchmark_equity_curve(
+                signal_data, benchmark_data, threshold, comparison, rsi_period, rsi_method, 
+                preconditions, precondition_data
+            )
             
-            # Generate buy signals for benchmark (same as strategy)
-            if comparison == "less_than":
-                benchmark_base_signals = (signal_rsi <= threshold).astype(int)
-            else:  # greater_than
-                benchmark_base_signals = (signal_rsi >= threshold).astype(int)
-            
-            # Apply preconditions to benchmark signals if they exist
-            if preconditions and precondition_data:
-                benchmark_precondition_mask = pd.Series(True, index=signal_data.index)
-                
-                for precondition in preconditions:
-                    # Use the new logical evaluation function with main signal output
-                    precondition_condition = evaluate_precondition_logic(precondition, signal_rsi, precondition_data, rsi_period, rsi_method, benchmark_base_signals)
-                    
-                    benchmark_precondition_mask = benchmark_precondition_mask & precondition_condition
-                
-                benchmark_signals = benchmark_base_signals & benchmark_precondition_mask
-            else:
-                benchmark_signals = benchmark_base_signals
-            
-            # Calculate benchmark equity curve using benchmark prices (same logic as strategy)
-            benchmark_equity_curve = pd.Series(1.0, index=benchmark_data.index)
-            current_equity = 1.0
-            in_position = False
-            entry_equity = 1.0
-            entry_price = None
+            # Calculate benchmark trades for metrics
             benchmark_trades = []
-            
-            for date in benchmark_data.index:
-                current_signal = benchmark_signals[date] if date in benchmark_signals.index else 0
-                current_price = benchmark_data[date]
-                
-                if current_signal == 1 and not in_position:
-                    # Enter position
-                    in_position = True
-                    entry_equity = current_equity
-                    entry_price = current_price
-                    
-                elif current_signal == 0 and in_position:
-                    # Exit position
-                    trade_return = (current_price - entry_price) / entry_price
-                    current_equity = entry_equity * (1 + trade_return)
-                    benchmark_trades.append(trade_return)
-                    in_position = False
-                
-                # Update equity curve
-                if in_position:
-                    current_equity = entry_equity * (current_price / entry_price)
-                
-                benchmark_equity_curve[date] = current_equity
-            
-            # Handle case where we're still in position at the end
-            if in_position:
-                final_price = benchmark_data.iloc[-1]
-                trade_return = (final_price - entry_price) / entry_price
-                current_equity = entry_equity * (1 + trade_return)
-                benchmark_trades.append(trade_return)
-                benchmark_equity_curve.iloc[-1] = current_equity
+            benchmark_returns = benchmark_equity_curve.pct_change().dropna()
+            benchmark_trades = benchmark_returns[benchmark_returns != 0].tolist()
             
             # Calculate benchmark average and median returns
             benchmark_avg_return = np.mean(benchmark_trades) if benchmark_trades else 0
@@ -1263,67 +1159,16 @@ def run_rsi_analysis(signal_ticker: str, target_ticker: str, rsi_threshold: floa
             # Calculate additional risk metrics
             risk_metrics = calculate_additional_metrics(analysis['returns'], analysis['equity_curve'], analysis['annualized_return'], use_quantstats)
         else:
-            # Calculate benchmark average and median returns even when strategy has no trades
-            signal_rsi = calculate_rsi(signal_data, window=rsi_period, method=rsi_method)
+            # Calculate benchmark equity curve using identical logic to strategy but with benchmark prices
+            benchmark_equity_curve = calculate_benchmark_equity_curve(
+                signal_data, benchmark_data, threshold, comparison, rsi_period, rsi_method, 
+                preconditions, precondition_data
+            )
             
-            # Generate buy signals for benchmark (same as strategy)
-            if comparison == "less_than":
-                benchmark_base_signals = (signal_rsi <= threshold).astype(int)
-            else:  # greater_than
-                benchmark_base_signals = (signal_rsi >= threshold).astype(int)
-            
-            # Apply preconditions to benchmark signals if they exist
-            if preconditions and precondition_data:
-                benchmark_precondition_mask = pd.Series(True, index=signal_data.index)
-                
-                for precondition in preconditions:
-                    # Use the new logical evaluation function with main signal output
-                    precondition_condition = evaluate_precondition_logic(precondition, signal_rsi, precondition_data, rsi_period, rsi_method, benchmark_base_signals)
-                    
-                    benchmark_precondition_mask = benchmark_precondition_mask & precondition_condition
-                
-                benchmark_signals = benchmark_base_signals & benchmark_precondition_mask
-            else:
-                benchmark_signals = benchmark_base_signals
-            
-            # Calculate benchmark equity curve using benchmark prices (same logic as strategy)
-            benchmark_equity_curve = pd.Series(1.0, index=benchmark_data.index)
-            current_equity = 1.0
-            in_position = False
-            entry_equity = 1.0
-            entry_price = None
+            # Calculate benchmark trades for metrics
             benchmark_trades = []
-            
-            for date in benchmark_data.index:
-                current_signal = benchmark_signals[date] if date in benchmark_signals.index else 0
-                current_price = benchmark_data[date]
-                
-                if current_signal == 1 and not in_position:
-                    # Enter position
-                    in_position = True
-                    entry_equity = current_equity
-                    entry_price = current_price
-                    
-                elif current_signal == 0 and in_position:
-                    # Exit position
-                    trade_return = (current_price - entry_price) / entry_price
-                    current_equity = entry_equity * (1 + trade_return)
-                    benchmark_trades.append(trade_return)
-                    in_position = False
-                
-                # Update equity curve
-                if in_position:
-                    current_equity = entry_equity * (current_price / entry_price)
-                
-                benchmark_equity_curve[date] = current_equity
-            
-            # Handle case where we're still in position at the end
-            if in_position:
-                final_price = benchmark_data.iloc[-1]
-                trade_return = (final_price - entry_price) / entry_price
-                current_equity = entry_equity * (1 + trade_return)
-                benchmark_trades.append(trade_return)
-                benchmark_equity_curve.iloc[-1] = current_equity
+            benchmark_returns = benchmark_equity_curve.pct_change().dropna()
+            benchmark_trades = benchmark_returns[benchmark_returns != 0].tolist()
             
             # Calculate benchmark average and median returns
             benchmark_avg_return = np.mean(benchmark_trades) if benchmark_trades else 0
@@ -2158,48 +2003,7 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
         if 'RSI_Threshold' in display_df.columns:
             st.metric("RSI Threshold", f"{best_result['RSI_Threshold']}")
     
-    # Display equity curve
-    st.subheader("📈 Equity Curve")
-    if 'equity_curve' in results_df.columns:
-        # Get the equity curve for the best result
-        best_equity_curve = results_df.iloc[best_idx]['equity_curve']
-        if hasattr(best_equity_curve, 'index') and len(best_equity_curve) > 0:
-            fig = go.Figure()
-            
-            # Add strategy equity curve
-            fig.add_trace(go.Scatter(
-                x=best_equity_curve.index,
-                y=best_equity_curve.values,
-                mode='lines',
-                name='Strategy',
-                line=dict(color='blue', width=2)
-            ))
-            
-            # Add benchmark equity curve if available
-            if 'benchmark_equity_curve' in results_df.columns:
-                benchmark_equity_curve = results_df.iloc[best_idx]['benchmark_equity_curve']
-                if hasattr(benchmark_equity_curve, 'index') and len(benchmark_equity_curve) > 0:
-                    fig.add_trace(go.Scatter(
-                        x=benchmark_equity_curve.index,
-                        y=benchmark_equity_curve.values,
-                        mode='lines',
-                        name='Benchmark',
-                        line=dict(color='red', width=2)
-                    ))
-            
-            fig.update_layout(
-                title="Strategy vs Benchmark Performance",
-                xaxis_title="Date",
-                yaxis_title="Cumulative Return",
-                hovermode='x unified',
-                showlegend=True
-            )
-            
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.warning("⚠️ Equity curve data not available for display.")
-    else:
-        st.warning("⚠️ Equity curve data not available for display.")
+
     
     # Drop the equity_curve and trades columns for display
     # Use different column sets based on analysis mode
@@ -2920,3 +2724,77 @@ st.markdown("""
     Questions? Reach out to @Gobi on Discord
 </div>
 """, unsafe_allow_html=True)
+
+def calculate_benchmark_equity_curve(signal_prices: pd.Series, benchmark_prices: pd.Series, rsi_threshold: float, comparison: str = "less_than", rsi_period: int = 14, rsi_method: str = "wilders", preconditions: List[Dict] = None, precondition_data: Dict[str, pd.Series] = None) -> pd.Series:
+    """
+    Calculate benchmark equity curve using identical logic to the strategy but with benchmark prices.
+    This ensures the benchmark follows the exact same conditions and preconditions as the strategy.
+    """
+    # Calculate RSI for the SIGNAL ticker using specified period and method
+    signal_rsi = calculate_rsi(signal_prices, window=rsi_period, method=rsi_method)
+    
+    # Generate buy signals based on SIGNAL RSI threshold and comparison (identical to strategy)
+    if comparison == "less_than":
+        # "≤" configuration: Buy BENCHMARK when SIGNAL RSI ≤ threshold, sell when SIGNAL RSI < threshold
+        base_signals = (signal_rsi <= rsi_threshold).astype(int)
+    else:  # greater_than
+        # "≥" configuration: Buy BENCHMARK when SIGNAL RSI ≥ threshold, sell when SIGNAL RSI < threshold
+        base_signals = (signal_rsi >= rsi_threshold).astype(int)
+    
+    # Apply preconditions if provided (identical to strategy)
+    if preconditions and precondition_data:
+        # Start with all signals as valid
+        precondition_mask = pd.Series(True, index=signal_prices.index)
+        
+        for i, precondition in enumerate(preconditions):
+            # Use the new logical evaluation function with main signal output
+            precondition_condition = evaluate_precondition_logic(precondition, signal_rsi, precondition_data, rsi_period, rsi_method, base_signals)
+            
+            # Update the mask (all preconditions must be True)
+            precondition_mask = precondition_mask & precondition_condition
+        
+        # Apply precondition mask to base signals
+        signals = base_signals & precondition_mask
+    else:
+        signals = base_signals
+    
+    # Calculate equity curve day by day - buy/sell BENCHMARK based on SIGNAL RSI (identical logic to strategy)
+    equity_curve = pd.Series(1.0, index=benchmark_prices.index)
+    current_equity = 1.0
+    in_position = False
+    entry_equity = 1.0
+    entry_date = None
+    entry_price = None
+    
+    for i, date in enumerate(benchmark_prices.index):
+        current_signal = signals[date] if date in signals.index else 0
+        current_price = benchmark_prices[date]  # BENCHMARK price
+        
+        if current_signal == 1 and not in_position:
+            # Enter position - buy BENCHMARK at close when SIGNAL RSI meets condition
+            in_position = True
+            entry_equity = current_equity
+            entry_date = date
+            entry_price = current_price
+            
+        elif current_signal == 0 and in_position:
+            # Exit position - sell BENCHMARK at close when SIGNAL RSI no longer meets condition
+            trade_return = (current_price - entry_price) / entry_price
+            current_equity = entry_equity * (1 + trade_return)
+            in_position = False
+        
+        # Update equity curve
+        if in_position:
+            # Mark-to-market the BENCHMARK position
+            current_equity = entry_equity * (current_price / entry_price)
+        
+        equity_curve[date] = current_equity
+    
+    # Handle case where we're still in position at the end
+    if in_position:
+        final_price = benchmark_prices.iloc[-1]
+        trade_return = (final_price - entry_price) / entry_price
+        current_equity = entry_equity * (1 + trade_return)
+        equity_curve.iloc[-1] = current_equity
+    
+    return equity_curve
