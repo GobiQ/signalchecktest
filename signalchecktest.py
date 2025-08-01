@@ -810,7 +810,7 @@ with st.sidebar.expander("➕ Add Precondition", expanded=False):
     
     # Precondition signal ticker (can be different from main signal)
     precondition_signal = st.text_input("Precondition Signal Ticker", 
-                                       value=signal_ticker, 
+                                       value="QQQ", 
                                        key="precondition_signal",
                                        help="The ticker whose RSI will be checked for this precondition. Can be the same as or different from the main signal ticker.")
     
