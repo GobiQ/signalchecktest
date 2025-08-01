@@ -913,9 +913,9 @@ use_custom_range = st.sidebar.checkbox("Use custom RSI range", help="Check this 
 
 # Set default ranges based on condition
 if comparison == "less_than":
-    default_min, default_max = 20.0, 50.0
+    default_min, default_max = 0.0, 50.0  # Test from 0 to 50 for less than conditions
 else:
-    default_min, default_max = 50.0, 85.0
+    default_min, default_max = 50.0, 100.0  # Test from 50 to 100 for greater than conditions
 
 if use_custom_range:
     col1, col2 = st.sidebar.columns(2)
