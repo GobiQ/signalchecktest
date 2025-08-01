@@ -1866,7 +1866,8 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
                             y=benchmark_equity_curve.values,
                             mode='lines',
                             name=f"RSI {row['RSI_Threshold']} Benchmark (same conditions)",
-                            line=dict(color=color, width=1, dash='dot')
+                            line=dict(color=color, width=1, dash='dot'),
+                            visible='legendonly'  # Hidden by default
                         ))
                 else:
                     st.warning(f"No equity curve found for RSI {row['RSI_Threshold']}")
@@ -1976,7 +1977,8 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
                             y=benchmark_equity_curve.values,
                             mode='lines',
                             name=f"RSI {row['RSI_Threshold']} Benchmark (same conditions)",
-                            line=dict(color=color, width=1, dash='dot')
+                            line=dict(color=color, width=1, dash='dot'),
+                            visible='legendonly'  # Hidden by default
                         ))
                 else:
                     st.warning(f"No equity curve found for RSI {row['RSI_Threshold']}")
