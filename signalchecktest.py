@@ -1872,12 +1872,29 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
                 else:
                     st.warning(f"No equity curve found for RSI {row['RSI_Threshold']}")
             
+            # Find the shortest time period among visible curves for default scaling
+            shortest_period = None
+            shortest_duration = float('inf')
+            
+            # Check strategy curves (these are always visible)
+            for i, (idx, row) in enumerate(top_significant.iterrows()):
+                if 'equity_curve' in row and row['equity_curve'] is not None:
+                    curve_duration = (row['equity_curve'].index[-1] - row['equity_curve'].index[0]).days
+                    if curve_duration < shortest_duration:
+                        shortest_duration = curve_duration
+                        shortest_period = row['equity_curve']
+            
+            # If no strategy curves found, use benchmark
+            if shortest_period is None:
+                shortest_period = benchmark
+            
             fig_comparison.update_layout(
                 title=f"Highest Cumulative Return Significant Signals Comparison vs {benchmark_name}",
                 xaxis_title="Date",
                 yaxis_title="Equity Value",
                 hovermode='x unified',
-                legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
+                legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01),
+                xaxis=dict(range=[shortest_period.index[0], shortest_period.index[-1]])  # Scale to shortest period
             )
             st.plotly_chart(fig_comparison, use_container_width=True, key="most_profitable_comparison")
             
@@ -1983,12 +2000,29 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
                 else:
                     st.warning(f"No equity curve found for RSI {row['RSI_Threshold']}")
             
+            # Find the shortest time period among visible curves for default scaling
+            shortest_period = None
+            shortest_duration = float('inf')
+            
+            # Check strategy curves (these are always visible)
+            for i, (idx, row) in enumerate(top_sortino_significant.iterrows()):
+                if 'equity_curve' in row and row['equity_curve'] is not None:
+                    curve_duration = (row['equity_curve'].index[-1] - row['equity_curve'].index[0]).days
+                    if curve_duration < shortest_duration:
+                        shortest_duration = curve_duration
+                        shortest_period = row['equity_curve']
+            
+            # If no strategy curves found, use benchmark
+            if shortest_period is None:
+                shortest_period = benchmark
+            
             fig_sortino_comparison.update_layout(
                 title=f"Highest Sortino Significant Signals Comparison vs {benchmark_name}",
                 xaxis_title="Date",
                 yaxis_title="Equity Value",
                 hovermode='x unified',
-                legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
+                legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01),
+                xaxis=dict(range=[shortest_period.index[0], shortest_period.index[-1]])  # Scale to shortest period
             )
             st.plotly_chart(fig_sortino_comparison, use_container_width=True, key="highest_sortino_comparison")
             
