@@ -1072,7 +1072,7 @@ with tab3:
             
             # Initialize strategy branches if not exists
             if 'strategy_branches' not in st.session_state:
-                st.session_state.strategy_branches = [{'signals': [], 'allocation': ''}]
+                st.session_state.strategy_branches = [{'signals': [], 'allocation': '', 'else_type': 'allocation', 'else_allocation': '', 'else_signals': []}]
             
             # Display strategy branches
             for branch_idx, branch in enumerate(st.session_state.strategy_branches):
@@ -1122,6 +1122,73 @@ with tab3:
                     key=f"branch_{branch_idx}_allocation"
                 )
                 
+                # ELSE functionality
+                st.markdown("**ELSE:**")
+                
+                # ELSE type selection
+                branch['else_type'] = st.selectbox(
+                    "ELSE Type",
+                    ["Allocation", "Additional Signals"],
+                    key=f"branch_{branch_idx}_else_type"
+                )
+                
+                if branch['else_type'] == "Allocation":
+                    # Simple allocation
+                    branch['else_allocation'] = st.selectbox(
+                        "ELSE Allocate To",
+                        list(st.session_state.output_allocations.keys()),
+                        key=f"branch_{branch_idx}_else_allocation"
+                    )
+                else:
+                    # Additional signals
+                    st.markdown("**Additional Signals:**")
+                    
+                    # Display existing ELSE signals
+                    for else_signal_idx, else_signal_config in enumerate(branch.get('else_signals', [])):
+                        col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
+                        
+                        with col1:
+                            else_signal_config['signal'] = st.selectbox(
+                                f"ELSE Signal {else_signal_idx + 1}", 
+                                [""] + [s['name'] for s in st.session_state.signals], 
+                                key=f"branch_{branch_idx}_else_signal_{else_signal_idx}"
+                            )
+                        
+                        with col2:
+                            else_signal_config['negated'] = st.checkbox("NOT", key=f"branch_{branch_idx}_else_negated_{else_signal_idx}")
+                        
+                        with col3:
+                            if else_signal_idx > 0:  # Don't show operator for first signal
+                                else_signal_config['operator'] = st.selectbox(
+                                    "Logic", 
+                                    ["AND", "OR"], 
+                                    key=f"branch_{branch_idx}_else_operator_{else_signal_idx}"
+                                )
+                            else:
+                                st.write("")  # Empty space for alignment
+                        
+                        with col4:
+                            if else_signal_idx > 0:  # Don't show remove button for first signal
+                                if st.button("🗑️", key=f"remove_branch_{branch_idx}_else_signal_{else_signal_idx}"):
+                                    branch['else_signals'].pop(else_signal_idx)
+                                    st.rerun()
+                            else:
+                                st.write("")  # Empty space for alignment
+                    
+                    # Add ELSE signal button
+                    if st.button("➕ Add ELSE Signal", key=f"add_branch_{branch_idx}_else_signal"):
+                        if 'else_signals' not in branch:
+                            branch['else_signals'] = []
+                        branch['else_signals'].append({'signal': '', 'negated': False, 'operator': 'AND'})
+                        st.rerun()
+                    
+                    # ELSE allocation (for when ELSE signals are true)
+                    branch['else_allocation'] = st.selectbox(
+                        "ELSE Signals True → Allocate To",
+                        list(st.session_state.output_allocations.keys()),
+                        key=f"branch_{branch_idx}_else_signals_allocation"
+                    )
+                
                 # Remove branch button (except for first branch)
                 if branch_idx > 0:
                     if st.button("🗑️ Remove Branch", key=f"remove_branch_{branch_idx}"):
@@ -1132,7 +1199,7 @@ with tab3:
             
             # Add new branch button
             if st.button("➕ Add Branch", key="add_branch"):
-                st.session_state.strategy_branches.append({'signals': [], 'allocation': ''})
+                st.session_state.strategy_branches.append({'signals': [], 'allocation': '', 'else_type': 'allocation', 'else_allocation': '', 'else_signals': []})
                 st.rerun()
             
             # Default allocation (if no branches match)
@@ -1148,10 +1215,20 @@ with tab3:
                 for branch in st.session_state.strategy_branches:
                     valid_signals = [s for s in branch['signals'] if s['signal']]
                     if valid_signals:
-                        valid_branches.append({
+                        branch_data = {
                             'signals': valid_signals.copy(),
-                            'allocation': branch['allocation']
-                        })
+                            'allocation': branch['allocation'],
+                            'else_type': branch['else_type'],
+                            'else_allocation': branch['else_allocation']
+                        }
+                        
+                        # Add ELSE signals if they exist
+                        if branch['else_type'] == "Additional Signals":
+                            valid_else_signals = [s for s in branch.get('else_signals', []) if s['signal']]
+                            if valid_else_signals:
+                                branch_data['else_signals'] = valid_else_signals.copy()
+                        
+                        valid_branches.append(branch_data)
                 
                 if not valid_branches:
                     st.error("Please add at least one signal to a branch.")
@@ -1193,6 +1270,21 @@ with tab3:
                                 condition_texts.append(f"**IF** {condition_text} **THEN** {branch['allocation']}")
                             else:
                                 condition_texts.append(f"**ELSE IF** {condition_text} **THEN** {branch['allocation']}")
+                            
+                            # Add ELSE logic
+                            if branch.get('else_type') == "Allocation":
+                                condition_texts.append(f"**ELSE** {branch['else_allocation']}")
+                            elif branch.get('else_type') == "Additional Signals" and branch.get('else_signals'):
+                                else_condition_parts = []
+                                for else_signal_idx, else_signal_config in enumerate(branch['else_signals']):
+                                    else_signal_text = f"NOT {else_signal_config['signal']}" if else_signal_config['negated'] else else_signal_config['signal']
+                                    if else_signal_idx > 0:
+                                        else_condition_parts.append(f"{else_signal_config['operator']} {else_signal_text}")
+                                    else:
+                                        else_condition_parts.append(else_signal_text)
+                                
+                                else_condition_text = " ".join(else_condition_parts)
+                                condition_texts.append(f"**ELSE IF** {else_condition_text} **THEN** {branch['else_allocation']}")
                         
                         # Add default allocation
                         condition_texts.append(f"**ELSE** {strategy['default_allocation']}")
@@ -1673,7 +1765,9 @@ with tab4:
                     if 'branches' in strategy:  # New format
                         # Initialize strategy signals for each branch
                         branch_signals = []
+                        else_signals = []
                         for branch in strategy['branches']:
+                            # Main branch signals
                             branch_signal = None
                             
                             for signal_config in branch['signals']:
@@ -1693,23 +1787,65 @@ with tab4:
                                         branch_signal = (branch_signal | signal_values).astype(int)
                             
                             branch_signals.append(branch_signal)
+                            
+                            # ELSE signals (if they exist)
+                            if branch.get('else_type') == "Additional Signals" and branch.get('else_signals'):
+                                else_signal = None
+                                
+                                for else_signal_config in branch['else_signals']:
+                                    else_signal_values = signal_results[else_signal_config['signal']]
+                                    
+                                    # Apply negation if needed
+                                    if else_signal_config['negated']:
+                                        else_signal_values = (~else_signal_values.astype(bool)).astype(int)
+                                    
+                                    # Combine with previous ELSE signals
+                                    if else_signal is None:
+                                        else_signal = else_signal_values
+                                    else:
+                                        if else_signal_config['operator'] == "AND":
+                                            else_signal = (else_signal & else_signal_values).astype(int)
+                                        else:  # OR
+                                            else_signal = (else_signal | else_signal_values).astype(int)
+                                
+                                else_signals.append(else_signal)
+                            else:
+                                else_signals.append(None)
                         
-                        # Calculate equity curves for each branch
+                        # Calculate equity curves for each branch and ELSE conditions
                         branch_equities = []
+                        else_equities = []
                         for branch_idx, branch in enumerate(strategy['branches']):
+                            # Main branch equity
                             allocation = st.session_state.output_allocations[branch['allocation']]
                             branch_equity = calculate_multi_ticker_equity_curve(branch_signals[branch_idx], allocation, data)
                             branch_equities.append(branch_equity)
+                            
+                            # ELSE equity (if ELSE signals exist)
+                            if else_signals[branch_idx] is not None:
+                                else_allocation = st.session_state.output_allocations[branch['else_allocation']]
+                                else_equity = calculate_multi_ticker_equity_curve(else_signals[branch_idx], else_allocation, data)
+                                else_equities.append(else_equity)
+                            else:
+                                # If ELSE type is "Allocation", use simple allocation
+                                if branch.get('else_type') == "Allocation":
+                                    else_allocation = st.session_state.output_allocations[branch['else_allocation']]
+                                    else_equity = calculate_multi_ticker_equity_curve(pd.Series(1, index=data[benchmark_ticker].index), else_allocation, data)
+                                    else_equities.append(else_equity)
+                                else:
+                                    else_equities.append(None)
                         
                         # Calculate default allocation equity curve
                         default_allocation = st.session_state.output_allocations[strategy['default_allocation']]
                         default_equity = calculate_multi_ticker_equity_curve(pd.Series(0, index=data[benchmark_ticker].index), default_allocation, data)
                         
-                        # Combine all branch returns (first branch that is true gets used)
+                        # Combine all branch returns with ELSE logic
                         combined_returns = pd.Series(0.0, index=data[benchmark_ticker].index)
                         used_signals = pd.Series(0, index=data[benchmark_ticker].index)
                         
                         for branch_idx, branch_signal in enumerate(branch_signals):
+                            branch = strategy['branches'][branch_idx]
+                            
                             # Only use this branch if no previous branch was true
                             branch_active = branch_signal & (used_signals == 0)
                             used_signals = used_signals | branch_active
@@ -1717,6 +1853,24 @@ with tab4:
                             # Get returns for this branch
                             branch_returns = branch_equities[branch_idx].pct_change().fillna(0)
                             combined_returns = combined_returns + (branch_returns * branch_active)
+                            
+                            # Handle ELSE logic
+                            if branch.get('else_type') == "Allocation":
+                                # Simple ELSE allocation (when main branch is false)
+                                else_active = (~branch_signal.astype(bool)).astype(int) & (used_signals == 0)
+                                used_signals = used_signals | else_active
+                                
+                                else_returns = else_equities[branch_idx].pct_change().fillna(0)
+                                combined_returns = combined_returns + (else_returns * else_active)
+                                
+                            elif branch.get('else_type') == "Additional Signals" and else_signals[branch_idx] is not None:
+                                # ELSE signals (when main branch is false but ELSE signals are true)
+                                else_signal = else_signals[branch_idx]
+                                else_active = else_signal & (~branch_signal.astype(bool)).astype(int) & (used_signals == 0)
+                                used_signals = used_signals | else_active
+                                
+                                else_returns = else_equities[branch_idx].pct_change().fillna(0)
+                                combined_returns = combined_returns + (else_returns * else_active)
                         
                         # Add default allocation returns for periods when no branch was active
                         default_returns = default_equity.pct_change().fillna(0)
