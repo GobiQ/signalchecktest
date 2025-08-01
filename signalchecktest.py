@@ -1199,7 +1199,7 @@ with st.sidebar.expander("➕ Add Precondition", expanded=False):
         st.write("**Precondition RSI Comparison Configuration:**")
         
         # Signal and comparison tickers with RSI periods
-        col1, col2 = st.sidebar.columns(2)
+        col1, col2 = st.columns(2)
         with col1:
             precondition_signal_ticker = st.text_input("Precondition Signal Ticker", 
                                                       value="QQQ", 
@@ -1220,7 +1220,7 @@ with st.sidebar.expander("➕ Add Precondition", expanded=False):
                                                                 help="RSI period for the comparison ticker in this comparison.")
         
         # Target and fallback tickers
-        col1, col2 = st.sidebar.columns(2)
+        col1, col2 = st.columns(2)
         with col1:
             precondition_target_ticker = st.text_input("Precondition Target Ticker", 
                                                       value="TQQQ", 
