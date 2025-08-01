@@ -898,7 +898,7 @@ with tab1:
     # Display existing signals
     if st.session_state.signals:
         st.subheader("📋 Active Reference Signal Blocks")
-        for i, signal in enumerate(st.session_state.signals):
+        for signal_idx, signal in enumerate(st.session_state.signals):
             with st.container():
                 col1, col2 = st.columns([3, 1])
                 with col1:
@@ -915,8 +915,8 @@ with tab1:
                     else:
                         st.caption(f"{signal['signal_ticker']} vs {signal['comparison_ticker']} RSI {signal['comparison_operator']} → {signal['target_ticker']}")
                 with col2:
-                    if st.button("🗑️", key=f"delete_signal_{i}"):
-                        st.session_state.signals.pop(i)
+                    if st.button("🗑️", key=f"delete_signal_{signal_idx}"):
+                        st.session_state.signals.pop(signal_idx)
                         st.rerun()
     else:
         st.info("No reference signal blocks created yet. Create your first signal above.")
@@ -1138,7 +1138,7 @@ with tab3:
     # Display existing strategies
     if st.session_state.strategies:
         st.subheader("📋 Active Strategies")
-        for i, strategy in enumerate(st.session_state.strategies):
+        for strategy_idx, strategy in enumerate(st.session_state.strategies):
             with st.container():
                 col1, col2 = st.columns([3, 1])
                 with col1:
@@ -1146,9 +1146,9 @@ with tab3:
                     
                     # Build condition text
                     condition_parts = []
-                    for i, signal_config in enumerate(strategy['signals']):
+                    for signal_idx, signal_config in enumerate(strategy['signals']):
                         signal_text = f"NOT {signal_config['signal']}" if signal_config['negated'] else signal_config['signal']
-                        if i > 0:
+                        if signal_idx > 0:
                             condition_parts.append(f"{signal_config['operator']} {signal_text}")
                         else:
                             condition_parts.append(signal_text)
@@ -1156,8 +1156,8 @@ with tab3:
                     condition_text = " ".join(condition_parts)
                     st.markdown(f"**IF** {condition_text} **THEN** {strategy['output_allocation']} **ELSE** {strategy['else_allocation']}")
                 with col2:
-                    if st.button("🗑️", key=f"delete_strategy_{i}"):
-                        st.session_state.strategies.pop(i)
+                    if st.button("🗑️", key=f"delete_strategy_{strategy_idx}"):
+                        st.session_state.strategies.pop(strategy_idx)
                         st.rerun()
     else:
         st.info("No strategies created yet. Create your first strategy above.")
@@ -1223,7 +1223,7 @@ with tab4:
                             <span>Condition</span>
                         </div>
                         <p>
-                            <strong>IF</strong> {" ".join([f"{f'NOT {signal_config["signal"]}' if signal_config['negated'] else signal_config['signal']}{f' {signal_config["operator"]}' if i > 0 else ''}" for i, signal_config in enumerate(strategy['signals'])])} 
+                            <strong>IF</strong> {" ".join([f"{f'NOT {signal_config["signal"]}' if signal_config['negated'] else signal_config['signal']}{f' {signal_config["operator"]}' if signal_idx > 0 else ''}" for signal_idx, signal_config in enumerate(strategy['signals'])])} 
                             <strong>THEN</strong> {strategy['output_allocation']} <strong>ELSE</strong> {strategy['else_allocation']}
                         </p>
                     </div>
