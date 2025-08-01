@@ -796,7 +796,7 @@ rsi_method = "wilders"
 
 # Preconditions System
 st.sidebar.subheader("🔍 Preconditions")
-st.sidebar.info("💡 **Preconditions:** Set additional RSI conditions that must be met before the main signal is considered. This allows for more complex multi-condition strategies.")
+st.sidebar.caption("💡 Preconditions add additional RSI conditions that must ALL be true before the main signal is considered. This allows for more complex multi-condition strategies.")
 
 # Initialize preconditions in session state if not exists
 if 'preconditions' not in st.session_state:
@@ -1812,27 +1812,7 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
 st.write("---")
 st.write("💡 **Tip:** Try different ticker combinations and RSI conditions to find optimal signal thresholds")
 
-# Add explanation about preconditions
-if st.session_state.get('preconditions'):
-    st.write("---")
-    st.subheader("🔍 Preconditions Explanation")
-    st.info("""
-    **How Preconditions Work:**
-    
-    Preconditions add additional RSI conditions that must ALL be true before the main signal is considered. 
-    This allows you to create more sophisticated multi-condition strategies.
-    
-    **Example:** If you set a precondition "SPY RSI ≤ 30" and your main signal is "QQQ RSI ≤ 25", 
-    then the strategy will only buy when BOTH conditions are met:
-    - SPY RSI ≤ 30 (precondition)
-    - QQQ RSI ≤ 25 (main signal)
-    
-    **Benefits:**
-    - Reduce false signals by requiring multiple conditions
-    - Test different ticker combinations
-    - Create more conservative or aggressive strategies
-    - Filter signals based on market conditions
-    """)
+
 
 # Display data quality messages at the bottom
 if 'data_messages' in st.session_state and st.session_state['data_messages']:
