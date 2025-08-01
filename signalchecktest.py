@@ -326,6 +326,80 @@ def evaluate_simple_precondition(precondition: Dict, signal_rsi: pd.Series, prec
     else:  # greater_than
         return (precondition_rsi >= precondition_threshold)
 
+def calculate_benchmark_equity_curve(signal_prices: pd.Series, benchmark_prices: pd.Series, rsi_threshold: float, comparison: str = "less_than", rsi_period: int = 14, rsi_method: str = "wilders", preconditions: List[Dict] = None, precondition_data: Dict[str, pd.Series] = None) -> pd.Series:
+    """
+    Calculate benchmark equity curve using identical logic to the strategy but with benchmark prices.
+    This ensures the benchmark follows the exact same conditions and preconditions as the strategy.
+    """
+    # Calculate RSI for the SIGNAL ticker using specified period and method
+    signal_rsi = calculate_rsi(signal_prices, window=rsi_period, method=rsi_method)
+    
+    # Generate buy signals based on SIGNAL RSI threshold and comparison (identical to strategy)
+    if comparison == "less_than":
+        # "≤" configuration: Buy BENCHMARK when SIGNAL RSI ≤ threshold, sell when SIGNAL RSI < threshold
+        base_signals = (signal_rsi <= rsi_threshold).astype(int)
+    else:  # greater_than
+        # "≥" configuration: Buy BENCHMARK when SIGNAL RSI ≥ threshold, sell when SIGNAL RSI < threshold
+        base_signals = (signal_rsi >= rsi_threshold).astype(int)
+    
+    # Apply preconditions if provided (identical to strategy)
+    if preconditions and precondition_data:
+        # Start with all signals as valid
+        precondition_mask = pd.Series(True, index=signal_prices.index)
+        
+        for i, precondition in enumerate(preconditions):
+            # Use the new logical evaluation function with main signal output
+            precondition_condition = evaluate_precondition_logic(precondition, signal_rsi, precondition_data, rsi_period, rsi_method, base_signals)
+            
+            # Update the mask (all preconditions must be True)
+            precondition_mask = precondition_mask & precondition_condition
+        
+        # Apply precondition mask to base signals
+        signals = base_signals & precondition_mask
+    else:
+        signals = base_signals
+    
+    # Calculate equity curve day by day - buy/sell BENCHMARK based on SIGNAL RSI (identical logic to strategy)
+    equity_curve = pd.Series(1.0, index=benchmark_prices.index)
+    current_equity = 1.0
+    in_position = False
+    entry_equity = 1.0
+    entry_date = None
+    entry_price = None
+    
+    for i, date in enumerate(benchmark_prices.index):
+        current_signal = signals[date] if date in signals.index else 0
+        current_price = benchmark_prices[date]  # BENCHMARK price
+        
+        if current_signal == 1 and not in_position:
+            # Enter position - buy BENCHMARK at close when SIGNAL RSI meets condition
+            in_position = True
+            entry_equity = current_equity
+            entry_date = date
+            entry_price = current_price
+            
+        elif current_signal == 0 and in_position:
+            # Exit position - sell BENCHMARK at close when SIGNAL RSI no longer meets condition
+            trade_return = (current_price - entry_price) / entry_price
+            current_equity = entry_equity * (1 + trade_return)
+            in_position = False
+        
+        # Update equity curve
+        if in_position:
+            # Mark-to-market the BENCHMARK position
+            current_equity = entry_equity * (current_price / entry_price)
+        
+        equity_curve[date] = current_equity
+    
+    # Handle case where we're still in position at the end
+    if in_position:
+        final_price = benchmark_prices.iloc[-1]
+        trade_return = (final_price - entry_price) / entry_price
+        current_equity = entry_equity * (1 + trade_return)
+        equity_curve.iloc[-1] = current_equity
+    
+    return equity_curve
+
 def analyze_rsi_comparison_signals(signal_prices: pd.Series, comparison_prices: pd.Series, target_prices: pd.Series, rsi_period: int = 14, rsi_method: str = "wilders", comparison_operator: str = "less_than", use_quantstats: bool = True, preconditions: List[Dict] = None, precondition_data: Dict[str, pd.Series] = None) -> Dict:
     """
     Analyze RSI comparison signals: when signal RSI < comparison RSI, buy target, else hold cash
@@ -2724,77 +2798,3 @@ st.markdown("""
     Questions? Reach out to @Gobi on Discord
 </div>
 """, unsafe_allow_html=True)
-
-def calculate_benchmark_equity_curve(signal_prices: pd.Series, benchmark_prices: pd.Series, rsi_threshold: float, comparison: str = "less_than", rsi_period: int = 14, rsi_method: str = "wilders", preconditions: List[Dict] = None, precondition_data: Dict[str, pd.Series] = None) -> pd.Series:
-    """
-    Calculate benchmark equity curve using identical logic to the strategy but with benchmark prices.
-    This ensures the benchmark follows the exact same conditions and preconditions as the strategy.
-    """
-    # Calculate RSI for the SIGNAL ticker using specified period and method
-    signal_rsi = calculate_rsi(signal_prices, window=rsi_period, method=rsi_method)
-    
-    # Generate buy signals based on SIGNAL RSI threshold and comparison (identical to strategy)
-    if comparison == "less_than":
-        # "≤" configuration: Buy BENCHMARK when SIGNAL RSI ≤ threshold, sell when SIGNAL RSI < threshold
-        base_signals = (signal_rsi <= rsi_threshold).astype(int)
-    else:  # greater_than
-        # "≥" configuration: Buy BENCHMARK when SIGNAL RSI ≥ threshold, sell when SIGNAL RSI < threshold
-        base_signals = (signal_rsi >= rsi_threshold).astype(int)
-    
-    # Apply preconditions if provided (identical to strategy)
-    if preconditions and precondition_data:
-        # Start with all signals as valid
-        precondition_mask = pd.Series(True, index=signal_prices.index)
-        
-        for i, precondition in enumerate(preconditions):
-            # Use the new logical evaluation function with main signal output
-            precondition_condition = evaluate_precondition_logic(precondition, signal_rsi, precondition_data, rsi_period, rsi_method, base_signals)
-            
-            # Update the mask (all preconditions must be True)
-            precondition_mask = precondition_mask & precondition_condition
-        
-        # Apply precondition mask to base signals
-        signals = base_signals & precondition_mask
-    else:
-        signals = base_signals
-    
-    # Calculate equity curve day by day - buy/sell BENCHMARK based on SIGNAL RSI (identical logic to strategy)
-    equity_curve = pd.Series(1.0, index=benchmark_prices.index)
-    current_equity = 1.0
-    in_position = False
-    entry_equity = 1.0
-    entry_date = None
-    entry_price = None
-    
-    for i, date in enumerate(benchmark_prices.index):
-        current_signal = signals[date] if date in signals.index else 0
-        current_price = benchmark_prices[date]  # BENCHMARK price
-        
-        if current_signal == 1 and not in_position:
-            # Enter position - buy BENCHMARK at close when SIGNAL RSI meets condition
-            in_position = True
-            entry_equity = current_equity
-            entry_date = date
-            entry_price = current_price
-            
-        elif current_signal == 0 and in_position:
-            # Exit position - sell BENCHMARK at close when SIGNAL RSI no longer meets condition
-            trade_return = (current_price - entry_price) / entry_price
-            current_equity = entry_equity * (1 + trade_return)
-            in_position = False
-        
-        # Update equity curve
-        if in_position:
-            # Mark-to-market the BENCHMARK position
-            current_equity = entry_equity * (current_price / entry_price)
-        
-        equity_curve[date] = current_equity
-    
-    # Handle case where we're still in position at the end
-    if in_position:
-        final_price = benchmark_prices.iloc[-1]
-        trade_return = (final_price - entry_price) / entry_price
-        current_equity = entry_equity * (1 + trade_return)
-        equity_curve.iloc[-1] = current_equity
-    
-    return equity_curve
