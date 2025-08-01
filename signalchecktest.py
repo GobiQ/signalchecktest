@@ -212,6 +212,106 @@ def get_signal_output(signal_ticker: str, comparison_ticker: str, signal_prices:
     else:  # less_than (default)
         return (signal_rsi < comparison_rsi).astype(int)
 
+def evaluate_precondition_logic(precondition: Dict, signal_rsi: pd.Series, precondition_data: Dict[str, pd.Series], rsi_period: int, rsi_method: str) -> pd.Series:
+    """
+    Evaluate a precondition using logical operators (if, and, then, else).
+    
+    Args:
+        precondition: The precondition dictionary
+        signal_rsi: The main signal's RSI values
+        precondition_data: Dictionary of ticker data
+        rsi_period: Default RSI period
+        rsi_method: RSI calculation method
+    
+    Returns:
+        Boolean series indicating when the precondition is satisfied
+    """
+    logic_type = precondition.get('logic_type', 'simple')  # 'simple', 'if_then', 'if_and_then', 'if_then_else'
+    
+    if logic_type == 'simple':
+        # Simple threshold or comparison precondition
+        return evaluate_simple_precondition(precondition, signal_rsi, precondition_data, rsi_period, rsi_method)
+    
+    elif logic_type == 'if_then':
+        # IF condition THEN action
+        if_condition = precondition.get('if_condition', {})
+        then_action = precondition.get('then_action', {})
+        
+        # Evaluate IF condition
+        if_result = evaluate_simple_precondition(if_condition, signal_rsi, precondition_data, rsi_period, rsi_method)
+        
+        # Evaluate THEN action
+        then_result = evaluate_simple_precondition(then_action, signal_rsi, precondition_data, rsi_period, rsi_method)
+        
+        # IF condition is true, use THEN result, otherwise False
+        return if_result & then_result
+    
+    elif logic_type == 'if_and_then':
+        # IF condition1 AND condition2 THEN action
+        if_condition1 = precondition.get('if_condition1', {})
+        if_condition2 = precondition.get('if_condition2', {})
+        then_action = precondition.get('then_action', {})
+        
+        # Evaluate both IF conditions
+        if_result1 = evaluate_simple_precondition(if_condition1, signal_rsi, precondition_data, rsi_period, rsi_method)
+        if_result2 = evaluate_simple_precondition(if_condition2, signal_rsi, precondition_data, rsi_period, rsi_method)
+        
+        # Evaluate THEN action
+        then_result = evaluate_simple_precondition(then_action, signal_rsi, precondition_data, rsi_period, rsi_method)
+        
+        # IF both conditions are true, use THEN result, otherwise False
+        return (if_result1 & if_result2) & then_result
+    
+    elif logic_type == 'if_then_else':
+        # IF condition THEN action1 ELSE action2
+        if_condition = precondition.get('if_condition', {})
+        then_action = precondition.get('then_action', {})
+        else_action = precondition.get('else_action', {})
+        
+        # Evaluate IF condition
+        if_result = evaluate_simple_precondition(if_condition, signal_rsi, precondition_data, rsi_period, rsi_method)
+        
+        # Evaluate THEN and ELSE actions
+        then_result = evaluate_simple_precondition(then_action, signal_rsi, precondition_data, rsi_period, rsi_method)
+        else_result = evaluate_simple_precondition(else_action, signal_rsi, precondition_data, rsi_period, rsi_method)
+        
+        # Use THEN result when IF is true, ELSE result when IF is false
+        return (if_result & then_result) | (~if_result & else_result)
+    
+    else:
+        # Default to simple precondition
+        return evaluate_simple_precondition(precondition, signal_rsi, precondition_data, rsi_period, rsi_method)
+
+def evaluate_simple_precondition(precondition: Dict, signal_rsi: pd.Series, precondition_data: Dict[str, pd.Series], rsi_period: int, rsi_method: str) -> pd.Series:
+    """
+    Evaluate a simple precondition (threshold or comparison).
+    """
+    precondition_ticker = precondition.get('signal_ticker', '')
+    precondition_comparison = precondition.get('comparison', 'less_than')
+    precondition_threshold = precondition.get('threshold', 50.0)
+    
+    # Handle signal references (not actual tickers)
+    if precondition_ticker in ["Main Signal", "MAIN SIGNAL"]:
+        # Use the main signal's RSI for this precondition
+        precondition_rsi = signal_rsi
+    elif precondition_ticker.startswith("Precondition"):
+        # This would need to be handled by tracking precondition outputs
+        # For now, return False
+        return pd.Series(False, index=signal_rsi.index)
+    elif precondition_ticker in precondition_data:
+        # Get RSI data for this precondition ticker
+        precondition_rsi_period = precondition.get('rsi_period', rsi_period)
+        precondition_rsi = calculate_rsi(precondition_data[precondition_ticker], window=precondition_rsi_period, method=rsi_method)
+    else:
+        # No data available, return False
+        return pd.Series(False, index=signal_rsi.index)
+    
+    # Apply the precondition condition
+    if precondition_comparison == "less_than":
+        return (precondition_rsi <= precondition_threshold)
+    else:  # greater_than
+        return (precondition_rsi >= precondition_threshold)
+
 def analyze_rsi_comparison_signals(signal_prices: pd.Series, comparison_prices: pd.Series, target_prices: pd.Series, rsi_period: int = 14, rsi_method: str = "wilders", comparison_operator: str = "less_than", use_quantstats: bool = True, preconditions: List[Dict] = None, precondition_data: Dict[str, pd.Series] = None) -> Dict:
     """
     Analyze RSI comparison signals: when signal RSI < comparison RSI, buy target, else hold cash
@@ -398,36 +498,14 @@ def analyze_rsi_signals(signal_prices: pd.Series, target_prices: pd.Series, rsi_
         precondition_mask = pd.Series(True, index=signal_prices.index)
         
         for precondition in preconditions:
-            precondition_ticker = precondition['signal_ticker']
-            precondition_comparison = precondition['comparison']
-            precondition_threshold = precondition['threshold']
+            # Use the new logical evaluation function
+            precondition_condition = evaluate_precondition_logic(precondition, signal_rsi, precondition_data, rsi_period, rsi_method)
             
-            # Get RSI data for this precondition ticker
-            if precondition_ticker in precondition_data:
-                precondition_rsi = calculate_rsi(precondition_data[precondition_ticker], window=rsi_period, method=rsi_method)
-                
-                # Apply the precondition condition
-                if precondition_comparison == "less_than":
-                    precondition_condition = (precondition_rsi <= precondition_threshold)
-                else:  # greater_than
-                    precondition_condition = (precondition_rsi >= precondition_threshold)
-                
-                # Update the mask (all preconditions must be True)
-                precondition_mask = precondition_mask & precondition_condition
-            else:
-                st.warning(f"⚠️ No data found for precondition ticker: {precondition_ticker}")
-                return {
-                    'total_trades': 0,
-                    'win_rate': 0,
-                    'avg_return': 0,
-                    'median_return': 0,
-                    'returns': [],
-                    'avg_hold_days': 0,
-                    'sortino_ratio': 0,
-                    'equity_curve': pd.Series(1.0, index=target_prices.index),
-                    'trades': [],
-                    'annualized_return': 0
-                }
+            # Store precondition output for reference
+            precondition_outputs[f"Precondition {i+1} Signal"] = precondition_condition.astype(int)
+            
+            # Update the mask (all preconditions must be True)
+            precondition_mask = precondition_mask & precondition_condition
         
         # Apply precondition mask to base signals
         signals = base_signals & precondition_mask
@@ -847,13 +925,21 @@ def run_rsi_comparison_analysis(signal_ticker: str, comparison_ticker: str, targ
     if preconditions:
         unique_tickers = set()
         for i, precondition in enumerate(preconditions):
-            unique_tickers.add(precondition['signal_ticker'])
+            signal_ticker = precondition['signal_ticker']
+            # Only add actual ticker symbols, not signal references
+            if signal_ticker not in ["Main Signal", "MAIN SIGNAL"] and not signal_ticker.startswith("Precondition"):
+                unique_tickers.add(signal_ticker)
+            
             if precondition.get('type') == 'comparison':
-                unique_tickers.add(precondition['comparison_ticker'])
+                comparison_ticker = precondition['comparison_ticker']
+                # Only add actual ticker symbols, not signal references
+                if comparison_ticker not in ["Main Signal", "MAIN SIGNAL"] and not comparison_ticker.startswith("Precondition"):
+                    unique_tickers.add(comparison_ticker)
+                
                 # Resolve fallback ticker for enhanced options
                 fallback_option = precondition.get('fallback_ticker', 'BIL')
                 resolved_fallback = resolve_fallback_ticker(fallback_option, signal_ticker, preconditions, i)
-                if resolved_fallback not in [signal_ticker, comparison_ticker, target_ticker, benchmark_ticker]:
+                if resolved_fallback not in [signal_ticker, comparison_ticker, target_ticker, benchmark_ticker] and resolved_fallback not in ["Main Signal", "MAIN SIGNAL"] and not resolved_fallback.startswith("Precondition"):
                     unique_tickers.add(resolved_fallback)
         
         for ticker in unique_tickers:
@@ -882,41 +968,10 @@ def run_rsi_comparison_analysis(signal_ticker: str, comparison_ticker: str, targ
         benchmark_precondition_mask = pd.Series(True, index=signal_data.index)
         
         for precondition in preconditions:
-            precondition_ticker = precondition['signal_ticker']
-            if precondition_ticker in precondition_data:
-                # Use custom RSI period if specified, otherwise use default
-                precondition_rsi_period = precondition.get('rsi_period', rsi_period)
-                precondition_rsi = calculate_rsi(precondition_data[precondition_ticker], window=precondition_rsi_period, method=rsi_method)
-                
-                if precondition.get('type') == 'comparison':
-                    # RSI comparison precondition
-                    comparison_ticker = precondition['comparison_ticker']
-                    if comparison_ticker in precondition_data:
-                        # Use custom RSI periods for comparison
-                        signal_rsi_period = precondition.get('signal_rsi_period', rsi_period)
-                        comparison_rsi_period = precondition.get('comparison_rsi_period', rsi_period)
-                        
-                        signal_precondition_rsi = calculate_rsi(precondition_data[precondition_ticker], window=signal_rsi_period, method=rsi_method)
-                        comparison_precondition_rsi = calculate_rsi(precondition_data[comparison_ticker], window=comparison_rsi_period, method=rsi_method)
-                        
-                        # Use the same comparison operator as the main strategy
-                        if comparison == "greater_than":
-                            precondition_condition = (signal_precondition_rsi > comparison_precondition_rsi)
-                        else:  # less_than (default)
-                            precondition_condition = (signal_precondition_rsi < comparison_precondition_rsi)
-                    else:
-                        precondition_condition = pd.Series(False, index=signal_data.index)
-                else:
-                    # RSI threshold precondition
-                    precondition_comparison = precondition.get('comparison', 'less_than')
-                    precondition_threshold = precondition.get('threshold', 50.0)
-                    
-                    if precondition_comparison == "less_than":
-                        precondition_condition = (precondition_rsi <= precondition_threshold)
-                    else:  # greater_than
-                        precondition_condition = (precondition_rsi >= precondition_threshold)
-                
-                benchmark_precondition_mask = benchmark_precondition_mask & precondition_condition
+            # Use the new logical evaluation function
+            precondition_condition = evaluate_precondition_logic(precondition, signal_rsi, precondition_data, rsi_period, rsi_method)
+            
+            benchmark_precondition_mask = benchmark_precondition_mask & precondition_condition
         
         benchmark_signals = benchmark_base_signals & benchmark_precondition_mask
     else:
@@ -1056,7 +1111,23 @@ def run_rsi_analysis(signal_ticker: str, target_ticker: str, rsi_threshold: floa
     # Fetch precondition data if preconditions are set
     precondition_data = {}
     if preconditions:
-        unique_precondition_tickers = list(set([p['signal_ticker'] for p in preconditions]))
+        # Only fetch data for actual ticker symbols, not signal references
+        unique_precondition_tickers = []
+        for p in preconditions:
+            signal_ticker = p['signal_ticker']
+            # Skip if it's a signal reference (not an actual ticker)
+            if signal_ticker not in ["Main Signal", "MAIN SIGNAL"] and not signal_ticker.startswith("Precondition"):
+                unique_precondition_tickers.append(signal_ticker)
+            
+            # Also check comparison ticker for RSI comparison preconditions
+            if p.get('type') == 'comparison':
+                comparison_ticker = p.get('comparison_ticker', '')
+                if comparison_ticker and comparison_ticker not in ["Main Signal", "MAIN SIGNAL"] and not comparison_ticker.startswith("Precondition"):
+                    unique_precondition_tickers.append(comparison_ticker)
+        
+        # Remove duplicates
+        unique_precondition_tickers = list(set(unique_precondition_tickers))
+        
         for ticker in unique_precondition_tickers:
             if ticker != signal_ticker:  # Don't fetch again if it's the same as main signal
                 with st.spinner(f"Fetching precondition data for {ticker}..."):
@@ -1116,19 +1187,10 @@ def run_rsi_analysis(signal_ticker: str, target_ticker: str, rsi_threshold: floa
                 benchmark_precondition_mask = pd.Series(True, index=signal_data.index)
                 
                 for precondition in preconditions:
-                    precondition_ticker = precondition['signal_ticker']
-                    precondition_comparison = precondition['comparison']
-                    precondition_threshold = precondition['threshold']
+                    # Use the new logical evaluation function
+                    precondition_condition = evaluate_precondition_logic(precondition, signal_rsi, precondition_data, rsi_period, rsi_method)
                     
-                    if precondition_ticker in precondition_data:
-                        precondition_rsi = calculate_rsi(precondition_data[precondition_ticker], window=rsi_period, method=rsi_method)
-                        
-                        if precondition_comparison == "less_than":
-                            precondition_condition = (precondition_rsi <= precondition_threshold)
-                        else:  # greater_than
-                            precondition_condition = (precondition_rsi >= precondition_threshold)
-                        
-                        benchmark_precondition_mask = benchmark_precondition_mask & precondition_condition
+                    benchmark_precondition_mask = benchmark_precondition_mask & precondition_condition
                 
                 benchmark_signals = benchmark_base_signals & benchmark_precondition_mask
             else:
@@ -1201,19 +1263,10 @@ def run_rsi_analysis(signal_ticker: str, target_ticker: str, rsi_threshold: floa
                 benchmark_precondition_mask = pd.Series(True, index=signal_data.index)
                 
                 for precondition in preconditions:
-                    precondition_ticker = precondition['signal_ticker']
-                    precondition_comparison = precondition['comparison']
-                    precondition_threshold = precondition['threshold']
+                    # Use the new logical evaluation function
+                    precondition_condition = evaluate_precondition_logic(precondition, signal_rsi, precondition_data, rsi_period, rsi_method)
                     
-                    if precondition_ticker in precondition_data:
-                        precondition_rsi = calculate_rsi(precondition_data[precondition_ticker], window=rsi_period, method=rsi_method)
-                        
-                        if precondition_comparison == "less_than":
-                            precondition_condition = (precondition_rsi <= precondition_threshold)
-                        else:  # greater_than
-                            precondition_condition = (precondition_rsi >= precondition_threshold)
-                        
-                        benchmark_precondition_mask = benchmark_precondition_mask & precondition_condition
+                    benchmark_precondition_mask = benchmark_precondition_mask & precondition_condition
                 
                 benchmark_signals = benchmark_base_signals & benchmark_precondition_mask
             else:
@@ -1261,16 +1314,13 @@ def run_rsi_analysis(signal_ticker: str, target_ticker: str, rsi_threshold: floa
             # Calculate benchmark average and median returns
             benchmark_avg_return = np.mean(benchmark_trades) if benchmark_trades else 0
             benchmark_median_return = np.median(benchmark_trades) if benchmark_trades else 0
-            
-            stats_result = {
-                't_statistic': 0,
-                'p_value': 1.0,
-                'confidence_level': 0,
-                'significant': False,
-                'effect_size': 0,
-                'power': 0,
-                'insufficient_data': True
-            }
+            benchmark_annualized = (benchmark.iloc[-1] - 1) * (365 / (benchmark.index[-1] - benchmark.index[0]).days)
+            stats_result = calculate_statistical_significance(
+                strategy_equity_curve, 
+                benchmark_equity_curve,
+                analysis['annualized_return'],
+                benchmark_annualized
+            )
             
             # Calculate additional risk metrics (even when no trades)
             risk_metrics = calculate_additional_metrics(analysis['returns'], analysis['equity_curve'], analysis['annualized_return'], use_quantstats)
