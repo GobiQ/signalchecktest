@@ -705,8 +705,6 @@ with tab1:
             col1, col2 = st.columns(2)
             with col1:
                 signal_ticker1 = st.text_input("Signal Ticker 1", value="SPY", help="First ticker to analyze")
-            with col2:
-                signal_ticker2 = st.text_input("Signal Ticker 2", value="QQQ", help="Second ticker to analyze (optional)")
             
             # Signal logic builder
             st.write("**Is true if:**")
@@ -766,6 +764,12 @@ with tab1:
                         key="static_value"
                     )
             
+            # Signal Ticker 2 (only show if not Static Value)
+            if indicator2 != "Static Value":
+                signal_ticker2 = st.text_input("Signal Ticker 2", value="QQQ", help="Second ticker to analyze")
+            else:
+                signal_ticker2 = signal_ticker1  # Use same ticker for static value comparisons
+            
             # Display the signal logic
             if indicator1 not in ["Current Price"] and indicator2 not in ["Current Price", "Static Value"]:
                 st.info(f"**Signal Logic:** {signal_ticker1} {indicator1}({days1}) {operator} {signal_ticker2} {indicator2}({days2})")
@@ -779,6 +783,10 @@ with tab1:
                 st.info(f"**Signal Logic:** {signal_ticker1} {indicator1} {operator} {static_value}")
             else:
                 st.info(f"**Signal Logic:** {signal_ticker1} {indicator1} {operator} {signal_ticker2} {indicator2}")
+            
+            # Show a note about Signal Ticker 2 when Static Value is selected
+            if indicator2 == "Static Value":
+                st.info("💡 **Note:** Signal Ticker 2 is hidden since you're comparing against a static value.")
             
             if st.button("Add Signal", type="primary"):
                 signal = {
@@ -894,8 +902,13 @@ with tab2:
         with col1:
             new_ticker = st.text_input("Ticker", placeholder="e.g., SPY", key="new_ticker")
         with col2:
-            ticker_weight = st.number_input("Weight (%)", min_value=0, max_value=100, value=50, key="ticker_weight")
+            ticker_weight = st.number_input("Weight (%)", min_value=0, max_value=100, value=100, key="ticker_weight")
         
+        # Info about auto-add feature
+        if not st.session_state.current_allocation_tickers and new_ticker:
+            st.info("💡 **Tip:** You can click 'Create Allocation Block' to automatically add this ticker with 100% weight.")
+        
+        # Add ticker button
         if st.button("➕ Add Ticker", key="add_ticker"):
             if new_ticker and ticker_weight > 0:
                 ticker_component = {
@@ -923,6 +936,14 @@ with tab2:
             
             st.write(f"**Total Weight: {total_weight}%**")
             
+            # Equal weight button for multiple tickers
+            if len(st.session_state.current_allocation_tickers) > 1:
+                if st.button("⚖️ Equal Weight All", key="equal_weight"):
+                    equal_weight = 100 / len(st.session_state.current_allocation_tickers)
+                    for tc in st.session_state.current_allocation_tickers:
+                        tc['weight'] = equal_weight
+                    st.rerun()
+            
             if total_weight != 100:
                 if total_weight > 100:
                     st.error(f"⚠️ Total weight exceeds 100% ({total_weight}%)")
@@ -933,13 +954,26 @@ with tab2:
         
         # Create allocation button
         if st.button("Create Allocation Block", type="primary"):
-            if allocation_name and st.session_state.current_allocation_tickers:
-                total_weight = sum([tc['weight'] for tc in st.session_state.current_allocation_tickers])
+            if allocation_name:
+                # Check if we have tickers in the list or if we should auto-add the current ticker
+                if st.session_state.current_allocation_tickers:
+                    # Use existing tickers
+                    tickers_to_use = st.session_state.current_allocation_tickers.copy()
+                elif new_ticker:
+                    # Auto-add the current ticker with 100% weight
+                    tickers_to_use = [{
+                        'ticker': new_ticker.upper(),
+                        'weight': 100
+                    }]
+                else:
+                    st.error("Please provide at least one ticker.")
+                
+                total_weight = sum([tc['weight'] for tc in tickers_to_use])
                 
                 if total_weight == 100:
                     allocation = {
                         'name': allocation_name,
-                        'tickers': st.session_state.current_allocation_tickers.copy(),
+                        'tickers': tickers_to_use,
                         'total_weight': total_weight
                     }
                     st.session_state.output_allocations[allocation_name] = allocation
@@ -949,7 +983,7 @@ with tab2:
                 else:
                     st.error("Total weight must equal 100% to create allocation.")
             else:
-                st.error("Please provide an allocation name and at least one ticker component.")
+                st.error("Please provide an allocation name.")
     
     # Display existing allocations
     if st.session_state.output_allocations:
