@@ -1782,7 +1782,7 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
             # Create comparison chart with all significant signals
             fig_comparison = go.Figure()
             
-            # Add benchmark
+            # Add benchmark buy-and-hold
             fig_comparison.add_trace(go.Scatter(
                 x=benchmark.index,
                 y=benchmark.values,
@@ -1791,19 +1791,83 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
                 line=dict(color='red', width=2, dash='dash')
             ))
             
-            # Add significant signals
+            # Add significant signals with their corresponding benchmark curves
             colors = ['blue', 'green', 'purple', 'orange', 'brown', 'pink', 'gray', 'olive']
             for i, (idx, row) in enumerate(top_significant.iterrows()):
                 # Debug: Check if equity curve exists
                 if 'equity_curve' in row and row['equity_curve'] is not None:
                     color = colors[i % len(colors)]
+                    
+                    # Add strategy equity curve
                     fig_comparison.add_trace(go.Scatter(
                         x=row['equity_curve'].index,
                         y=row['equity_curve'].values,
                         mode='lines',
-                        name=f"RSI {row['RSI_Threshold']} (Cumulative: {row['Total_Return']:.3%}, Annualized: {row['annualized_return']:.3%})",
+                        name=f"RSI {row['RSI_Threshold']} Strategy (Cumulative: {row['Total_Return']:.3%}, Annualized: {row['annualized_return']:.3%})",
                         line=dict(color=color, width=2)
                     ))
+                    
+                    # Add corresponding benchmark equity curve under same conditions
+                    # We need to calculate the benchmark equity curve for this specific RSI threshold
+                    signal_data = st.session_state.get('signal_data')
+                    benchmark_data = st.session_state.get('benchmark_data')
+                    rsi_period = st.session_state.get('rsi_period', 14)
+                    comparison = st.session_state.get('comparison', 'less_than')
+                    
+                    if signal_data is not None and benchmark_data is not None:
+                        # Calculate RSI for the signal
+                        signal_rsi = calculate_rsi(signal_data, window=rsi_period, method="wilders")
+                        
+                        # Generate buy signals for benchmark (same as strategy)
+                        if comparison == "less_than":
+                            benchmark_signals = (signal_rsi <= row['RSI_Threshold']).astype(int)
+                        else:  # greater_than
+                            benchmark_signals = (signal_rsi >= row['RSI_Threshold']).astype(int)
+                        
+                        # Calculate benchmark equity curve using benchmark prices (same logic as strategy)
+                        benchmark_equity_curve = pd.Series(1.0, index=benchmark_data.index)
+                        current_equity = 1.0
+                        in_position = False
+                        entry_equity = 1.0
+                        entry_price = None
+                        
+                        for date in benchmark_data.index:
+                            current_signal = benchmark_signals[date] if date in benchmark_signals.index else 0
+                            current_price = benchmark_data[date]
+                            
+                            if current_signal == 1 and not in_position:
+                                # Enter position
+                                in_position = True
+                                entry_equity = current_equity
+                                entry_price = current_price
+                                
+                            elif current_signal == 0 and in_position:
+                                # Exit position
+                                trade_return = (current_price - entry_price) / entry_price
+                                current_equity = entry_equity * (1 + trade_return)
+                                in_position = False
+                            
+                            # Update equity curve
+                            if in_position:
+                                current_equity = entry_equity * (current_price / entry_price)
+                            
+                            benchmark_equity_curve[date] = current_equity
+                        
+                        # Handle case where we're still in position at the end
+                        if in_position:
+                            final_price = benchmark_data.iloc[-1]
+                            trade_return = (final_price - entry_price) / entry_price
+                            current_equity = entry_equity * (1 + trade_return)
+                            benchmark_equity_curve.iloc[-1] = current_equity
+                        
+                        # Add benchmark equity curve under same conditions
+                        fig_comparison.add_trace(go.Scatter(
+                            x=benchmark_equity_curve.index,
+                            y=benchmark_equity_curve.values,
+                            mode='lines',
+                            name=f"RSI {row['RSI_Threshold']} Benchmark (same conditions)",
+                            line=dict(color=color, width=1, dash='dot')
+                        ))
                 else:
                     st.warning(f"No equity curve found for RSI {row['RSI_Threshold']}")
             
@@ -1828,7 +1892,7 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
             # Create comparison chart with highest Sortino signals
             fig_sortino_comparison = go.Figure()
             
-            # Add benchmark
+            # Add benchmark buy-and-hold
             fig_sortino_comparison.add_trace(go.Scatter(
                 x=benchmark.index,
                 y=benchmark.values,
@@ -1837,19 +1901,83 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
                 line=dict(color='red', width=2, dash='dash')
             ))
             
-            # Add significant signals with highest Sortino ratios
+            # Add significant signals with highest Sortino ratios and their corresponding benchmark curves
             colors = ['blue', 'green', 'purple', 'orange', 'brown', 'pink', 'gray', 'olive']
             for i, (idx, row) in enumerate(top_sortino_significant.iterrows()):
                 # Debug: Check if equity curve exists
                 if 'equity_curve' in row and row['equity_curve'] is not None:
                     color = colors[i % len(colors)]
+                    
+                    # Add strategy equity curve
                     fig_sortino_comparison.add_trace(go.Scatter(
                         x=row['equity_curve'].index,
                         y=row['equity_curve'].values,
                         mode='lines',
-                        name=f"RSI {row['RSI_Threshold']} (Cumulative: {row['Total_Return']:.3%}, Annualized: {row['annualized_return']:.3%}, Sortino: {row['Sortino_Ratio']:.2f})",
+                        name=f"RSI {row['RSI_Threshold']} Strategy (Cumulative: {row['Total_Return']:.3%}, Annualized: {row['annualized_return']:.3%}, Sortino: {row['Sortino_Ratio']:.2f})",
                         line=dict(color=color, width=2)
                     ))
+                    
+                    # Add corresponding benchmark equity curve under same conditions
+                    # We need to calculate the benchmark equity curve for this specific RSI threshold
+                    signal_data = st.session_state.get('signal_data')
+                    benchmark_data = st.session_state.get('benchmark_data')
+                    rsi_period = st.session_state.get('rsi_period', 14)
+                    comparison = st.session_state.get('comparison', 'less_than')
+                    
+                    if signal_data is not None and benchmark_data is not None:
+                        # Calculate RSI for the signal
+                        signal_rsi = calculate_rsi(signal_data, window=rsi_period, method="wilders")
+                        
+                        # Generate buy signals for benchmark (same as strategy)
+                        if comparison == "less_than":
+                            benchmark_signals = (signal_rsi <= row['RSI_Threshold']).astype(int)
+                        else:  # greater_than
+                            benchmark_signals = (signal_rsi >= row['RSI_Threshold']).astype(int)
+                        
+                        # Calculate benchmark equity curve using benchmark prices (same logic as strategy)
+                        benchmark_equity_curve = pd.Series(1.0, index=benchmark_data.index)
+                        current_equity = 1.0
+                        in_position = False
+                        entry_equity = 1.0
+                        entry_price = None
+                        
+                        for date in benchmark_data.index:
+                            current_signal = benchmark_signals[date] if date in benchmark_signals.index else 0
+                            current_price = benchmark_data[date]
+                            
+                            if current_signal == 1 and not in_position:
+                                # Enter position
+                                in_position = True
+                                entry_equity = current_equity
+                                entry_price = current_price
+                                
+                            elif current_signal == 0 and in_position:
+                                # Exit position
+                                trade_return = (current_price - entry_price) / entry_price
+                                current_equity = entry_equity * (1 + trade_return)
+                                in_position = False
+                            
+                            # Update equity curve
+                            if in_position:
+                                current_equity = entry_equity * (current_price / entry_price)
+                            
+                            benchmark_equity_curve[date] = current_equity
+                        
+                        # Handle case where we're still in position at the end
+                        if in_position:
+                            final_price = benchmark_data.iloc[-1]
+                            trade_return = (final_price - entry_price) / entry_price
+                            current_equity = entry_equity * (1 + trade_return)
+                            benchmark_equity_curve.iloc[-1] = current_equity
+                        
+                        # Add benchmark equity curve under same conditions
+                        fig_sortino_comparison.add_trace(go.Scatter(
+                            x=benchmark_equity_curve.index,
+                            y=benchmark_equity_curve.values,
+                            mode='lines',
+                            name=f"RSI {row['RSI_Threshold']} Benchmark (same conditions)",
+                            line=dict(color=color, width=1, dash='dot')
+                        ))
                 else:
                     st.warning(f"No equity curve found for RSI {row['RSI_Threshold']}")
             
