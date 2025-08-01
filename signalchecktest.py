@@ -816,14 +816,14 @@ with st.sidebar.expander("➕ Add Precondition", expanded=False):
     
     # Precondition RSI comparison
     precondition_comparison = st.selectbox("Precondition RSI Condition", 
-                                          ["greater_than", "less_than"], 
-                                          format_func=lambda x: "RSI ≥ threshold" if x == "greater_than" else "RSI ≤ threshold",
+                                          ["less_than", "greater_than"], 
+                                          format_func=lambda x: "RSI ≤ threshold" if x == "less_than" else "RSI ≥ threshold",
                                           key="precondition_comparison",
                                           help="Choose the RSI condition for this precondition.")
     
     # Precondition RSI threshold
     precondition_threshold = st.number_input("Precondition RSI Threshold", 
-                                           min_value=0.0, max_value=100.0, value=30.0, step=0.5,
+                                           min_value=0.0, max_value=100.0, value=80.0, step=0.5,
                                            key="precondition_threshold",
                                            help="The RSI threshold value for this precondition.")
     
