@@ -271,28 +271,59 @@ st.markdown("""
     }
     
     /* Fix input field colors */
-    .main .stTextInput > div > div > input {
+    .stTextInput > div > div > input {
         background: white !important;
         color: #333 !important;
         border: 1px solid #e1e5e9 !important;
     }
     
-    .main .stSelectbox > div > div {
+    .stSelectbox > div > div {
         background: white !important;
         color: #333 !important;
         border: 1px solid #e1e5e9 !important;
     }
     
-    .main .stNumberInput > div > div > input {
+    .stNumberInput > div > div > input {
         background: white !important;
         color: #333 !important;
         border: 1px solid #e1e5e9 !important;
     }
     
-    .main .stDateInput > div > div > input {
+    .stDateInput > div > div > input {
         background: white !important;
         color: #333 !important;
         border: 1px solid #e1e5e9 !important;
+    }
+    
+    /* Fix all input elements globally */
+    input, textarea, select {
+        background: white !important;
+        color: #333 !important;
+        border: 1px solid #e1e5e9 !important;
+    }
+    
+    /* Fix Streamlit specific input containers */
+    .stTextInput, .stSelectbox, .stNumberInput, .stDateInput {
+        background: white !important;
+        color: #333 !important;
+    }
+    
+    /* Fix dropdown menus */
+    .stSelectbox [data-baseweb="select"] {
+        background: white !important;
+        color: #333 !important;
+    }
+    
+    .stSelectbox [data-baseweb="select"] > div {
+        background: white !important;
+        color: #333 !important;
+    }
+    
+    /* Fix input focus states */
+    input:focus, textarea:focus, select:focus {
+        background: white !important;
+        color: #333 !important;
+        border: 2px solid #1976d2 !important;
     }
     
     /* Fix label colors */
@@ -582,123 +613,14 @@ def calculate_multi_ticker_equity_curve(signals: pd.Series, allocation: dict, da
 st.markdown('<h1 class="main-header">📊 Strategy Validation Tool</h1>', unsafe_allow_html=True)
 
 # Create tabs for different sections
-tab1, tab2, tab3, tab4 = st.tabs(["💰 Allocations", "📊 Signals", "🎯 Strategies", "📈 Backtest"])
+tab1, tab2, tab3, tab4 = st.tabs(["📊 Reference Signal Blocks", "💰 Allocation Blocks", "🎯 Strategies", "📈 Backtest"])
 
-# Tab 1: Allocations
+# Tab 1: Reference Signal Blocks
 with tab1:
-    st.header("💰 Output Allocations")
-    
-    # Create allocation
-    with st.expander("➕ Create Output Allocation", expanded=True):
-        allocation_name = st.text_input("Allocation Name", placeholder="e.g., Aggressive Growth")
-        
-        st.subheader("📊 Ticker Components")
-        
-        # Initialize ticker components in session state
-        if 'current_allocation_tickers' not in st.session_state:
-            st.session_state.current_allocation_tickers = []
-        
-        # Add ticker component
-        col1, col2 = st.columns(2)
-        with col1:
-            new_ticker = st.text_input("Ticker", placeholder="e.g., SPY", key="new_ticker")
-        with col2:
-            ticker_weight = st.number_input("Weight (%)", min_value=0, max_value=100, value=50, key="ticker_weight")
-        
-        if st.button("➕ Add Ticker", key="add_ticker"):
-            if new_ticker and ticker_weight > 0:
-                ticker_component = {
-                    'ticker': new_ticker.upper(),
-                    'weight': ticker_weight
-                }
-                st.session_state.current_allocation_tickers.append(ticker_component)
-                st.rerun()
-        
-        # Display current ticker components
-        if st.session_state.current_allocation_tickers:
-            st.subheader("📋 Current Tickers")
-            total_weight = sum([tc['weight'] for tc in st.session_state.current_allocation_tickers])
-            
-            for i, ticker_component in enumerate(st.session_state.current_allocation_tickers):
-                col1, col2, col3 = st.columns([2, 1, 1])
-                with col1:
-                    st.write(f"**{ticker_component['ticker']}**")
-                with col2:
-                    st.write(f"{ticker_component['weight']}%")
-                with col3:
-                    if st.button("🗑️", key=f"remove_ticker_{i}"):
-                        st.session_state.current_allocation_tickers.pop(i)
-                        st.rerun()
-            
-            st.write(f"**Total Weight: {total_weight}%**")
-            
-            if total_weight != 100:
-                if total_weight > 100:
-                    st.error(f"⚠️ Total weight exceeds 100% ({total_weight}%)")
-                else:
-                    st.warning(f"ℹ️ Total weight: {total_weight}% ({(100-total_weight):.1f}% unallocated)")
-            else:
-                st.success(f"✅ Total weight: {total_weight}%")
-        
-        # Create allocation button
-        if st.button("Create Allocation", type="primary"):
-            if allocation_name and st.session_state.current_allocation_tickers:
-                total_weight = sum([tc['weight'] for tc in st.session_state.current_allocation_tickers])
-                
-                if total_weight == 100:
-                    allocation = {
-                        'name': allocation_name,
-                        'tickers': st.session_state.current_allocation_tickers.copy(),
-                        'total_weight': total_weight
-                    }
-                    st.session_state.output_allocations[allocation_name] = allocation
-                    st.session_state.current_allocation_tickers = []  # Reset for next allocation
-                    st.success(f"Allocation '{allocation_name}' created successfully!")
-                    st.rerun()
-                else:
-                    st.error("Total weight must equal 100% to create allocation.")
-            else:
-                st.error("Please provide an allocation name and at least one ticker component.")
-    
-    # Display existing allocations
-    if st.session_state.output_allocations:
-        st.subheader("📋 Active Allocations")
-        for name, allocation in st.session_state.output_allocations.items():
-            with st.container():
-                st.markdown(f"""
-                <div class="signal-card">
-                    <div class="signal-header">
-                        <h3 class="signal-name">{name}</h3>
-                        <span class="signal-type">Allocation</span>
-                    </div>
-                    <div class="allocation-container">
-                        <div class="allocation-header">
-                            <span>Components</span>
-                        </div>
-                        <div style="margin-top: 0.5rem;">
-                """, unsafe_allow_html=True)
-                
-                for ticker_component in allocation['tickers']:
-                    st.write(f"• **{ticker_component['ticker']}**: {ticker_component['weight']}%")
-                
-                st.markdown("""
-                        </div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                if st.button("🗑️", key=f"delete_allocation_{name}"):
-                    del st.session_state.output_allocations[name]
-                    st.rerun()
-    else:
-        st.info("No allocations created yet. Create your first allocation above.")
-
-# Tab 2: Signals
-with tab2:
-    st.header("📊 Signal Management")
+    st.header("📊 Reference Signal Blocks")
     
     # Signal creation
-    with st.expander("➕ Create Signal", expanded=True):
+    with st.expander("➕ Create Reference Signal", expanded=True):
         signal_name = st.text_input("Signal Name", placeholder="e.g., QQQ RSI Oversold")
         
         # Signal type selection
@@ -781,7 +703,7 @@ with tab2:
                     'days2': days2 if indicator2 not in ["Current Price"] else None
                 }
                 st.session_state.signals.append(signal)
-                st.success(f"Signal '{signal_name}' added!")
+                st.success(f"Reference Signal '{signal_name}' added!")
                 st.rerun()
         
         elif signal_type == "RSI Threshold":
@@ -807,7 +729,7 @@ with tab2:
                     'comparison': comparison
                 }
                 st.session_state.signals.append(signal)
-                st.success(f"Signal '{signal_name}' added!")
+                st.success(f"Reference Signal '{signal_name}' added!")
                 st.rerun()
         
         elif signal_type == "RSI Comparison":
@@ -833,12 +755,12 @@ with tab2:
                     'comparison_operator': comparison_operator
                 }
                 st.session_state.signals.append(signal)
-                st.success(f"Signal '{signal_name}' added!")
+                st.success(f"Reference Signal '{signal_name}' added!")
                 st.rerun()
     
     # Display existing signals
     if st.session_state.signals:
-        st.subheader("📋 Active Signals")
+        st.subheader("📋 Active Reference Signal Blocks")
         for i, signal in enumerate(st.session_state.signals):
             with st.container():
                 col1, col2 = st.columns([3, 1])
@@ -857,7 +779,116 @@ with tab2:
                         st.session_state.signals.pop(i)
                         st.rerun()
     else:
-        st.info("No signals created yet. Create your first signal above.")
+        st.info("No reference signal blocks created yet. Create your first signal above.")
+
+# Tab 2: Allocation Blocks
+with tab2:
+    st.header("💰 Allocation Blocks")
+    
+    # Create allocation
+    with st.expander("➕ Create Allocation Block", expanded=True):
+        allocation_name = st.text_input("Allocation Name", placeholder="e.g., Aggressive Growth")
+        
+        st.subheader("📊 Ticker Components")
+        
+        # Initialize ticker components in session state
+        if 'current_allocation_tickers' not in st.session_state:
+            st.session_state.current_allocation_tickers = []
+        
+        # Add ticker component
+        col1, col2 = st.columns(2)
+        with col1:
+            new_ticker = st.text_input("Ticker", placeholder="e.g., SPY", key="new_ticker")
+        with col2:
+            ticker_weight = st.number_input("Weight (%)", min_value=0, max_value=100, value=50, key="ticker_weight")
+        
+        if st.button("➕ Add Ticker", key="add_ticker"):
+            if new_ticker and ticker_weight > 0:
+                ticker_component = {
+                    'ticker': new_ticker.upper(),
+                    'weight': ticker_weight
+                }
+                st.session_state.current_allocation_tickers.append(ticker_component)
+                st.rerun()
+        
+        # Display current ticker components
+        if st.session_state.current_allocation_tickers:
+            st.subheader("📋 Current Tickers")
+            total_weight = sum([tc['weight'] for tc in st.session_state.current_allocation_tickers])
+            
+            for i, ticker_component in enumerate(st.session_state.current_allocation_tickers):
+                col1, col2, col3 = st.columns([2, 1, 1])
+                with col1:
+                    st.write(f"**{ticker_component['ticker']}**")
+                with col2:
+                    st.write(f"{ticker_component['weight']}%")
+                with col3:
+                    if st.button("🗑️", key=f"remove_ticker_{i}"):
+                        st.session_state.current_allocation_tickers.pop(i)
+                        st.rerun()
+            
+            st.write(f"**Total Weight: {total_weight}%**")
+            
+            if total_weight != 100:
+                if total_weight > 100:
+                    st.error(f"⚠️ Total weight exceeds 100% ({total_weight}%)")
+                else:
+                    st.warning(f"ℹ️ Total weight: {total_weight}% ({(100-total_weight):.1f}% unallocated)")
+            else:
+                st.success(f"✅ Total weight: {total_weight}%")
+        
+        # Create allocation button
+        if st.button("Create Allocation Block", type="primary"):
+            if allocation_name and st.session_state.current_allocation_tickers:
+                total_weight = sum([tc['weight'] for tc in st.session_state.current_allocation_tickers])
+                
+                if total_weight == 100:
+                    allocation = {
+                        'name': allocation_name,
+                        'tickers': st.session_state.current_allocation_tickers.copy(),
+                        'total_weight': total_weight
+                    }
+                    st.session_state.output_allocations[allocation_name] = allocation
+                    st.session_state.current_allocation_tickers = []  # Reset for next allocation
+                    st.success(f"Allocation Block '{allocation_name}' created successfully!")
+                    st.rerun()
+                else:
+                    st.error("Total weight must equal 100% to create allocation.")
+            else:
+                st.error("Please provide an allocation name and at least one ticker component.")
+    
+    # Display existing allocations
+    if st.session_state.output_allocations:
+        st.subheader("📋 Active Allocation Blocks")
+        for name, allocation in st.session_state.output_allocations.items():
+            with st.container():
+                st.markdown(f"""
+                <div class="signal-card">
+                    <div class="signal-header">
+                        <h3 class="signal-name">{name}</h3>
+                        <span class="signal-type">Allocation Block</span>
+                    </div>
+                    <div class="allocation-container">
+                        <div class="allocation-header">
+                            <span>Components</span>
+                        </div>
+                        <div style="margin-top: 0.5rem;">
+                """, unsafe_allow_html=True)
+                
+                for ticker_component in allocation['tickers']:
+                    st.write(f"• **{ticker_component['ticker']}**: {ticker_component['weight']}%")
+                
+                st.markdown("""
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                if st.button("🗑️", key=f"delete_allocation_{name}"):
+                    del st.session_state.output_allocations[name]
+                    st.rerun()
+    else:
+        st.info("No allocation blocks created yet. Create your first allocation above.")
 
 # Tab 3: Strategies
 with tab3:
