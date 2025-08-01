@@ -785,7 +785,7 @@ st.sidebar.header("📊 Configuration")
 use_quantstats = st.sidebar.checkbox("Enable QuantStats Integration", value=True, help="Enable enhanced financial analysis using QuantStats library. When disabled, the app will use fallback calculations.")
 
 # Preconditions System
-st.sidebar.subheader("🔍 Preconditions", help="Preconditions add additional RSI conditions that must ALL be true before the main signal is considered. This allows for more complex multi-condition strategies.")
+st.sidebar.subheader("Preconditions", help="Preconditions add additional RSI conditions that must ALL be true before the main signal is considered. This allows for more complex multi-condition strategies.")
 
 # Initialize preconditions in session state if not exists
 if 'preconditions' not in st.session_state:
@@ -1564,33 +1564,38 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
         st.subheader("📊 RSI Threshold vs Cumulative Return")
         st.info("💡 **What this shows:** This chart displays how the total cumulative return varies across different RSI thresholds. Higher cumulative returns indicate better overall performance. Look for peaks in the chart to identify optimal RSI thresholds.")
         
+        # Use original numerical data for consistency
+        original_filtered_data = st.session_state['results_df'][st.session_state['results_df']['RSI_Threshold'].isin(filtered_df['RSI_Threshold'])]
+        original_significant_data = original_filtered_data[original_filtered_data['significant'] == True]
+        original_non_significant_data = original_filtered_data[original_filtered_data['significant'] == False]
+        
         fig_return_rsi = go.Figure()
         
         # Add points for significant signals (green)
-        if not significant_data.empty:
+        if not original_significant_data.empty:
             fig_return_rsi.add_trace(go.Scatter(
-                x=significant_data['RSI_Threshold'],
-                y=significant_data['Total_Return'],
+                x=original_significant_data['RSI_Threshold'],
+                y=original_significant_data['Total_Return'],
                 mode='markers',
                 name='Significant Signals',
                 marker=dict(color='green', size=8),
                 line=dict(width=0),  # Explicitly disable lines
                 hovertemplate='<b>RSI %{x}</b><br>' +
-                            'Cumulative Return: %{y:.1f}<br>' +
+                            'Cumulative Return: %{y:.3%}<br>' +
                             'Significant: ✓<extra></extra>'
             ))
         
         # Add points for non-significant signals (red)
-        if not non_significant_data.empty:
+        if not original_non_significant_data.empty:
             fig_return_rsi.add_trace(go.Scatter(
-                x=non_significant_data['RSI_Threshold'],
-                y=non_significant_data['Total_Return'],
+                x=original_non_significant_data['RSI_Threshold'],
+                y=original_non_significant_data['Total_Return'],
                 mode='markers',
                 name='Non-Significant Signals',
                 marker=dict(color='red', size=8),
                 line=dict(width=0),  # Explicitly disable lines
                 hovertemplate='<b>RSI %{x}</b><br>' +
-                            'Cumulative Return: %{y:.1f}<br>' +
+                            'Cumulative Return: %{y:.3%}<br>' +
                             'Significant: ✗<extra></extra>'
             ))
         
