@@ -980,7 +980,7 @@ def run_rsi_comparison_analysis(signal_ticker: str, comparison_ticker: str, targ
     return results_df, benchmark, buyhold_benchmark, data_messages
 
 def run_rsi_analysis(signal_ticker: str, target_ticker: str, rsi_threshold: float, comparison: str, 
-                    start_date=None, end_date=None, rsi_period: int = 14, rsi_method: str = "wilders", benchmark_ticker: str = "SPY", use_quantstats: bool = True, preconditions: List[Dict] = None, exclusions: List[Dict] = None) -> Tuple[pd.DataFrame, pd.Series, List[str]]:
+                    start_date=None, end_date=None, rsi_period: int = 14, rsi_method: str = "wilders", benchmark_ticker: str = "SPY", use_quantstats: bool = True, preconditions: List[Dict] = None, exclusions: List[Dict] = None, rsi_min: float = 0.0, rsi_max: float = 100.0) -> Tuple[pd.DataFrame, pd.Series, List[str]]:
     """Run comprehensive RSI analysis across the specified range with optional preconditions and exclusions"""
     
     # Fetch data with quality validation
@@ -1756,7 +1756,10 @@ if st.sidebar.button("🚀 Run RSI Analysis", type="primary", use_container_widt
                 else:
                     # Ensure rsi_period is defined for RSI Threshold mode
                     rsi_period_to_use = rsi_period if 'rsi_period' in locals() else 10
-                    results_df, benchmark, data_messages = run_rsi_analysis(signal_ticker, target_ticker, rsi_threshold, comparison, start_date, end_date, rsi_period_to_use, rsi_method, final_benchmark_ticker, use_quantstats, st.session_state.get('preconditions', []), exclusions)
+                    # Get RSI range parameters
+                    rsi_min_to_use = rsi_min_to_use if 'rsi_min_to_use' in locals() else 0.0
+                    rsi_max_to_use = rsi_max_to_use if 'rsi_max_to_use' in locals() else 100.0
+                    results_df, benchmark, data_messages = run_rsi_analysis(signal_ticker, target_ticker, rsi_threshold, comparison, start_date, end_date, rsi_period_to_use, rsi_method, final_benchmark_ticker, use_quantstats, st.session_state.get('preconditions', []), exclusions, rsi_min_to_use, rsi_max_to_use)
             else:
                 # RSI Comparison mode
                 # Get buy-and-hold benchmark
@@ -1912,6 +1915,8 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
     benchmark = st.session_state['benchmark']
     
     st.success("✅ Analysis completed successfully!")
+else:
+    st.info("ℹ️ No analysis results found. Please run the analysis first.")
     
     # Check for data quality issues
     insufficient_data_count = results_df.get('insufficient_data', pd.Series([False] * len(results_df))).sum()
@@ -1987,6 +1992,103 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
     
     # Add p-value to display columns
     display_df['P_Value'] = display_df['p_value'].apply(lambda x: f"{x:.4f}" if isinstance(x, (int, float)) else x)
+    
+    # Display comprehensive statistical summary
+    st.subheader("📊 Statistical Significance Analysis")
+    
+    # Get the best performing result for detailed analysis
+    if 'RSI_Threshold' in display_df.columns:
+        # For RSI Threshold mode, find the best result by total return
+        best_idx = display_df['Total_Return'].str.replace('%', '').astype(float).idxmax()
+    else:
+        # For RSI Comparison mode, use the single result
+        best_idx = 0
+    
+    best_result = display_df.iloc[best_idx]
+    
+    # Create a comprehensive summary
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("Total Trades", f"{best_result['Total_Trades']}")
+        st.metric("Win Rate", best_result['Win_Rate'])
+        st.metric("Average Return per Trade", best_result['Avg_Return'])
+        st.metric("Median Return per Trade", best_result['Median_Return'])
+    
+    with col2:
+        st.metric("Total Return", best_result['Total_Return'])
+        st.metric("Annualized Return", best_result['Annualized_Return'])
+        st.metric("Best Single Trade", best_result['Best_Return'])
+        st.metric("Worst Single Trade", best_result['Worst_Return'])
+    
+    with col3:
+        st.metric("P-Value", best_result['P_Value'])
+        st.metric("Significant", best_result['Significant'])
+        st.metric("Effect Size", best_result['Effect_Size'])
+        st.metric("Confidence Level", best_result['Confidence_Level'])
+    
+    # Risk metrics
+    st.subheader("📈 Risk Metrics")
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("Sortino Ratio", best_result['Sortino_Ratio'])
+        st.metric("Sharpe Ratio", best_result['Sharpe_Ratio'])
+        st.metric("Calmar Ratio", best_result['Calmar_Ratio'])
+    
+    with col2:
+        st.metric("Max Drawdown", best_result['Max_Drawdown'])
+        st.metric("Value at Risk (95%)", best_result['VaR_95'])
+        st.metric("Return Standard Deviation", best_result['Return_Std'])
+    
+    with col3:
+        st.metric("Average Hold Days", best_result['Avg_Hold_Days'])
+        st.metric("Final Equity", best_result['Final_Equity'])
+        if 'RSI_Threshold' in display_df.columns:
+            st.metric("RSI Threshold", f"{best_result['RSI_Threshold']}")
+    
+    # Display equity curve
+    st.subheader("📈 Equity Curve")
+    if 'equity_curve' in results_df.columns:
+        # Get the equity curve for the best result
+        best_equity_curve = results_df.iloc[best_idx]['equity_curve']
+        if hasattr(best_equity_curve, 'index') and len(best_equity_curve) > 0:
+            fig = go.Figure()
+            
+            # Add strategy equity curve
+            fig.add_trace(go.Scatter(
+                x=best_equity_curve.index,
+                y=best_equity_curve.values,
+                mode='lines',
+                name='Strategy',
+                line=dict(color='blue', width=2)
+            ))
+            
+            # Add benchmark equity curve if available
+            if 'benchmark_equity_curve' in results_df.columns:
+                benchmark_equity_curve = results_df.iloc[best_idx]['benchmark_equity_curve']
+                if hasattr(benchmark_equity_curve, 'index') and len(benchmark_equity_curve) > 0:
+                    fig.add_trace(go.Scatter(
+                        x=benchmark_equity_curve.index,
+                        y=benchmark_equity_curve.values,
+                        mode='lines',
+                        name='Benchmark',
+                        line=dict(color='red', width=2)
+                    ))
+            
+            fig.update_layout(
+                title="Strategy vs Benchmark Performance",
+                xaxis_title="Date",
+                yaxis_title="Cumulative Return",
+                hovermode='x unified',
+                showlegend=True
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning("⚠️ Equity curve data not available for display.")
+    else:
+        st.warning("⚠️ Equity curve data not available for display.")
     
     # Drop the equity_curve and trades columns for display
     # Use different column sets based on analysis mode
