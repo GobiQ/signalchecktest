@@ -498,19 +498,19 @@ if 'strategy_signals' not in st.session_state:
 
 # Helper functions
 def calculate_rsi(prices: pd.Series, window: int = 14, method: str = "wilders") -> pd.Series:
-    """Calculate RSI using specified method"""
-    if method == "wilders":
-        delta = prices.diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
-        rs = gain / loss
-        rsi = 100 - (100 / (1 + rs))
-    else:  # sma method
-        delta = prices.diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
-        rs = gain / loss
-        rsi = 100 - (100 / (1 + rs))
+    """Calculate RSI using Wilder's smoothing (TradingView standard)"""
+    delta = prices.diff()
+    gain = delta.where(delta > 0, 0)
+    loss = -delta.where(delta < 0, 0)
+    
+    # Wilder's smoothing: use exponential moving average with alpha = 1/window
+    alpha = 1.0 / window
+    avg_gain = gain.ewm(alpha=alpha, adjust=False).mean()
+    avg_loss = loss.ewm(alpha=alpha, adjust=False).mean()
+    
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
+    
     return rsi
 
 def get_stock_data(ticker: str, start_date=None, end_date=None, exclusions=None) -> pd.Series:
@@ -618,20 +618,24 @@ def calculate_metrics(equity_curve: pd.Series, returns: pd.Series) -> dict:
     }
 
 def calculate_sma(prices: pd.Series, window: int) -> pd.Series:
-    """Calculate Simple Moving Average"""
-    return prices.rolling(window=window).mean()
+    """Calculate Simple Moving Average (TradingView standard)"""
+    return prices.rolling(window=window, min_periods=1).mean()
 
 def calculate_ema(prices: pd.Series, window: int) -> pd.Series:
-    """Calculate Exponential Moving Average"""
-    return prices.ewm(span=window).mean()
+    """Calculate Exponential Moving Average (TradingView standard)"""
+    # Use span parameter for consistency with TradingView
+    return prices.ewm(span=window, adjust=False).mean()
 
 def calculate_cumulative_return(prices: pd.Series, window: int) -> pd.Series:
-    """Calculate cumulative return over the specified window"""
-    return (prices / prices.shift(window) - 1) * 100
+    """Calculate cumulative return over the specified window (TradingView standard)"""
+    # Calculate percentage change over the window period
+    return prices.pct_change(periods=window) * 100
 
 def calculate_max_drawdown_series(prices: pd.Series, window: int) -> pd.Series:
-    """Calculate rolling max drawdown over the specified window"""
-    rolling_max = prices.rolling(window=window).max()
+    """Calculate rolling max drawdown over the specified window (TradingView standard)"""
+    # Calculate rolling maximum over the window
+    rolling_max = prices.rolling(window=window, min_periods=1).max()
+    # Calculate drawdown as percentage from peak
     drawdown = (prices - rolling_max) / rolling_max * 100
     return drawdown
 
