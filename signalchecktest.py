@@ -2055,3 +2055,12 @@ if 'data_messages' in st.session_state and st.session_state['data_messages']:
     st.subheader("📊 Data Quality Information")
     for message in st.session_state['data_messages']:
         st.info(message)
+
+# Footer
+st.write("---")
+st.markdown("""
+<div style='text-align: center; padding: 20px; color: #666;'>
+    <strong>RSI Threshold Validation Tool</strong><br>
+    Questions? Reach out to @Gobi on Discord
+</div>
+""", unsafe_allow_html=True)
