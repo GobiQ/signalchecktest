@@ -706,7 +706,7 @@ with tab1:
         signal_name = st.text_input("Signal Name", placeholder="e.g., QQQ RSI Oversold")
         
         # Signal type selection
-        signal_type = st.selectbox("Signal Type", ["Custom Indicator", "Static RSI", "RSI Comparison"])
+        signal_type = st.selectbox("Signal Type", ["Custom Indicator"])
         
         if signal_type == "Custom Indicator":
             st.subheader("📊 Signal Configuration")
@@ -725,12 +725,12 @@ with tab1:
                 # First indicator
                 indicator1 = st.selectbox(
                     "Indicator 1",
-                    ["SMA", "EMA", "Current Price", "Cumulative Return", "Max Drawdown", "RSI"],
+                    ["SMA", "EMA", "Current Price", "Cumulative Return", "Max Drawdown", "RSI", "Static RSI", "RSI Comparison"],
                     key="indicator1"
                 )
                 
                 # Days field for indicators that need it
-                if indicator1 not in ["Current Price"]:
+                if indicator1 not in ["Current Price", "Static RSI", "RSI Comparison"]:
                     days1 = st.number_input(
                         f"# of Days for {indicator1}",
                         min_value=1,
@@ -738,52 +738,105 @@ with tab1:
                         value=14,
                         key="days1"
                     )
+                elif indicator1 in ["RSI", "Static RSI", "RSI Comparison"]:
+                    days1 = st.number_input(
+                        "RSI Period",
+                        min_value=1,
+                        max_value=50,
+                        value=14,
+                        key="days1"
+                    )
             
             with col2:
                 # Operator
-                operator = st.selectbox(
-                    "Operator",
-                    [">", "<", ">=", "<=", "==", "!="],
-                    key="operator"
-                )
+                if indicator1 == "Static RSI":
+                    operator = st.selectbox(
+                        "Condition",
+                        ["less_than", "greater_than"],
+                        format_func=lambda x: "RSI ≤ threshold" if x == "less_than" else "RSI ≥ threshold",
+                        key="operator"
+                    )
+                else:
+                    operator = st.selectbox(
+                        "Operator",
+                        [">", "<", ">=", "<=", "==", "!="],
+                        key="operator"
+                    )
             
-            with col3:
-                # Signal Ticker 2
-                signal_ticker2 = st.text_input("Signal Ticker 2", value="QQQ", help="Second ticker to analyze")
-            
-            with col4:
-                # Second indicator
-                indicator2 = st.selectbox(
-                    "Indicator 2",
-                    ["SMA", "EMA", "Current Price", "Cumulative Return", "Max Drawdown", "RSI", "Static Value"],
-                    key="indicator2"
-                )
+            # Handle RSI-specific logic
+            if indicator1 == "Static RSI":
+                # For Static RSI, show threshold input instead of indicator2
+                with col3:
+                    st.write("")  # Empty space for alignment
+                with col4:
+                    rsi_threshold = st.number_input(
+                        "RSI Threshold",
+                        min_value=0.0,
+                        max_value=100.0,
+                        value=30.0,
+                        step=0.5,
+                        key="rsi_threshold"
+                    )
+                signal_ticker2 = signal_ticker1  # Not used for Static RSI
+                indicator2 = "Static Value"
+                days2 = None
+                static_value = rsi_threshold
                 
-                # Days field for second indicator or static value
-                if indicator2 not in ["Current Price", "Static Value"]:
+            elif indicator1 == "RSI Comparison":
+                # For RSI Comparison, automatically set indicator2 to RSI
+                with col3:
+                    signal_ticker2 = st.text_input("Signal Ticker 2", value="QQQ", help="Second ticker to analyze")
+                with col4:
+                    indicator2 = "RSI"
                     days2 = st.number_input(
-                        f"# of Days for {indicator2}",
+                        "RSI Period",
                         min_value=1,
-                        max_value=252,
+                        max_value=50,
                         value=14,
                         key="days2"
                     )
-                elif indicator2 == "Static Value":
-                    static_value = st.number_input(
-                        "Static Value",
-                        min_value=0.0,
-                        max_value=1000.0,
-                        value=50.0,
-                        step=0.1,
-                        key="static_value"
+                static_value = None
+                
+            else:
+                # Regular Custom Indicator logic
+                with col3:
+                    signal_ticker2 = st.text_input("Signal Ticker 2", value="QQQ", help="Second ticker to analyze")
+                with col4:
+                    indicator2 = st.selectbox(
+                        "Indicator 2",
+                        ["SMA", "EMA", "Current Price", "Cumulative Return", "Max Drawdown", "RSI", "Static Value"],
+                        key="indicator2"
                     )
-            
-            # Handle Signal Ticker 2 logic
-            if indicator2 == "Static Value":
-                signal_ticker2 = signal_ticker1  # Use same ticker for static value comparisons
+                    
+                    # Days field for second indicator or static value
+                    if indicator2 not in ["Current Price", "Static Value"]:
+                        days2 = st.number_input(
+                            f"# of Days for {indicator2}",
+                            min_value=1,
+                            max_value=252,
+                            value=14,
+                            key="days2"
+                        )
+                    elif indicator2 == "Static Value":
+                        static_value = st.number_input(
+                            "Static Value",
+                            min_value=0.0,
+                            max_value=1000.0,
+                            value=50.0,
+                            step=0.1,
+                            key="static_value"
+                        )
+                
+                # Handle Signal Ticker 2 logic
+                if indicator2 == "Static Value":
+                    signal_ticker2 = signal_ticker1  # Use same ticker for static value comparisons
             
             # Display the signal logic
-            if indicator1 not in ["Current Price"] and indicator2 not in ["Current Price", "Static Value"]:
+            if indicator1 == "Static RSI":
+                st.info(f"**Signal Logic:** {signal_ticker1} RSI({days1}) {operator} {static_value}")
+            elif indicator1 == "RSI Comparison":
+                st.info(f"**Signal Logic:** {signal_ticker1} RSI({days1}) vs {signal_ticker2} RSI({days2})")
+            elif indicator1 not in ["Current Price"] and indicator2 not in ["Current Price", "Static Value"]:
                 st.info(f"**Signal Logic:** {signal_ticker1} {indicator1}({days1}) {operator} {signal_ticker2} {indicator2}({days2})")
             elif indicator1 not in ["Current Price"] and indicator2 == "Static Value":
                 st.info(f"**Signal Logic:** {signal_ticker1} {indicator1}({days1}) {operator} {static_value}")
@@ -799,73 +852,44 @@ with tab1:
 
             
             if st.button("Add Signal", type="primary"):
-                signal = {
-                    'name': signal_name,
-                    'type': signal_type,
-                    'signal_ticker1': signal_ticker1,
-                    'signal_ticker2': signal_ticker2,
-                    'indicator1': indicator1,
-                    'indicator2': indicator2,
-                    'operator': operator,
-                    'days1': days1 if indicator1 not in ["Current Price"] else None,
-                    'days2': days2 if indicator2 not in ["Current Price", "Static Value"] else None,
-                    'static_value': static_value if indicator2 == "Static Value" else None
-                }
+                if indicator1 == "Static RSI":
+                    signal = {
+                        'name': signal_name,
+                        'type': 'Static RSI',
+                        'signal_ticker': signal_ticker1,
+                        'target_ticker': signal_ticker1,  # Default to same ticker
+                        'rsi_period': days1,
+                        'rsi_threshold': static_value,
+                        'comparison': operator
+                    }
+                elif indicator1 == "RSI Comparison":
+                    signal = {
+                        'name': signal_name,
+                        'type': 'RSI Comparison',
+                        'signal_ticker': signal_ticker1,
+                        'comparison_ticker': signal_ticker2,
+                        'target_ticker': signal_ticker1,  # Default to same ticker
+                        'rsi_period': days1,
+                        'comparison_operator': 'less_than' if operator == '<' else 'greater_than'
+                    }
+                else:
+                    signal = {
+                        'name': signal_name,
+                        'type': signal_type,
+                        'signal_ticker1': signal_ticker1,
+                        'signal_ticker2': signal_ticker2,
+                        'indicator1': indicator1,
+                        'indicator2': indicator2,
+                        'operator': operator,
+                        'days1': days1 if indicator1 not in ["Current Price"] else None,
+                        'days2': days2 if indicator2 not in ["Current Price", "Static Value"] else None,
+                        'static_value': static_value if indicator2 == "Static Value" else None
+                    }
                 st.session_state.signals.append(signal)
                 st.success(f"Reference Signal '{signal_name}' added!")
                 st.rerun()
         
-        elif signal_type == "Static RSI":
-            col1, col2 = st.columns(2)
-            with col1:
-                signal_ticker = st.text_input("Signal Ticker", value="QQQ")
-                target_ticker = st.text_input("Target Ticker", value="SPY")
-            with col2:
-                rsi_period = st.number_input("RSI Period", min_value=1, max_value=50, value=14)
-                rsi_threshold = st.number_input("RSI Threshold", min_value=0.0, max_value=100.0, value=30.0, step=0.5)
-            
-            comparison = st.selectbox("Condition", ["less_than", "greater_than"], 
-                                   format_func=lambda x: "RSI ≤ threshold" if x == "less_than" else "RSI ≥ threshold")
-            
-            if st.button("Add Signal", type="primary"):
-                signal = {
-                    'name': signal_name,
-                    'type': signal_type,
-                    'signal_ticker': signal_ticker,
-                    'target_ticker': target_ticker,
-                    'rsi_period': rsi_period,
-                    'rsi_threshold': rsi_threshold,
-                    'comparison': comparison
-                }
-                st.session_state.signals.append(signal)
-                st.success(f"Reference Signal '{signal_name}' added!")
-                st.rerun()
-        
-        elif signal_type == "RSI Comparison":
-            col1, col2 = st.columns(2)
-            with col1:
-                signal_ticker = st.text_input("Signal Ticker", value="QQQ")
-                comparison_ticker = st.text_input("Comparison Ticker", value="SPY")
-            with col2:
-                target_ticker = st.text_input("Target Ticker", value="TQQQ")
-                rsi_period = st.number_input("RSI Period", min_value=1, max_value=50, value=14)
-            
-            comparison_operator = st.selectbox("Comparison", ["less_than", "greater_than"],
-                                            format_func=lambda x: "Signal RSI < Comparison RSI" if x == "less_than" else "Signal RSI > Comparison RSI")
-            
-            if st.button("Add Signal", type="primary"):
-                signal = {
-                    'name': signal_name,
-                    'type': signal_type,
-                    'signal_ticker': signal_ticker,
-                    'comparison_ticker': comparison_ticker,
-                    'target_ticker': target_ticker,
-                    'rsi_period': rsi_period,
-                    'comparison_operator': comparison_operator
-                }
-                st.session_state.signals.append(signal)
-                st.success(f"Reference Signal '{signal_name}' added!")
-                st.rerun()
+
     
     # Display existing signals
     if st.session_state.signals:
