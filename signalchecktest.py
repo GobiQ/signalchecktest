@@ -669,20 +669,23 @@ def evaluate_signal_condition(indicator1_values: pd.Series, indicator2_values: p
 
 def calculate_multi_ticker_equity_curve(signals: pd.Series, allocation: dict, data: dict) -> pd.Series:
     """Calculate equity curve for an allocation with multiple tickers"""
-    # Calculate weighted equity curve for multiple tickers
-    weighted_equity_curves = []
+    # Calculate weighted returns for multiple tickers
+    combined_returns = pd.Series(0.0, index=data[list(data.keys())[0]].index)
+    
     for ticker_component in allocation['tickers']:
         ticker = ticker_component['ticker']
         weight = ticker_component['weight'] / 100
         
         # Calculate equity curve for this ticker
-        ticker_equity = calculate_equity_curve(signals, data[ticker], weight)
-        weighted_equity_curves.append(ticker_equity)
+        ticker_equity = calculate_equity_curve(signals, data[ticker], 1.0)  # Use full allocation for individual ticker
+        
+        # Convert to returns and apply weight
+        ticker_returns = ticker_equity.pct_change().fillna(0)
+        weighted_returns = ticker_returns * weight
+        combined_returns = combined_returns + weighted_returns
     
-    # Combine weighted equity curves
-    equity_curve = pd.Series(1.0, index=data[list(data.keys())[0]].index)
-    for ticker_equity in weighted_equity_curves:
-        equity_curve = equity_curve * ticker_equity
+    # Convert back to equity curve
+    equity_curve = (1 + combined_returns).cumprod()
     
     return equity_curve
 
@@ -710,14 +713,11 @@ with tab1:
             col1, col2 = st.columns(2)
             with col1:
                 signal_ticker1 = st.text_input("Signal Ticker 1", value="SPY", help="First ticker to analyze")
-            with col2:
-                # Signal Ticker 2 (only show if not Static Value)
-                signal_ticker2 = st.text_input("Signal Ticker 2", value="QQQ", help="Second ticker to analyze")
             
             # Signal logic builder
             st.write("**Is true if:**")
             
-            col1, col2, col3 = st.columns(3)
+            col1, col2, col3, col4 = st.columns([2, 1, 2, 2])
             
             with col1:
                 # First indicator
@@ -746,6 +746,10 @@ with tab1:
                 )
             
             with col3:
+                # Signal Ticker 2
+                signal_ticker2 = st.text_input("Signal Ticker 2", value="QQQ", help="Second ticker to analyze")
+            
+            with col4:
                 # Second indicator
                 indicator2 = st.selectbox(
                     "Indicator 2",
@@ -1361,7 +1365,13 @@ if st.session_state.backtest_results:
         yaxis_title="Equity Value",
         hovermode='x unified',
         plot_bgcolor='white',
-        paper_bgcolor='white'
+        paper_bgcolor='white',
+        legend=dict(
+            font=dict(color='#333'),
+            bgcolor='white',
+            bordercolor='#ccc',
+            borderwidth=1
+        )
     )
     
     st.plotly_chart(fig, use_container_width=True)
@@ -1405,6 +1415,12 @@ if st.session_state.backtest_results:
         hovermode='x unified',
         plot_bgcolor='white',
         paper_bgcolor='white',
+        legend=dict(
+            font=dict(color='#333'),
+            bgcolor='white',
+            bordercolor='#ccc',
+            borderwidth=1
+        ),
         yaxis=dict(range=[min(portfolio_drawdown.min(), benchmark_drawdown.min()) * 1.1, 5])
     )
     
