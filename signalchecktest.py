@@ -710,6 +710,9 @@ with tab1:
             col1, col2 = st.columns(2)
             with col1:
                 signal_ticker1 = st.text_input("Signal Ticker 1", value="SPY", help="First ticker to analyze")
+            with col2:
+                # Signal Ticker 2 (only show if not Static Value)
+                signal_ticker2 = st.text_input("Signal Ticker 2", value="QQQ", help="Second ticker to analyze")
             
             # Signal logic builder
             st.write("**Is true if:**")
@@ -769,13 +772,8 @@ with tab1:
                         key="static_value"
                     )
             
-            # Signal Ticker 2 (only show if not Static Value) - positioned to the right
-            if indicator2 != "Static Value":
-                # Create a new row with Signal Ticker 2 to the right of Indicator 2
-                col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
-                with col4:
-                    signal_ticker2 = st.text_input("Signal Ticker 2", value="QQQ", help="Second ticker to analyze")
-            else:
+            # Handle Signal Ticker 2 logic
+            if indicator2 == "Static Value":
                 signal_ticker2 = signal_ticker1  # Use same ticker for static value comparisons
             
             # Display the signal logic
@@ -792,9 +790,7 @@ with tab1:
             else:
                 st.info(f"**Signal Logic:** {signal_ticker1} {indicator1} {operator} {signal_ticker2} {indicator2}")
             
-            # Show a note about Signal Ticker 2 when Static Value is selected
-            if indicator2 == "Static Value":
-                st.info("💡 **Note:** Signal Ticker 2 is hidden since you're comparing against a static value.")
+
             
             if st.button("Add Signal", type="primary"):
                 signal = {
