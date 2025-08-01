@@ -319,6 +319,78 @@ st.markdown("""
         color: #333 !important;
     }
     
+    /* Fix dropdown options */
+    .stSelectbox [data-baseweb="select"] > div > div {
+        background: white !important;
+        color: #333 !important;
+    }
+    
+    /* Fix dropdown option hover */
+    .stSelectbox [data-baseweb="select"] > div > div:hover {
+        background: #f5f5f5 !important;
+        color: #333 !important;
+    }
+    
+    /* Fix dropdown option text */
+    .stSelectbox [data-baseweb="select"] > div > div > div {
+        background: white !important;
+        color: #333 !important;
+    }
+    
+    /* Fix dropdown option text hover */
+    .stSelectbox [data-baseweb="select"] > div > div > div:hover {
+        background: #f5f5f5 !important;
+        color: #333 !important;
+    }
+    
+    /* Global dropdown styling */
+    div[data-baseweb="select"] {
+        background: white !important;
+        color: #333 !important;
+    }
+    
+    div[data-baseweb="select"] > div {
+        background: white !important;
+        color: #333 !important;
+    }
+    
+    div[data-baseweb="select"] > div > div {
+        background: white !important;
+        color: #333 !important;
+    }
+    
+    div[data-baseweb="select"] > div > div > div {
+        background: white !important;
+        color: #333 !important;
+    }
+    
+    /* Additional dropdown styling for better visibility */
+    .stSelectbox > div > div > div > div {
+        background: white !important;
+        color: #333 !important;
+    }
+    
+    .stSelectbox > div > div > div > div > div {
+        background: white !important;
+        color: #333 !important;
+    }
+    
+    /* Fix any remaining dark text issues */
+    .stSelectbox * {
+        color: #333 !important;
+    }
+    
+    /* Ensure dropdown options are visible */
+    [role="option"] {
+        background: white !important;
+        color: #333 !important;
+    }
+    
+    [role="option"]:hover {
+        background: #f5f5f5 !important;
+        color: #333 !important;
+    }
+    
     /* Fix input focus states */
     input:focus, textarea:focus, select:focus {
         background: white !important;
@@ -629,8 +701,8 @@ with tab1:
         if signal_type == "Custom Indicator":
             st.subheader("📊 Signal Configuration")
             
-            # Target ticker
-            target_ticker = st.text_input("Target Ticker", value="SPY", help="The ticker to buy/sell based on the signal")
+            # Signal ticker
+            signal_ticker = st.text_input("Signal Ticker", value="SPY", help="The ticker to analyze for the signal")
             
             # Signal logic builder
             st.write("**Is true if:**")
@@ -667,12 +739,12 @@ with tab1:
                 # Second indicator
                 indicator2 = st.selectbox(
                     "Indicator 2",
-                    ["SMA", "EMA", "Current Price", "Cumulative Return", "Max Drawdown", "RSI"],
+                    ["SMA", "EMA", "Current Price", "Cumulative Return", "Max Drawdown", "RSI", "Static Value"],
                     key="indicator2"
                 )
                 
-                # Days field for second indicator
-                if indicator2 not in ["Current Price"]:
+                # Days field for second indicator or static value
+                if indicator2 not in ["Current Price", "Static Value"]:
                     days2 = st.number_input(
                         f"# of Days for {indicator2}",
                         min_value=1,
@@ -680,14 +752,27 @@ with tab1:
                         value=14,
                         key="days2"
                     )
+                elif indicator2 == "Static Value":
+                    static_value = st.number_input(
+                        "Static Value",
+                        min_value=0.0,
+                        max_value=1000.0,
+                        value=50.0,
+                        step=0.1,
+                        key="static_value"
+                    )
             
             # Display the signal logic
-            if indicator1 not in ["Current Price"] and indicator2 not in ["Current Price"]:
+            if indicator1 not in ["Current Price"] and indicator2 not in ["Current Price", "Static Value"]:
                 st.info(f"**Signal Logic:** {indicator1}({days1}) {operator} {indicator2}({days2})")
+            elif indicator1 not in ["Current Price"] and indicator2 == "Static Value":
+                st.info(f"**Signal Logic:** {indicator1}({days1}) {operator} {static_value}")
             elif indicator1 not in ["Current Price"]:
                 st.info(f"**Signal Logic:** {indicator1}({days1}) {operator} {indicator2}")
-            elif indicator2 not in ["Current Price"]:
+            elif indicator2 not in ["Current Price", "Static Value"]:
                 st.info(f"**Signal Logic:** {indicator1} {operator} {indicator2}({days2})")
+            elif indicator2 == "Static Value":
+                st.info(f"**Signal Logic:** {indicator1} {operator} {static_value}")
             else:
                 st.info(f"**Signal Logic:** {indicator1} {operator} {indicator2}")
             
@@ -695,12 +780,13 @@ with tab1:
                 signal = {
                     'name': signal_name,
                     'type': signal_type,
-                    'target_ticker': target_ticker,
+                    'signal_ticker': signal_ticker,
                     'indicator1': indicator1,
                     'indicator2': indicator2,
                     'operator': operator,
                     'days1': days1 if indicator1 not in ["Current Price"] else None,
-                    'days2': days2 if indicator2 not in ["Current Price"] else None
+                    'days2': days2 if indicator2 not in ["Current Price", "Static Value"] else None,
+                    'static_value': static_value if indicator2 == "Static Value" else None
                 }
                 st.session_state.signals.append(signal)
                 st.success(f"Reference Signal '{signal_name}' added!")
@@ -768,8 +854,11 @@ with tab1:
                     st.write(f"**{signal['name']}**")
                     if signal['type'] == "Custom Indicator":
                         indicator1_text = f"{signal['indicator1']}({signal['days1']})" if signal['days1'] else signal['indicator1']
-                        indicator2_text = f"{signal['indicator2']}({signal['days2']})" if signal['days2'] else signal['indicator2']
-                        st.caption(f"{indicator1_text} {signal['operator']} {indicator2_text} → {signal['target_ticker']}")
+                        if signal['indicator2'] == "Static Value":
+                            indicator2_text = str(signal['static_value'])
+                        else:
+                            indicator2_text = f"{signal['indicator2']}({signal['days2']})" if signal['days2'] else signal['indicator2']
+                        st.caption(f"{signal['signal_ticker']}: {indicator1_text} {signal['operator']} {indicator2_text}")
                     elif signal['type'] == "RSI Threshold":
                         st.caption(f"{signal['signal_ticker']} RSI {signal['rsi_period']}-day {signal['comparison']} {signal['rsi_threshold']} → {signal['target_ticker']}")
                     else:
@@ -1019,7 +1108,7 @@ with tab4:
                 all_tickers = set()
                 for signal in st.session_state.signals:
                     if signal['type'] == "Custom Indicator":
-                        all_tickers.add(signal['target_ticker'])
+                        all_tickers.add(signal['signal_ticker'])
                     elif signal['type'] == "RSI Threshold":
                         all_tickers.add(signal['signal_ticker'])
                         all_tickers.add(signal['target_ticker'])
@@ -1030,7 +1119,8 @@ with tab4:
                 
                 # Add allocation tickers
                 for allocation in st.session_state.output_allocations.values():
-                    all_tickers.add(allocation['ticker'])
+                    for ticker_component in allocation['tickers']:
+                        all_tickers.add(ticker_component['ticker'])
                 
                 all_tickers.add(benchmark_ticker)
                 
@@ -1043,10 +1133,15 @@ with tab4:
                 signal_results = {}
                 for signal in st.session_state.signals:
                     if signal['type'] == "Custom Indicator":
-                        target_ticker = signal['target_ticker']
+                        signal_ticker = signal['signal_ticker']
                         
-                        indicator1_values = calculate_indicator(data[target_ticker], signal['indicator1'], signal['days1'])
-                        indicator2_values = calculate_indicator(data[target_ticker], signal['indicator2'], signal['days2'])
+                        indicator1_values = calculate_indicator(data[signal_ticker], signal['indicator1'], signal['days1'])
+                        
+                        if signal['indicator2'] == "Static Value":
+                            # Create a series of static values
+                            indicator2_values = pd.Series(signal['static_value'], index=data[signal_ticker].index)
+                        else:
+                            indicator2_values = calculate_indicator(data[signal_ticker], signal['indicator2'], signal['days2'])
                         
                         signals = evaluate_signal_condition(indicator1_values, indicator2_values, signal['operator'])
                         
@@ -1096,11 +1191,9 @@ with tab4:
                     
                     # Get allocation details
                     allocation = st.session_state.output_allocations[strategy['output_allocation']]
-                    allocation_ticker = allocation['ticker']
-                    allocation_percentage = allocation['percentage'] / 100
                     
-                    # Calculate equity curve for this strategy
-                    equity_curve = calculate_equity_curve(strategy_signals, data[allocation_ticker], allocation_percentage)
+                    # Calculate equity curve for this strategy using multi-ticker allocation
+                    equity_curve = calculate_multi_ticker_equity_curve(strategy_signals, allocation, data)
                     
                     # Calculate metrics
                     returns = equity_curve.pct_change().dropna()
@@ -1132,430 +1225,6 @@ with tab4:
                 }
                 
                 st.success("Backtest completed successfully!")
-
-# Main content area
-col1, col2 = st.columns([2, 1])
-
-with col1:
-    st.header("📈 Backtest Configuration")
-    
-    # Date range selection
-    col1a, col1b = st.columns(2)
-    with col1a:
-        start_date = st.date_input("Start Date", value=datetime.now() - timedelta(days=365*2))
-    with col1b:
-        end_date = st.date_input("End Date", value=datetime.now())
-    
-    # Benchmark selection
-    benchmark_ticker = st.selectbox("Benchmark", ["SPY", "QQQ", "VTI", "BIL"], 
-                                  help="Benchmark for comparison")
-    
-    # Run backtest button
-    if st.button("🚀 Run Backtest", type="primary", use_container_width=True):
-        if not st.session_state.signals:
-            st.error("Please add at least one signal before running backtest.")
-        elif not st.session_state.strategies:
-            st.error("Please create at least one strategy before running backtest.")
-        else:
-            with st.spinner("Running backtest..."):
-                # Fetch data for all tickers
-                all_tickers = set()
-                for signal in st.session_state.signals:
-                    if signal['type'] == "Custom Indicator":
-                        all_tickers.add(signal['target_ticker'])
-                    elif signal['type'] == "RSI Threshold":
-                        all_tickers.add(signal['signal_ticker'])
-                        all_tickers.add(signal['target_ticker'])
-                    elif signal['type'] == "RSI Comparison":
-                        all_tickers.add(signal['signal_ticker'])
-                        all_tickers.add(signal['comparison_ticker'])
-                        all_tickers.add(signal['target_ticker'])
-                
-                # Add allocation tickers
-                for allocation in st.session_state.output_allocations.values():
-                    all_tickers.add(allocation['ticker'])
-                
-                all_tickers.add(benchmark_ticker)
-                
-                # Fetch data
-                data = {}
-                for ticker in all_tickers:
-                    data[ticker] = get_stock_data(ticker, start_date, end_date)
-                
-                # Calculate individual signals
-                signal_results = {}
-                for signal in st.session_state.signals:
-                    if signal['type'] == "Custom Indicator":
-                        target_ticker = signal['target_ticker']
-                        
-                        indicator1_values = calculate_indicator(data[target_ticker], signal['indicator1'], signal['days1'])
-                        indicator2_values = calculate_indicator(data[target_ticker], signal['indicator2'], signal['days2'])
-                        
-                        signals = evaluate_signal_condition(indicator1_values, indicator2_values, signal['operator'])
-                        
-                        signal_results[signal['name']] = signals
-                    
-                    elif signal['type'] == "RSI Threshold":
-                        rsi = calculate_rsi(data[signal['signal_ticker']], signal['rsi_period'])
-                        
-                        if signal['comparison'] == "less_than":
-                            signals = (rsi <= signal['rsi_threshold']).astype(int)
-                        else:
-                            signals = (rsi >= signal['rsi_threshold']).astype(int)
-                        
-                        signal_results[signal['name']] = signals
-                    
-                    elif signal['type'] == "RSI Comparison":
-                        signal_rsi = calculate_rsi(data[signal['signal_ticker']], signal['rsi_period'])
-                        comparison_rsi = calculate_rsi(data[signal['comparison_ticker']], signal['rsi_period'])
-                        
-                        if signal['comparison_operator'] == "less_than":
-                            signals = (signal_rsi < comparison_rsi).astype(int)
-                        else:
-                            signals = (signal_rsi > comparison_rsi).astype(int)
-                        
-                        signal_results[signal['name']] = signals
-                
-                # Calculate strategy allocations
-                strategy_results = {}
-                combined_equity = pd.Series(1.0, index=data[benchmark_ticker].index)
-                
-                for strategy in st.session_state.strategies:
-                    # Get signal values
-                    signal1_values = signal_results[strategy['signal1']]
-                    signal2_values = signal_results[strategy['signal2']]
-                    
-                    # Apply negation if needed
-                    if strategy['signal1_negated']:
-                        signal1_values = (~signal1_values.astype(bool)).astype(int)
-                    if strategy['signal2_negated']:
-                        signal2_values = (~signal2_values.astype(bool)).astype(int)
-                    
-                    # Apply logic operator
-                    if strategy['logic_operator'] == "AND":
-                        strategy_signals = (signal1_values & signal2_values).astype(int)
-                    else:  # OR
-                        strategy_signals = (signal1_values | signal2_values).astype(int)
-                    
-                    # Get allocation details
-                    allocation = st.session_state.output_allocations[strategy['output_allocation']]
-                    allocation_ticker = allocation['ticker']
-                    allocation_percentage = allocation['percentage'] / 100
-                    
-                    # Calculate equity curve for this strategy
-                    equity_curve = calculate_equity_curve(strategy_signals, data[allocation_ticker], allocation_percentage)
-                    
-                    # Calculate metrics
-                    returns = equity_curve.pct_change().dropna()
-                    metrics = calculate_metrics(equity_curve, returns)
-                    
-                    strategy_results[strategy['name']] = {
-                        'equity_curve': equity_curve,
-                        'signals': strategy_signals,
-                        'metrics': metrics,
-                        'allocation': allocation
-                    }
-                    
-                    # Add to combined portfolio
-                    combined_equity = combined_equity * (1 + (equity_curve - 1))
-                
-                # Calculate benchmark
-                benchmark_equity = data[benchmark_ticker] / data[benchmark_ticker].iloc[0]
-                benchmark_returns = benchmark_equity.pct_change().dropna()
-                benchmark_metrics = calculate_metrics(benchmark_equity, benchmark_returns)
-                
-                # Store results
-                st.session_state.backtest_results = {
-                    'signals': signal_results,
-                    'strategies': strategy_results,
-                    'combined_equity': combined_equity,
-                    'benchmark_equity': benchmark_equity,
-                    'benchmark_metrics': benchmark_metrics,
-                    'data': data
-                }
-                
-                st.success("Backtest completed successfully!")
-
-with col2:
-    st.header("📊 Quick Stats")
-    if st.session_state.backtest_results:
-        results = st.session_state.backtest_results
-        
-        # Combined portfolio metrics
-        combined_returns = results['combined_equity'].pct_change().dropna()
-        combined_metrics = calculate_metrics(results['combined_equity'], combined_returns)
-        
-        st.metric("Portfolio Return", f"{combined_metrics['total_return']:.2f}%")
-        st.metric("Benchmark Return", f"{results['benchmark_metrics']['total_return']:.2f}%")
-        st.metric("Excess Return", f"{combined_metrics['total_return'] - results['benchmark_metrics']['total_return']:.2f}%")
-        st.metric("Sharpe Ratio", f"{combined_metrics['sharpe_ratio']:.2f}")
-        st.metric("Max Drawdown", f"{combined_metrics['max_drawdown']:.2f}%")
-
-# Strategy overview
-if st.session_state.strategies:
-    st.header("🎯 Strategy Overview")
-    
-    # Display strategies
-    for strategy in st.session_state.strategies:
-        with st.container():
-            st.markdown(f"""
-            <div class="signal-card">
-                <div class="signal-header">
-                    <h3 class="signal-name">{strategy['name']}</h3>
-                    <span class="signal-type">Strategy</span>
-                </div>
-                <div class="allocation-container">
-                    <div class="allocation-header">
-                        <span>Condition</span>
-                    </div>
-                    <p>
-                        IF {f"NOT {strategy['signal1']}" if strategy['signal1_negated'] else strategy['signal1']} 
-                        {strategy['logic_operator']} 
-                        {f"NOT {strategy['signal2']}" if strategy['signal2_negated'] else strategy['signal2']} 
-                        THEN {strategy['output_allocation']}
-                    </p>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-    
-    # Total allocation summary
-    total_allocation = sum([alloc['percentage'] for alloc in st.session_state.output_allocations.values()])
-    if total_allocation > 100:
-        st.error(f"⚠️ Total allocation exceeds 100% ({total_allocation:.1f}%)")
-    elif total_allocation < 100:
-        st.warning(f"ℹ️ Total allocation: {total_allocation:.1f}% ({(100-total_allocation):.1f}% in cash)")
-    else:
-        st.success(f"✅ Total allocation: {total_allocation:.1f}%")
-
-# Results display
-if st.session_state.backtest_results:
-    st.header("📈 Backtest Results")
-    
-    # Portfolio overview
-    with st.container():
-        st.markdown('<div class="custom-container">', unsafe_allow_html=True)
-        st.subheader("📊 Portfolio Overview")
-        
-        results = st.session_state.backtest_results
-        combined_returns = results['combined_equity'].pct_change().dropna()
-        combined_metrics = calculate_metrics(results['combined_equity'], combined_returns)
-        
-        # Create metric grid
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            st.markdown(f"""
-            <div class="metric-card">
-                <div class="metric-value positive">{combined_metrics['total_return']:.2f}%</div>
-                <div class="metric-label">Total Return</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col2:
-            st.markdown(f"""
-            <div class="metric-card">
-                <div class="metric-value positive">{combined_metrics['annualized_return']:.2f}%</div>
-                <div class="metric-label">Annualized Return</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col3:
-            st.markdown(f"""
-            <div class="metric-card">
-                <div class="metric-value neutral">{combined_metrics['sharpe_ratio']:.2f}</div>
-                <div class="metric-label">Sharpe Ratio</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col4:
-            st.markdown(f"""
-            <div class="metric-card">
-                <div class="metric-value negative">{combined_metrics['max_drawdown']:.2f}%</div>
-                <div class="metric-label">Max Drawdown</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        st.markdown('</div>', unsafe_allow_html=True)
-    
-    # Equity curve comparison
-    with st.container():
-        st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-        st.subheader("📈 Performance Chart")
-        
-        fig = go.Figure()
-        
-        # Add benchmark
-        fig.add_trace(go.Scatter(
-            x=st.session_state.backtest_results['benchmark_equity'].index,
-            y=st.session_state.backtest_results['benchmark_equity'].values,
-            mode='lines',
-            name='Benchmark',
-            line=dict(color='#d32f2f', width=2, dash='dash')
-        ))
-        
-        # Add combined portfolio
-        fig.add_trace(go.Scatter(
-            x=st.session_state.backtest_results['combined_equity'].index,
-            y=st.session_state.backtest_results['combined_equity'].values,
-            mode='lines',
-            name='Portfolio',
-            line=dict(color='#1976d2', width=3)
-        ))
-        
-        # Add individual signals
-        colors = ['#2e7d32', '#7b1fa2', '#f57c00', '#5d4037', '#c2185b', '#424242', '#388e3c']
-        for i, (signal_name, result) in enumerate(st.session_state.backtest_results['signals'].items()):
-            fig.add_trace(go.Scatter(
-                x=result['equity_curve'].index,
-                y=result['equity_curve'].values,
-                mode='lines',
-                name=f"{signal_name}",
-                line=dict(color=colors[i % len(colors)], width=1),
-                visible='legendonly'
-            ))
-        
-        fig.update_layout(
-            title="Portfolio Performance vs Benchmark",
-            xaxis_title="Date",
-            yaxis_title="Equity Value",
-            hovermode='x unified',
-            plot_bgcolor='white',
-            paper_bgcolor='white',
-            font=dict(size=12)
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-    
-        # Strategy performance table
-    with st.container():
-        st.markdown('<div class="custom-container">', unsafe_allow_html=True)
-        st.subheader("📊 Strategy Performance")
-        
-        # Create performance table
-        performance_data = []
-        for strategy_name, result in st.session_state.backtest_results['strategies'].items():
-            metrics = result['metrics']
-            allocation = result['allocation']
-            performance_data.append({
-                'Strategy': strategy_name,
-                'Total Return (%)': f"{metrics['total_return']:.2f}",
-                'Annualized Return (%)': f"{metrics['annualized_return']:.2f}",
-                'Sharpe Ratio': f"{metrics['sharpe_ratio']:.2f}",
-                'Sortino Ratio': f"{metrics['sortino_ratio']:.2f}",
-                'Max Drawdown (%)': f"{metrics['max_drawdown']:.2f}",
-                'Win Rate (%)': f"{metrics['win_rate']:.1f}",
-                'Total Trades': metrics['total_trades'],
-                'Allocation': ', '.join([f"{tc['ticker']}({tc['weight']}%)" for tc in allocation['tickers']])
-            })
-        
-        # Add benchmark row
-        benchmark_metrics = st.session_state.backtest_results['benchmark_metrics']
-        performance_data.append({
-            'Strategy': 'Benchmark',
-            'Total Return (%)': f"{benchmark_metrics['total_return']:.2f}",
-            'Annualized Return (%)': f"{benchmark_metrics['annualized_return']:.2f}",
-            'Sharpe Ratio': f"{benchmark_metrics['sharpe_ratio']:.2f}",
-            'Sortino Ratio': f"{benchmark_metrics['sortino_ratio']:.2f}",
-            'Max Drawdown (%)': f"{benchmark_metrics['max_drawdown']:.2f}",
-            'Win Rate (%)': f"{benchmark_metrics['win_rate']:.1f}",
-            'Total Trades': benchmark_metrics['total_trades'],
-            'Allocation': '100% → SPY'
-        })
-        
-        df = pd.DataFrame(performance_data)
-        st.dataframe(df, use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-    
-    # Individual strategy analysis
-    if len(st.session_state.backtest_results['strategies']) > 0:
-        with st.container():
-            st.markdown('<div class="custom-container">', unsafe_allow_html=True)
-            st.subheader("🔍 Individual Strategy Analysis")
-            
-            strategy_names = list(st.session_state.backtest_results['strategies'].keys())
-            selected_strategy = st.selectbox("Select Strategy for Detailed Analysis", strategy_names)
-            
-            if selected_strategy:
-                strategy_result = st.session_state.backtest_results['strategies'][selected_strategy]
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.subheader(f"📈 {selected_strategy} Performance")
-                    
-                    # Key metrics
-                    metrics = strategy_result['metrics']
-                    col1a, col1b = st.columns(2)
-                    
-                    with col1a:
-                        st.metric("Total Return", f"{metrics['total_return']:.2f}%", 
-                                 delta=f"{metrics['total_return'] - benchmark_metrics['total_return']:.2f}%")
-                        st.metric("Annualized Return", f"{metrics['annualized_return']:.2f}%")
-                        st.metric("Sharpe Ratio", f"{metrics['sharpe_ratio']:.2f}")
-                        st.metric("Max Drawdown", f"{metrics['max_drawdown']:.2f}%")
-                    
-                    with col1b:
-                        st.metric("Win Rate", f"{metrics['win_rate']:.1f}%")
-                        st.metric("Total Trades", metrics['total_trades'])
-                        st.metric("Avg Trade Return", f"{metrics['avg_trade_return']:.2f}%")
-                        st.metric("Volatility", f"{metrics['volatility']:.2f}%")
-                
-                with col2:
-                    st.subheader("📊 Strategy Distribution")
-                    
-                    # Signal frequency analysis
-                    signals = strategy_result['signals']
-                    signal_frequency = signals.value_counts()
-                    
-                    fig_pie = go.Figure(data=[go.Pie(
-                        labels=['No Signal', 'Signal'],
-                        values=[signal_frequency.get(0, 0), signal_frequency.get(1, 0)],
-                        hole=0.3,
-                        marker_colors=['#e3f2fd', '#1976d2']
-                    )])
-                    fig_pie.update_layout(
-                        title="Strategy Signal Distribution",
-                        plot_bgcolor='white',
-                        paper_bgcolor='white'
-                    )
-                    st.plotly_chart(fig_pie, use_container_width=True)
-                
-                # Strategy equity curve
-                st.subheader("📈 Strategy Equity Curve")
-                
-                fig_strategy = go.Figure()
-                
-                # Add strategy equity curve
-                fig_strategy.add_trace(go.Scatter(
-                    x=strategy_result['equity_curve'].index,
-                    y=strategy_result['equity_curve'].values,
-                    mode='lines',
-                    name=f"{selected_strategy}",
-                    line=dict(color='#1976d2', width=2)
-                ))
-                
-                # Add benchmark
-                fig_strategy.add_trace(go.Scatter(
-                    x=st.session_state.backtest_results['benchmark_equity'].index,
-                    y=st.session_state.backtest_results['benchmark_equity'].values,
-                    mode='lines',
-                    name='Benchmark',
-                    line=dict(color='#d32f2f', width=2, dash='dash')
-                ))
-                
-                fig_strategy.update_layout(
-                    title=f"{selected_strategy} vs Benchmark",
-                    xaxis_title="Date",
-                    yaxis_title="Equity Value",
-                    hovermode='x unified',
-                    plot_bgcolor='white',
-                    paper_bgcolor='white'
-                )
-                
-                st.plotly_chart(fig_strategy, use_container_width=True)
-            
-            st.markdown('</div>', unsafe_allow_html=True)
 
 # Footer
 st.write("---")
