@@ -118,6 +118,119 @@ def get_stock_data(ticker: str, start_date=None, end_date=None, exclusions=None)
         st.error(f"Error fetching data for {ticker}: {str(e)}")
         return None
 
+def analyze_rsi_comparison_signals(signal_prices: pd.Series, comparison_prices: pd.Series, target_prices: pd.Series, rsi_period: int = 14, rsi_method: str = "wilders", use_quantstats: bool = True, preconditions: List[Dict] = None, precondition_data: Dict[str, pd.Series] = None) -> Dict:
+    """
+    Analyze RSI comparison signals: when signal RSI < comparison RSI, buy target, else hold cash
+    """
+    # Calculate RSI for both tickers
+    signal_rsi = calculate_rsi(signal_prices, window=rsi_period, method=rsi_method)
+    comparison_rsi = calculate_rsi(comparison_prices, window=rsi_period, method=rsi_method)
+    
+    # Generate buy signals: buy when signal RSI < comparison RSI
+    buy_signals = (signal_rsi < comparison_rsi).astype(int)
+    
+    # Apply preconditions if they exist
+    if preconditions and precondition_data:
+        precondition_mask = pd.Series(True, index=signal_prices.index)
+        
+        for precondition in preconditions:
+            precondition_ticker = precondition['signal_ticker']
+            if precondition_ticker in precondition_data:
+                precondition_rsi = calculate_rsi(precondition_data[precondition_ticker], window=rsi_period, method=rsi_method)
+                
+                if precondition.get('type') == 'comparison':
+                    # RSI comparison precondition
+                    comparison_ticker = precondition['comparison_ticker']
+                    if comparison_ticker in precondition_data:
+                        comparison_precondition_rsi = calculate_rsi(precondition_data[comparison_ticker], window=rsi_period, method=rsi_method)
+                        precondition_condition = (precondition_rsi < comparison_precondition_rsi)
+                    else:
+                        precondition_condition = pd.Series(False, index=signal_prices.index)
+                else:
+                    # RSI threshold precondition
+                    precondition_comparison = precondition.get('comparison', 'less_than')
+                    precondition_threshold = precondition.get('threshold', 50.0)
+                    
+                    if precondition_comparison == "less_than":
+                        precondition_condition = (precondition_rsi <= precondition_threshold)
+                    else:  # greater_than
+                        precondition_condition = (precondition_rsi >= precondition_threshold)
+                
+                precondition_mask = precondition_mask & precondition_condition
+        
+        buy_signals = buy_signals & precondition_mask
+    
+    # Calculate equity curve
+    equity_curve = pd.Series(1.0, index=target_prices.index)
+    current_equity = 1.0
+    in_position = False
+    entry_equity = 1.0
+    entry_price = None
+    trades = []
+    
+    for date in target_prices.index:
+        current_signal = buy_signals[date] if date in buy_signals.index else 0
+        current_price = target_prices[date]
+        
+        if current_signal == 1 and not in_position:
+            # Enter position
+            in_position = True
+            entry_equity = current_equity
+            entry_price = current_price
+            
+        elif current_signal == 0 and in_position:
+            # Exit position
+            trade_return = (current_price - entry_price) / entry_price
+            current_equity = entry_equity * (1 + trade_return)
+            trades.append(trade_return)
+            in_position = False
+        
+        # Update equity curve
+        if in_position:
+            current_equity = entry_equity * (current_price / entry_price)
+        
+        equity_curve[date] = current_equity
+    
+    # Handle case where we're still in position at the end
+    if in_position:
+        final_price = target_prices.iloc[-1]
+        trade_return = (final_price - entry_price) / entry_price
+        current_equity = entry_equity * (1 + trade_return)
+        trades.append(trade_return)
+        equity_curve.iloc[-1] = current_equity
+    
+    # Calculate metrics
+    total_return = current_equity - 1.0
+    annualized_return = (current_equity - 1.0) * (365 / (target_prices.index[-1] - target_prices.index[0]).days)
+    
+    # Calculate additional metrics
+    if len(trades) > 0:
+        returns_array = np.array(trades)
+        additional_metrics = calculate_additional_metrics(returns_array, equity_curve, annualized_return, use_quantstats)
+    else:
+        additional_metrics = {
+            'win_rate': 0.0,
+            'total_trades': 0,
+            'avg_hold_days': 0,
+            'sortino_ratio': 0.0,
+            'sharpe_ratio': 0.0,
+            'max_drawdown': 0.0,
+            'calmar_ratio': 0.0,
+            'var_95': 0.0,
+            'volatility': 0.0,
+            'beta': 0.0,
+            'alpha': 0.0,
+            'information_ratio': 0.0
+        }
+    
+    return {
+        'equity_curve': equity_curve,
+        'total_return': total_return,
+        'annualized_return': annualized_return,
+        'trades': trades,
+        **additional_metrics
+    }
+
 def analyze_rsi_signals(signal_prices: pd.Series, target_prices: pd.Series, rsi_threshold: float, comparison: str = "less_than", rsi_period: int = 14, rsi_method: str = "wilders", use_quantstats: bool = True, preconditions: List[Dict] = None, precondition_data: Dict[str, pd.Series] = None) -> Dict:
     """Analyze RSI signals for a specific threshold with optional preconditions"""
     # Calculate RSI for the SIGNAL ticker using specified period and method
@@ -496,6 +609,184 @@ def validate_data_quality(data: pd.Series, ticker: str) -> Tuple[bool, List[str]
 # QuantStats report generation removed to avoid import issues
 # Basic QuantStats metrics are still available in the main analysis functions
 
+def run_rsi_comparison_analysis(signal_ticker: str, comparison_ticker: str, target_ticker: str, 
+                               start_date=None, end_date=None, rsi_period: int = 14, rsi_method: str = "wilders", benchmark_ticker: str = "SPY", use_quantstats: bool = True, preconditions: List[Dict] = None, exclusions: List[Dict] = None) -> Tuple[pd.DataFrame, pd.Series, List[str]]:
+    """
+    Run RSI comparison analysis: when signal RSI < comparison RSI, buy target, else hold cash
+    """
+    # Get data for all required tickers
+    signal_data = get_stock_data(signal_ticker, start_date, end_date, exclusions)
+    comparison_data = get_stock_data(comparison_ticker, start_date, end_date, exclusions)
+    target_data = get_stock_data(target_ticker, start_date, end_date, exclusions)
+    benchmark_data = get_stock_data(benchmark_ticker, start_date, end_date, exclusions)
+    
+    # Validate data quality
+    data_messages = []
+    for ticker, data in [(signal_ticker, signal_data), (comparison_ticker, comparison_data), 
+                         (target_ticker, target_data), (benchmark_ticker, benchmark_data)]:
+        is_valid, messages = validate_data_quality(data, ticker)
+        if not is_valid:
+            data_messages.extend(messages)
+    
+    if data_messages:
+        return pd.DataFrame(), pd.Series(), data_messages
+    
+    # Get common date range
+    common_dates = signal_data.index.intersection(comparison_data.index).intersection(target_data.index).intersection(benchmark_data.index)
+    if len(common_dates) < 30:
+        return pd.DataFrame(), pd.Series(), [f"Insufficient overlapping data. Only {len(common_dates)} common dates found."]
+    
+    signal_data = signal_data[common_dates]
+    comparison_data = comparison_data[common_dates]
+    target_data = target_data[common_dates]
+    benchmark_data = benchmark_data[common_dates]
+    
+    # Create buy-and-hold benchmark
+    benchmark = benchmark_data / benchmark_data.iloc[0]  # Normalize to start at 1.0
+    
+    # Get precondition data if needed
+    precondition_data = {}
+    if preconditions:
+        unique_tickers = set()
+        for precondition in preconditions:
+            unique_tickers.add(precondition['signal_ticker'])
+            if precondition.get('type') == 'comparison':
+                unique_tickers.add(precondition['comparison_ticker'])
+        
+        for ticker in unique_tickers:
+            if ticker not in [signal_ticker, comparison_ticker, target_ticker, benchmark_ticker]:
+                ticker_data = get_stock_data(ticker, start_date, end_date, exclusions)
+                if len(ticker_data) > 0:
+                    precondition_data[ticker] = ticker_data[common_dates]
+    
+    # Run single RSI comparison analysis
+    analysis = analyze_rsi_comparison_signals(signal_data, comparison_data, target_data, rsi_period, rsi_method, use_quantstats, preconditions, precondition_data)
+    
+    # Create benchmark equity curve that follows the same RSI conditions
+    signal_rsi = calculate_rsi(signal_data, window=rsi_period, method=rsi_method)
+    comparison_rsi = calculate_rsi(comparison_data, window=rsi_period, method=rsi_method)
+    
+    # Generate buy signals for benchmark (same as strategy)
+    benchmark_base_signals = (signal_rsi < comparison_rsi).astype(int)
+    
+    # Apply preconditions to benchmark signals if they exist
+    if preconditions and precondition_data:
+        benchmark_precondition_mask = pd.Series(True, index=signal_data.index)
+        
+        for precondition in preconditions:
+            precondition_ticker = precondition['signal_ticker']
+            if precondition_ticker in precondition_data:
+                precondition_rsi = calculate_rsi(precondition_data[precondition_ticker], window=rsi_period, method=rsi_method)
+                
+                if precondition.get('type') == 'comparison':
+                    # RSI comparison precondition
+                    comparison_ticker = precondition['comparison_ticker']
+                    if comparison_ticker in precondition_data:
+                        comparison_precondition_rsi = calculate_rsi(precondition_data[comparison_ticker], window=rsi_period, method=rsi_method)
+                        precondition_condition = (precondition_rsi < comparison_precondition_rsi)
+                    else:
+                        precondition_condition = pd.Series(False, index=signal_data.index)
+                else:
+                    # RSI threshold precondition
+                    precondition_comparison = precondition.get('comparison', 'less_than')
+                    precondition_threshold = precondition.get('threshold', 50.0)
+                    
+                    if precondition_comparison == "less_than":
+                        precondition_condition = (precondition_rsi <= precondition_threshold)
+                    else:  # greater_than
+                        precondition_condition = (precondition_rsi >= precondition_threshold)
+                
+                benchmark_precondition_mask = benchmark_precondition_mask & precondition_condition
+        
+        benchmark_signals = benchmark_base_signals & benchmark_precondition_mask
+    else:
+        benchmark_signals = benchmark_base_signals
+    
+    # Calculate benchmark equity curve using benchmark prices (same logic as strategy)
+    benchmark_equity_curve = pd.Series(1.0, index=benchmark_data.index)
+    current_equity = 1.0
+    in_position = False
+    entry_equity = 1.0
+    entry_price = None
+    benchmark_trades = []
+    
+    for date in benchmark_data.index:
+        current_signal = benchmark_signals[date] if date in benchmark_signals.index else 0
+        current_price = benchmark_data[date]
+        
+        if current_signal == 1 and not in_position:
+            # Enter position
+            in_position = True
+            entry_equity = current_equity
+            entry_price = current_price
+            
+        elif current_signal == 0 and in_position:
+            # Exit position
+            trade_return = (current_price - entry_price) / entry_price
+            current_equity = entry_equity * (1 + trade_return)
+            benchmark_trades.append(trade_return)
+            in_position = False
+        
+        # Update equity curve
+        if in_position:
+            current_equity = entry_equity * (current_price / entry_price)
+        
+        benchmark_equity_curve[date] = current_equity
+    
+    # Handle case where we're still in position at the end
+    if in_position:
+        final_price = benchmark_data.iloc[-1]
+        trade_return = (final_price - entry_price) / entry_price
+        current_equity = entry_equity * (1 + trade_return)
+        benchmark_trades.append(trade_return)
+        benchmark_equity_curve.iloc[-1] = current_equity
+    
+    # Calculate benchmark metrics
+    benchmark_avg_return = np.mean(benchmark_trades) if benchmark_trades else 0
+    benchmark_median_return = np.median(benchmark_trades) if benchmark_trades else 0
+    benchmark_annualized = (benchmark.iloc[-1] - 1) * (365 / (benchmark.index[-1] - benchmark.index[0]).days)
+    
+    # Calculate statistical significance
+    significance_results = calculate_statistical_significance(
+        analysis['equity_curve'], benchmark_equity_curve, 
+        analysis['annualized_return'], benchmark_annualized
+    )
+    
+    # Create results DataFrame
+    results_df = pd.DataFrame({
+        'Signal_Ticker': [signal_ticker],
+        'Comparison_Ticker': [comparison_ticker],
+        'Target_Ticker': [target_ticker],
+        'Analysis_Type': ['RSI Comparison'],
+        'Total_Return': [analysis['total_return']],
+        'annualized_return': [analysis['annualized_return']],
+        'Win_Rate': [analysis['win_rate']],
+        'Total_Trades': [analysis['total_trades']],
+        'Avg_Hold_Days': [analysis['avg_hold_days']],
+        'Sortino_Ratio': [analysis['sortino_ratio']],
+        'Sharpe_Ratio': [analysis['sharpe_ratio']],
+        'Max_Drawdown': [analysis['max_drawdown']],
+        'Calmar_Ratio': [analysis['calmar_ratio']],
+        'VaR_95': [analysis['var_95']],
+        'Volatility': [analysis['volatility']],
+        'Beta': [analysis['beta']],
+        'Alpha': [analysis['alpha']],
+        'Information_Ratio': [analysis['information_ratio']],
+        'Benchmark_Return': [benchmark_annualized],
+        'Benchmark_Avg_Return': [benchmark_avg_return],
+        'Benchmark_Median_Return': [benchmark_median_return],
+        'Confidence_Level': [significance_results['confidence_level']],
+        'P_Value': [significance_results['p_value']],
+        'T_Statistic': [significance_results['t_statistic']],
+        'Effect_Size': [significance_results['effect_size']],
+        'Power': [significance_results['power']],
+        'significant': [significance_results['significant']],
+        'equity_curve': [analysis['equity_curve']],
+        'benchmark_equity_curve': [benchmark_equity_curve]
+    })
+    
+    return results_df, benchmark, data_messages
+
 def run_rsi_analysis(signal_ticker: str, target_ticker: str, rsi_threshold: float, comparison: str, 
                     start_date=None, end_date=None, rsi_period: int = 14, rsi_method: str = "wilders", benchmark_ticker: str = "SPY", use_quantstats: bool = True, preconditions: List[Dict] = None, exclusions: List[Dict] = None) -> Tuple[pd.DataFrame, pd.Series, List[str]]:
     """Run comprehensive RSI analysis across the specified range with optional preconditions and exclusions"""
@@ -794,7 +1085,7 @@ st.sidebar.header("⚙️ Configuration")
 use_quantstats = st.sidebar.checkbox("Enable QuantStats Integration", value=True, help="Enable use of QuantStats library. When disabled, the app will use fallback calculations.")
 
 # Preconditions System
-st.sidebar.subheader("Preconditions", help="Preconditions add additional RSI conditions that must ALL be true before the main signal is considered. This allows for more complex multi-condition strategies.")
+st.sidebar.subheader("Preconditions", help="Preconditions add additional RSI conditions that must ALL be true before the main signal is considered. This allows for multi-condition signal validation.")
 
 # Initialize preconditions in session state if not exists
 if 'preconditions' not in st.session_state:
@@ -807,7 +1098,12 @@ if st.session_state.preconditions:
         with st.sidebar.container():
             col1, col2 = st.columns([3, 1])
             with col1:
-                st.write(f"• {precondition['signal_ticker']} RSI {precondition['comparison']} {precondition['threshold']}")
+                if 'type' in precondition and precondition['type'] == 'comparison':
+                    st.write(f"• {precondition['signal_ticker']} RSI < {precondition['comparison_ticker']} RSI")
+                else:
+                    # Handle legacy format or threshold type
+                    comparison_text = "≤" if precondition.get('comparison') == 'less_than' else "≥"
+                    st.write(f"• {precondition['signal_ticker']} RSI {comparison_text} {precondition.get('threshold', 'N/A')}")
             with col2:
                 if st.button(f"🗑️", key=f"remove_precondition_{i}"):
                     st.session_state.preconditions.pop(i)
@@ -817,40 +1113,69 @@ if st.session_state.preconditions:
 with st.sidebar.expander("➕ Add Precondition", expanded=False):
     st.write("**Add a new RSI precondition:**")
     
+    # Precondition type selection
+    precondition_type = st.selectbox("Precondition Type", 
+                                    ["RSI Threshold", "RSI Comparison"], 
+                                    key="precondition_type",
+                                    help="Choose between RSI threshold or RSI comparison precondition.")
+    
     # Precondition signal ticker (can be different from main signal)
     precondition_signal = st.text_input("Precondition Signal Ticker", 
                                        value="QQQ", 
                                        key="precondition_signal",
                                        help="The ticker whose RSI will be checked for this precondition. Can be the same as or different from the main signal ticker.")
     
-    # Precondition RSI comparison
-    precondition_comparison = st.selectbox("Precondition RSI Condition", 
-                                          ["less_than", "greater_than"], 
-                                          format_func=lambda x: "RSI ≤ threshold" if x == "less_than" else "RSI ≥ threshold",
-                                          key="precondition_comparison",
-                                          help="Choose the RSI condition for this precondition.")
-    
-    # Precondition RSI threshold
-    precondition_threshold = st.number_input("Precondition RSI Threshold", 
-                                           min_value=0.0, max_value=100.0, value=80.0, step=0.5,
-                                           key="precondition_threshold",
-                                           help="The RSI threshold value for this precondition.")
-    
-    # Add precondition button
-    if st.button("➕ Add Precondition", key="add_precondition"):
-        new_precondition = {
-            'signal_ticker': precondition_signal.upper().strip(),
-            'comparison': precondition_comparison,
-            'threshold': precondition_threshold
-        }
-        st.session_state.preconditions.append(new_precondition)
-        st.rerun()
+    if precondition_type == "RSI Threshold":
+        # Precondition RSI comparison
+        precondition_comparison = st.selectbox("Precondition RSI Condition", 
+                                              ["less_than", "greater_than"], 
+                                              format_func=lambda x: "RSI ≤ threshold" if x == "less_than" else "RSI ≥ threshold",
+                                              key="precondition_comparison",
+                                              help="Choose the RSI condition for this precondition.")
+        
+        # Precondition RSI threshold
+        precondition_threshold = st.number_input("Precondition RSI Threshold", 
+                                               min_value=0.0, max_value=100.0, value=80.0, step=0.5,
+                                               key="precondition_threshold",
+                                               help="The RSI threshold value for this precondition.")
+        
+        # Add precondition button
+        if st.button("➕ Add Precondition", key="add_precondition"):
+            new_precondition = {
+                'type': 'threshold',
+                'signal_ticker': precondition_signal.upper().strip(),
+                'comparison': precondition_comparison,
+                'threshold': precondition_threshold
+            }
+            st.session_state.preconditions.append(new_precondition)
+            st.rerun()
+    else:
+        # RSI Comparison precondition
+        precondition_comparison_ticker = st.text_input("Precondition Comparison Ticker", 
+                                                      value="XLK", 
+                                                      key="precondition_comparison_ticker",
+                                                      help="The second ticker to compare RSI against for this precondition.")
+        
+        # Add precondition button
+        if st.button("➕ Add Precondition", key="add_precondition"):
+            new_precondition = {
+                'type': 'comparison',
+                'signal_ticker': precondition_signal.upper().strip(),
+                'comparison_ticker': precondition_comparison_ticker.upper().strip()
+            }
+            st.session_state.preconditions.append(new_precondition)
+            st.rerun()
 
 # Clear all preconditions button
 if st.session_state.preconditions:
     if st.sidebar.button("🗑️ Clear All Preconditions", type="secondary"):
         st.session_state.preconditions = []
         st.rerun()
+
+# Analysis Mode Selection
+analysis_mode = st.sidebar.selectbox("Analysis Mode", 
+                                    ["RSI Threshold", "RSI Comparison"], 
+                                    help="Choose between testing RSI thresholds or comparing RSI between two tickers.")
 
 # Input fields with help tooltips
 signal_ticker = st.sidebar.text_input("Signal Ticker", value="QQQ", help="The ticker that generates RSI signals. This is the stock/ETF whose RSI we'll use to decide when to buy/sell the target ticker.")
@@ -862,11 +1187,17 @@ rsi_period = st.sidebar.number_input("RSI Period (Days)", min_value=1, max_value
 # RSI Calculation Method - Fixed to Wilder's method
 rsi_method = "wilders"
 
-# Conditional target ticker default based on RSI condition
-comparison = st.sidebar.selectbox("RSI Condition", 
-                               ["greater_than", "less_than"], 
-                               format_func=lambda x: "RSI ≥ threshold" if x == "greater_than" else "RSI ≤ threshold",
-                               help="Choose when to buy: 'RSI ≥ threshold' means buy when RSI is high (overbought), 'RSI ≤ threshold' means buy when RSI is low (oversold).")
+if analysis_mode == "RSI Threshold":
+    # RSI Threshold Mode
+    comparison = st.sidebar.selectbox("RSI Condition", 
+                                   ["greater_than", "less_than"], 
+                                   format_func=lambda x: "RSI ≥ threshold" if x == "greater_than" else "RSI ≤ threshold",
+                                   help="Choose when to buy: 'RSI ≥ threshold' means buy when RSI is high (overbought), 'RSI ≤ threshold' means buy when RSI is low (oversold).")
+else:
+    # RSI Comparison Mode
+    comparison_ticker = st.sidebar.text_input("Comparison Ticker", value="XLK", 
+                                             help="The second ticker to compare RSI against. The signal will trigger when the signal ticker's RSI is less than this ticker's RSI.")
+    comparison = "less_than"  # Default for RSI comparison mode
 
 # Set default target ticker based on RSI condition
 if comparison == "less_than":
@@ -885,7 +1216,7 @@ benchmark_ticker = st.sidebar.selectbox("Benchmark",
                                            "BIL": "BIL (Cash Equivalent)", 
                                            "TQQQ": "TQQQ (3x Nasdaq-100)"
                                        }.get(x, x),
-                                       help="Choose your benchmark for comparison: SPY represents the S&P 500 index, BIL represents cash (money market), TQQQ represents 3x leveraged Nasdaq-100. This is what your signal will be compared against.")
+                                       help="Choose your benchmark for comparison. This is what your signal will be compared against under the RSI conditions you specify.")
 
 # Allow custom benchmark input
 use_custom_benchmark = st.sidebar.checkbox("Use custom benchmark ticker", help="Check this to specify a custom ticker symbol instead of using the selected benchmark above.")
@@ -1014,10 +1345,19 @@ st.sidebar.markdown("---")
 final_benchmark_ticker = custom_benchmark.strip() if custom_benchmark.strip() else benchmark_ticker
 
 if st.sidebar.button("🚀 Run RSI Analysis", type="primary", use_container_width=True):
-    if (not use_date_range or (start_date and end_date and start_date < end_date)) and (not use_custom_range or (rsi_min and rsi_max and rsi_min < rsi_max)):
+    if (not use_date_range or (start_date and end_date and start_date < end_date)):
         try:
             exclusions = st.session_state.get('date_exclusions', []) if use_exclusions else None
-            results_df, benchmark, data_messages = run_rsi_analysis(signal_ticker, target_ticker, rsi_threshold, comparison, start_date, end_date, rsi_period, rsi_method, final_benchmark_ticker, use_quantstats, st.session_state.get('preconditions', []), exclusions)
+            
+            if analysis_mode == "RSI Threshold":
+                # RSI Threshold mode validation
+                if use_custom_range and (not rsi_min or not rsi_max or rsi_min >= rsi_max):
+                    st.sidebar.error("Please ensure RSI Min is less than RSI Max")
+                else:
+                    results_df, benchmark, data_messages = run_rsi_analysis(signal_ticker, target_ticker, rsi_threshold, comparison, start_date, end_date, rsi_period, rsi_method, final_benchmark_ticker, use_quantstats, st.session_state.get('preconditions', []), exclusions)
+            else:
+                # RSI Comparison mode
+                results_df, benchmark, data_messages = run_rsi_comparison_analysis(signal_ticker, comparison_ticker, target_ticker, start_date, end_date, rsi_period, rsi_method, final_benchmark_ticker, use_quantstats, st.session_state.get('preconditions', []), exclusions)
             
             if results_df is not None and benchmark is not None and not results_df.empty:
                 # Store analysis results in session state
@@ -1028,6 +1368,9 @@ if st.sidebar.button("🚀 Run RSI Analysis", type="primary", use_container_widt
                 st.session_state['rsi_period'] = rsi_period
                 st.session_state['comparison'] = comparison
                 st.session_state['benchmark_ticker'] = final_benchmark_ticker
+                st.session_state['analysis_mode'] = analysis_mode
+                if analysis_mode == "RSI Comparison":
+                    st.session_state['comparison_ticker'] = comparison_ticker
                 st.session_state['analysis_completed'] = True
                 st.session_state['data_messages'] = data_messages
                 
@@ -1038,8 +1381,6 @@ if st.sidebar.button("🚀 Run RSI Analysis", type="primary", use_container_widt
     else:
         if use_date_range and (not start_date or not end_date or start_date >= end_date):
             st.sidebar.error("Please ensure start date is before end date")
-        if use_custom_range and (not rsi_min or not rsi_max or rsi_min >= rsi_max):
-            st.sidebar.error("Please ensure RSI Min is less than RSI Max")
 
 # Main content
 col1, col2 = st.columns([2, 1])
@@ -1054,8 +1395,12 @@ with col1:
             comparison_symbol = "≤" if precondition['comparison'] == "less_than" else "≥"
             st.write(f"  • {precondition['signal_ticker']} RSI {comparison_symbol} {precondition['threshold']}")
     
+    st.write(f"**Analysis Mode:** {analysis_mode}")
     st.write(f"**Signal Ticker:** {signal_ticker} (generates RSI signals)")
     st.write(f"**Target Ticker:** {target_ticker} (buy/sell based on signals)")
+    
+    if analysis_mode == "RSI Comparison":
+        st.write(f"**Comparison Ticker:** {comparison_ticker} (RSI comparison target)")
     
     # Display benchmark information
     if custom_benchmark.strip():
@@ -1071,10 +1416,14 @@ with col1:
     
     st.write(f"**Benchmark:** {benchmark_display} ({benchmark_description})")
     st.write(f"**RSI Period:** {rsi_period}-day RSI")
-    if use_custom_range:
-        st.write(f"**RSI Condition:** {signal_ticker} RSI {'≤' if comparison == 'less_than' else '≥'} {rsi_threshold} (testing {rsi_min} to {rsi_max})")
+    
+    if analysis_mode == "RSI Threshold":
+        if use_custom_range:
+            st.write(f"**RSI Condition:** {signal_ticker} RSI {'≤' if comparison == 'less_than' else '≥'} {rsi_threshold} (testing {rsi_min} to {rsi_max})")
+        else:
+            st.write(f"**RSI Condition:** {signal_ticker} RSI {'≤' if comparison == 'less_than' else '≥'} {rsi_threshold} (testing {rsi_min} to {rsi_max})")
     else:
-        st.write(f"**RSI Condition:** {signal_ticker} RSI {'≤' if comparison == 'less_than' else '≥'} {rsi_threshold} (testing {rsi_min} to {rsi_max})")
+        st.write(f"**RSI Condition:** {signal_ticker} RSI < {comparison_ticker} RSI")
     
     if use_date_range and start_date and end_date:
         st.write(f"**Date Range:** {start_date} to {end_date}")
@@ -1098,10 +1447,13 @@ with col2:
             st.write(f"  • {precondition['signal_ticker']} RSI {comparison_symbol} {precondition['threshold']}")
         st.write("**Main Signal:**")
     
-    if comparison == "less_than":
-        st.info(f"🔵 BUY {target_ticker} when {signal_ticker} {rsi_period}-day RSI ≤ threshold\n\n📈 SELL {target_ticker} when {signal_ticker} {rsi_period}-day RSI > threshold")
+    if analysis_mode == "RSI Threshold":
+        if comparison == "less_than":
+            st.info(f"🔵 BUY {target_ticker} when {signal_ticker} {rsi_period}-day RSI ≤ threshold\n\n📈 SELL {target_ticker} when {signal_ticker} {rsi_period}-day RSI > threshold")
+        else:
+            st.info(f"🔵 BUY {target_ticker} when {signal_ticker} {rsi_period}-day RSI ≥ threshold\n\n📈 SELL {target_ticker} when {signal_ticker} {rsi_period}-day RSI < threshold")
     else:
-        st.info(f"🔵 BUY {target_ticker} when {signal_ticker} {rsi_period}-day RSI ≥ threshold\n\n📈 SELL {target_ticker} when {signal_ticker} {rsi_period}-day RSI < threshold")
+        st.info(f"🔵 BUY {target_ticker} when {signal_ticker} {rsi_period}-day RSI < {comparison_ticker} {rsi_period}-day RSI\n\n📈 SELL {target_ticker} when {signal_ticker} {rsi_period}-day RSI ≥ {comparison_ticker} {rsi_period}-day RSI")
 
 # Check if we have stored analysis results
 if 'analysis_completed' in st.session_state and st.session_state['analysis_completed']:
