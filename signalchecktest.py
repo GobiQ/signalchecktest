@@ -496,7 +496,7 @@ def validate_data_quality(data: pd.Series, ticker: str) -> Tuple[bool, List[str]
 # QuantStats report generation removed to avoid import issues
 # Basic QuantStats metrics are still available in the main analysis functions
 
-def run_rsi_analysis(signal_ticker: str, target_ticker: str, rsi_min: float, rsi_max: float, comparison: str, 
+def run_rsi_analysis(signal_ticker: str, target_ticker: str, rsi_threshold: float, comparison: str, 
                     start_date=None, end_date=None, rsi_period: int = 14, rsi_method: str = "wilders", benchmark_ticker: str = "SPY", use_quantstats: bool = True, preconditions: List[Dict] = None, exclusions: List[Dict] = None) -> Tuple[pd.DataFrame, pd.Series, List[str]]:
     """Run comprehensive RSI analysis across the specified range with optional preconditions and exclusions"""
     
@@ -558,7 +558,7 @@ def run_rsi_analysis(signal_ticker: str, target_ticker: str, rsi_min: float, rsi
     benchmark_returns = benchmark_data.pct_change().dropna()
     
     # Use single RSI threshold
-    rsi_thresholds = [rsi_min]  # rsi_min now contains the single threshold value
+    rsi_thresholds = [rsi_threshold]
     
     results = []
     
@@ -990,7 +990,7 @@ if st.sidebar.button("🚀 Run RSI Analysis", type="primary", use_container_widt
     if (not use_date_range or (start_date and end_date and start_date < end_date)):
         try:
             exclusions = st.session_state.get('date_exclusions', []) if use_exclusions else None
-            results_df, benchmark, data_messages = run_rsi_analysis(signal_ticker, target_ticker, rsi_threshold, rsi_threshold, comparison, start_date, end_date, rsi_period, rsi_method, final_benchmark_ticker, use_quantstats, st.session_state.get('preconditions', []), exclusions)
+            results_df, benchmark, data_messages = run_rsi_analysis(signal_ticker, target_ticker, rsi_threshold, comparison, start_date, end_date, rsi_period, rsi_method, final_benchmark_ticker, use_quantstats, st.session_state.get('preconditions', []), exclusions)
             
             if results_df is not None and benchmark is not None and not results_df.empty:
                 # Store analysis results in session state
@@ -1416,7 +1416,7 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
                 yaxis_title="Confidence Level (%)",
                 hovermode='closest',
                 showlegend=True,
-                xaxis=dict(range=[rsi_min, rsi_max]),  # Set x-axis range to match RSI range
+                xaxis=dict(range=[rsi_threshold - 5, rsi_threshold + 5]),  # Set x-axis range around the threshold
                 yaxis=dict(range=[0, 100])  # Set y-axis range to show full confidence scale
             )
             
@@ -1624,7 +1624,7 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
             xaxis_title="RSI Threshold",
             yaxis_title="Sortino Ratio",
             hovermode='closest',
-            xaxis=dict(range=[rsi_min, rsi_max]),
+            xaxis=dict(range=[rsi_threshold - 5, rsi_threshold + 5]),
             showlegend=True
         )
         
@@ -1678,7 +1678,7 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
             xaxis_title="RSI Threshold",
             yaxis_title="Cumulative Return (%)",
             hovermode='closest',
-            xaxis=dict(range=[rsi_min, rsi_max]),
+            xaxis=dict(range=[rsi_threshold - 5, rsi_threshold + 5]),
             yaxis=dict(tickformat='.1%'),
             showlegend=True
         )
@@ -1728,7 +1728,7 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
             xaxis_title="RSI Threshold",
             yaxis_title="Max Drawdown (%)",
             hovermode='closest',
-            xaxis=dict(range=[rsi_min, rsi_max]),
+            xaxis=dict(range=[rsi_threshold - 5, rsi_threshold + 5]),
             showlegend=True
         )
         
