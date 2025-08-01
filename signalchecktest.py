@@ -1591,10 +1591,13 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
     extreme_rsi_count = 0
     
     # Count extreme RSI values (very high or very low depending on comparison)
-    if st.session_state.get('comparison') == 'greater_than':
-        extreme_rsi_count = (results_df['RSI_Threshold'] >= 85).sum()
-    else:
-        extreme_rsi_count = (results_df['RSI_Threshold'] <= 15).sum()
+    # Only check for RSI thresholds in RSI Threshold mode
+    extreme_rsi_count = 0
+    if 'RSI_Threshold' in results_df.columns:
+        if st.session_state.get('comparison') == 'greater_than':
+            extreme_rsi_count = (results_df['RSI_Threshold'] >= 85).sum()
+        else:
+            extreme_rsi_count = (results_df['RSI_Threshold'] <= 15).sum()
     
     if insufficient_data_count > 0 or low_trade_count > 0 or extreme_rsi_count > 0:
         st.warning("⚠️ **Data Quality Warnings:**")
@@ -1649,9 +1652,17 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
     display_df['P_Value'] = display_df['p_value'].apply(lambda x: f"{x:.4f}" if isinstance(x, (int, float)) else x)
     
     # Drop the equity_curve and trades columns for display
-    display_cols = ['RSI_Threshold', 'Total_Trades', 'Win_Rate', 'Avg_Return', 'Median_Return', 'Benchmark_Avg_Return', 'Benchmark_Median_Return',
-                   'Total_Return', 'Annualized_Return', 'Sortino_Ratio', 'Sharpe_Ratio', 'Calmar_Ratio', 'Final_Equity', 'Avg_Hold_Days', 
-                   'Return_Std', 'Best_Return', 'Worst_Return', 'Max_Drawdown', 'VaR_95', 'Confidence_Level', 'Significant', 'Effect_Size', 'P_Value']
+    # Use different column sets based on analysis mode
+    if 'RSI_Threshold' in display_df.columns:
+        # RSI Threshold mode
+        display_cols = ['RSI_Threshold', 'Total_Trades', 'Win_Rate', 'Avg_Return', 'Median_Return', 'Benchmark_Avg_Return', 'Benchmark_Median_Return',
+                       'Total_Return', 'Annualized_Return', 'Sortino_Ratio', 'Sharpe_Ratio', 'Calmar_Ratio', 'Final_Equity', 'Avg_Hold_Days', 
+                       'Return_Std', 'Best_Return', 'Worst_Return', 'Max_Drawdown', 'VaR_95', 'Confidence_Level', 'Significant', 'Effect_Size', 'P_Value']
+    else:
+        # RSI Comparison mode
+        display_cols = ['Signal_Ticker', 'Comparison_Ticker', 'Target_Ticker', 'Analysis_Type', 'Total_Trades', 'Win_Rate', 'Avg_Return', 'Median_Return', 'Benchmark_Avg_Return', 'Benchmark_Median_Return',
+                       'Total_Return', 'Annualized_Return', 'Sortino_Ratio', 'Sharpe_Ratio', 'Calmar_Ratio', 'Final_Equity', 'Avg_Hold_Days', 
+                       'Return_Std', 'Best_Return', 'Worst_Return', 'Max_Drawdown', 'VaR_95', 'Confidence_Level', 'Significant', 'Effect_Size', 'P_Value']
     
     # Check if all display columns exist
     missing_display_cols = [col for col in display_cols if col not in display_df.columns]
@@ -1666,22 +1677,30 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
         # Create filter columns
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            rsi_min_filter = st.number_input(
-                "Min RSI Threshold:",
-                min_value=float(display_df['RSI_Threshold'].min()),
-                max_value=float(display_df['RSI_Threshold'].max()),
-                value=float(display_df['RSI_Threshold'].min()),
-                step=0.5,
-                help="Minimum RSI threshold to include in results."
-            )
-            rsi_max_filter = st.number_input(
-                "Max RSI Threshold:",
-                min_value=float(display_df['RSI_Threshold'].min()),
-                max_value=float(display_df['RSI_Threshold'].max()),
-                value=float(display_df['RSI_Threshold'].max()),
-                step=0.5,
-                help="Maximum RSI threshold to include in results."
-            )
+            # Only show RSI threshold filters in RSI Threshold mode
+            if 'RSI_Threshold' in display_df.columns:
+                rsi_min_filter = st.number_input(
+                    "Min RSI Threshold:",
+                    min_value=float(display_df['RSI_Threshold'].min()),
+                    max_value=float(display_df['RSI_Threshold'].max()),
+                    value=float(display_df['RSI_Threshold'].min()),
+                    step=0.5,
+                    help="Minimum RSI threshold to include in results."
+                )
+                rsi_max_filter = st.number_input(
+                    "Max RSI Threshold:",
+                    min_value=float(display_df['RSI_Threshold'].min()),
+                    max_value=float(display_df['RSI_Threshold'].max()),
+                    value=float(display_df['RSI_Threshold'].max()),
+                    step=0.5,
+                    help="Maximum RSI threshold to include in results."
+                )
+            else:
+                # In RSI Comparison mode, show different filters
+                st.write("**RSI Comparison Mode**")
+                st.write("No RSI threshold filters available")
+                rsi_min_filter = 0
+                rsi_max_filter = 100
         with col2:
             confidence_min_filter = st.number_input(
                 "Min Confidence Level (%):",
@@ -1770,10 +1789,13 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
         
         # Apply filters to the display dataframe (outside of columns)
         filtered_df = display_df.copy()
-        filtered_df = filtered_df[
-            (filtered_df['RSI_Threshold'] >= rsi_min_filter) & 
-            (filtered_df['RSI_Threshold'] <= rsi_max_filter)
-        ]
+        
+        # Only apply RSI threshold filters in RSI Threshold mode
+        if 'RSI_Threshold' in filtered_df.columns:
+            filtered_df = filtered_df[
+                (filtered_df['RSI_Threshold'] >= rsi_min_filter) & 
+                (filtered_df['RSI_Threshold'] <= rsi_max_filter)
+            ]
         filtered_df = filtered_df[
             (filtered_df['Confidence_Level'].str.replace('%', '').astype(float) >= confidence_min_filter) & 
             (filtered_df['Confidence_Level'].str.replace('%', '').astype(float) <= confidence_max_filter)
@@ -1850,8 +1872,10 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
             # Add points for significant signals (green)
             significant_data = valid_signals[valid_signals['significant'] == True]
             if not significant_data.empty:
+                # Use appropriate x-axis column based on analysis mode
+                x_column = 'RSI_Threshold' if 'RSI_Threshold' in significant_data.columns else 'Signal_Ticker'
                 fig_confidence_rsi.add_trace(go.Scatter(
-                    x=significant_data['RSI_Threshold'],
+                    x=significant_data[x_column],
                     y=significant_data['confidence_level'],
                     mode='markers',
                     name='Significant Signals (≥95%)',
@@ -1893,7 +1917,7 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
             non_significant_data = valid_signals[valid_signals['confidence_level'] < 85]
             if not non_significant_data.empty:
                 fig_confidence_rsi.add_trace(go.Scatter(
-                    x=non_significant_data['RSI_Threshold'],
+                    x=non_significant_data[x_column],
                     y=non_significant_data['confidence_level'],
                     mode='markers',
                     name='Non-Significant Signals (<85%)',
@@ -1916,13 +1940,23 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
             fig_confidence_rsi.add_hline(y=85, line_dash="dash", line_color="yellow", 
                                        annotation_text="85% Confidence")
             
+            # Set appropriate title and axis labels based on analysis mode
+            if 'RSI_Threshold' in valid_signals.columns:
+                title = "Confidence Level vs RSI Threshold (Point Size = Effect Size)"
+                xaxis_title = "RSI Threshold"
+                xaxis_range = [0, 100]
+            else:
+                title = "Confidence Level vs Signal Analysis (Point Size = Effect Size)"
+                xaxis_title = "Signal Ticker"
+                xaxis_range = None  # Let Plotly auto-scale
+            
             fig_confidence_rsi.update_layout(
-                title="Confidence Level vs RSI Threshold (Point Size = Effect Size)",
-                xaxis_title="RSI Threshold",
+                title=title,
+                xaxis_title=xaxis_title,
                 yaxis_title="Confidence Level (%)",
                 hovermode='closest',
                 showlegend=True,
-                xaxis=dict(range=[0, 100]),  # Set x-axis range to show full RSI scale
+                xaxis=dict(range=xaxis_range) if xaxis_range else {},
                 yaxis=dict(range=[0, 100])  # Set y-axis range to show full confidence scale
             )
             
@@ -1976,11 +2010,11 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
                     mode='markers',
                     name='Significant Signals',
                     marker=dict(color='green', size=8),
-                    hovertemplate='<b>RSI %{text}</b><br>' +
+                    hovertemplate='<b>Signal %{text}</b><br>' +
                                 'Total Return: %{y:.3%}<br>' +
                                 'Confidence: %{x:.1f}%<br>' +
                                 'Significant: ✓<extra></extra>',
-                    text=[f"{row['RSI_Threshold']}" for _, row in significant_data.iterrows()]
+                    text=[f"{row.get('RSI_Threshold', row.get('Signal_Ticker', 'N/A'))}" for _, row in significant_data.iterrows()]
                 ))
             
             # Add points for non-significant signals (red)
@@ -1992,11 +2026,11 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
                     mode='markers',
                     name='Non-Significant Signals',
                     marker=dict(color='red', size=8),
-                    hovertemplate='<b>RSI %{text}</b><br>' +
+                    hovertemplate='<b>Signal %{text}</b><br>' +
                                 'Total Return: %{y:.3%}<br>' +
                                 'Confidence: %{x:.1f}%<br>' +
                                 'Significant: ✗<extra></extra>',
-                    text=[f"{row['RSI_Threshold']}" for _, row in non_significant_data.iterrows()]
+                    text=[f"{row.get('RSI_Threshold', row.get('Signal_Ticker', 'N/A'))}" for _, row in non_significant_data.iterrows()]
                 ))
             
             # Add reference lines
