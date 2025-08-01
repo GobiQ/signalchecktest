@@ -136,14 +136,21 @@ def analyze_rsi_comparison_signals(signal_prices: pd.Series, comparison_prices: 
         for precondition in preconditions:
             precondition_ticker = precondition['signal_ticker']
             if precondition_ticker in precondition_data:
-                precondition_rsi = calculate_rsi(precondition_data[precondition_ticker], window=rsi_period, method=rsi_method)
+                # Use custom RSI period if specified, otherwise use default
+                precondition_rsi_period = precondition.get('rsi_period', rsi_period)
+                precondition_rsi = calculate_rsi(precondition_data[precondition_ticker], window=precondition_rsi_period, method=rsi_method)
                 
                 if precondition.get('type') == 'comparison':
                     # RSI comparison precondition
                     comparison_ticker = precondition['comparison_ticker']
                     if comparison_ticker in precondition_data:
-                        comparison_precondition_rsi = calculate_rsi(precondition_data[comparison_ticker], window=rsi_period, method=rsi_method)
-                        precondition_condition = (precondition_rsi < comparison_precondition_rsi)
+                        # Use custom RSI periods for comparison
+                        signal_rsi_period = precondition.get('signal_rsi_period', rsi_period)
+                        comparison_rsi_period = precondition.get('comparison_rsi_period', rsi_period)
+                        
+                        signal_precondition_rsi = calculate_rsi(precondition_data[precondition_ticker], window=signal_rsi_period, method=rsi_method)
+                        comparison_precondition_rsi = calculate_rsi(precondition_data[comparison_ticker], window=comparison_rsi_period, method=rsi_method)
+                        precondition_condition = (signal_precondition_rsi < comparison_precondition_rsi)
                     else:
                         precondition_condition = pd.Series(False, index=signal_prices.index)
                 else:
@@ -676,14 +683,21 @@ def run_rsi_comparison_analysis(signal_ticker: str, comparison_ticker: str, targ
         for precondition in preconditions:
             precondition_ticker = precondition['signal_ticker']
             if precondition_ticker in precondition_data:
-                precondition_rsi = calculate_rsi(precondition_data[precondition_ticker], window=rsi_period, method=rsi_method)
+                # Use custom RSI period if specified, otherwise use default
+                precondition_rsi_period = precondition.get('rsi_period', rsi_period)
+                precondition_rsi = calculate_rsi(precondition_data[precondition_ticker], window=precondition_rsi_period, method=rsi_method)
                 
                 if precondition.get('type') == 'comparison':
                     # RSI comparison precondition
                     comparison_ticker = precondition['comparison_ticker']
                     if comparison_ticker in precondition_data:
-                        comparison_precondition_rsi = calculate_rsi(precondition_data[comparison_ticker], window=rsi_period, method=rsi_method)
-                        precondition_condition = (precondition_rsi < comparison_precondition_rsi)
+                        # Use custom RSI periods for comparison
+                        signal_rsi_period = precondition.get('signal_rsi_period', rsi_period)
+                        comparison_rsi_period = precondition.get('comparison_rsi_period', rsi_period)
+                        
+                        signal_precondition_rsi = calculate_rsi(precondition_data[precondition_ticker], window=signal_rsi_period, method=rsi_method)
+                        comparison_precondition_rsi = calculate_rsi(precondition_data[comparison_ticker], window=comparison_rsi_period, method=rsi_method)
+                        precondition_condition = (signal_precondition_rsi < comparison_precondition_rsi)
                     else:
                         precondition_condition = pd.Series(False, index=signal_data.index)
                 else:
@@ -1099,11 +1113,14 @@ if st.session_state.preconditions:
             col1, col2 = st.columns([3, 1])
             with col1:
                 if 'type' in precondition and precondition['type'] == 'comparison':
-                    st.write(f"• {precondition['signal_ticker']} RSI < {precondition['comparison_ticker']} RSI")
+                    signal_period = precondition.get('signal_rsi_period', 10)
+                    comparison_period = precondition.get('comparison_rsi_period', 10)
+                    st.write(f"• {precondition['signal_ticker']} {signal_period}d RSI < {precondition['comparison_ticker']} {comparison_period}d RSI")
                 else:
                     # Handle legacy format or threshold type
                     comparison_text = "≤" if precondition.get('comparison') == 'less_than' else "≥"
-                    st.write(f"• {precondition['signal_ticker']} RSI {comparison_text} {precondition.get('threshold', 'N/A')}")
+                    rsi_period = precondition.get('rsi_period', 10)
+                    st.write(f"• {precondition['signal_ticker']} {rsi_period}d RSI {comparison_text} {precondition.get('threshold', 'N/A')}")
             with col2:
                 if st.button(f"🗑️", key=f"remove_precondition_{i}"):
                     st.session_state.preconditions.pop(i)
@@ -1139,29 +1156,53 @@ with st.sidebar.expander("➕ Add Precondition", expanded=False):
                                                key="precondition_threshold",
                                                help="The RSI threshold value for this precondition.")
         
+        # Precondition RSI period
+        precondition_rsi_period = st.number_input("Precondition RSI Period (Days)", 
+                                                 min_value=1, max_value=50, value=10,
+                                                 key="precondition_rsi_period",
+                                                 help="RSI period for this precondition ticker.")
+        
         # Add precondition button
         if st.button("➕ Add Precondition", key="add_precondition"):
             new_precondition = {
                 'type': 'threshold',
                 'signal_ticker': precondition_signal.upper().strip(),
                 'comparison': precondition_comparison,
-                'threshold': precondition_threshold
+                'threshold': precondition_threshold,
+                'rsi_period': precondition_rsi_period
             }
             st.session_state.preconditions.append(new_precondition)
             st.rerun()
     else:
         # RSI Comparison precondition
-        precondition_comparison_ticker = st.text_input("Precondition Comparison Ticker", 
-                                                      value="XLK", 
-                                                      key="precondition_comparison_ticker",
-                                                      help="The second ticker to compare RSI against for this precondition.")
+        col1, col2 = st.columns(2)
+        with col1:
+            precondition_comparison_ticker = st.text_input("Precondition Comparison Ticker", 
+                                                          value="XLK", 
+                                                          key="precondition_comparison_ticker",
+                                                          help="The second ticker to compare RSI against for this precondition.")
+        
+        # RSI periods for comparison
+        col1, col2 = st.columns(2)
+        with col1:
+            precondition_signal_rsi_period = st.number_input("Signal Ticker RSI Period (Days)", 
+                                                            min_value=1, max_value=50, value=10,
+                                                            key="precondition_signal_rsi_period",
+                                                            help="RSI period for the signal ticker in this comparison.")
+        with col2:
+            precondition_comparison_rsi_period = st.number_input("Comparison Ticker RSI Period (Days)", 
+                                                                min_value=1, max_value=50, value=10,
+                                                                key="precondition_comparison_rsi_period",
+                                                                help="RSI period for the comparison ticker in this comparison.")
         
         # Add precondition button
         if st.button("➕ Add Precondition", key="add_precondition"):
             new_precondition = {
                 'type': 'comparison',
                 'signal_ticker': precondition_signal.upper().strip(),
-                'comparison_ticker': precondition_comparison_ticker.upper().strip()
+                'comparison_ticker': precondition_comparison_ticker.upper().strip(),
+                'signal_rsi_period': precondition_signal_rsi_period,
+                'comparison_rsi_period': precondition_comparison_rsi_period
             }
             st.session_state.preconditions.append(new_precondition)
             st.rerun()
@@ -1228,37 +1269,44 @@ if use_custom_benchmark:
 else:
     custom_benchmark = ""
 
-# Set default RSI threshold based on condition
-if comparison == "less_than":
-    default_threshold = 40.0
-    st.sidebar.write("Buy signals: Signal RSI ≤ threshold")
+# RSI Threshold and Range options (only for RSI Threshold mode)
+if analysis_mode == "RSI Threshold":
+    # Set default RSI threshold based on condition
+    if comparison == "less_than":
+        default_threshold = 40.0
+        st.sidebar.write("Buy signals: Signal RSI ≤ threshold")
+    else:
+        default_threshold = 60.0
+        st.sidebar.write("Buy signals: Signal RSI ≥ threshold")
+
+    rsi_threshold = st.sidebar.number_input("RSI Threshold", min_value=0.0, max_value=100.0, value=float(default_threshold), step=0.5, help="The RSI threshold to test. For 'RSI ≤ threshold', try 20-40. For 'RSI ≥ threshold', try 60-80.")
+
+    # RSI Range options
+    st.sidebar.subheader("📊 RSI Range Options")
+    use_custom_range = st.sidebar.checkbox("Use custom RSI range", help="Check this to specify a custom range of RSI values to test instead of the default range.")
+
+    # Set default ranges based on condition
+    if comparison == "less_than":
+        default_min, default_max = 0.0, 50.0  # Test from 0 to 50 for less than conditions
+    else:
+        default_min, default_max = 50.0, 100.0  # Test from 50 to 100 for greater than conditions
+
+    if use_custom_range:
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            rsi_min = st.sidebar.number_input("RSI Range Min", min_value=0.0, max_value=100.0, value=float(default_min), step=0.5, help="The lowest RSI threshold to test.")
+        with col2:
+            rsi_max = st.sidebar.number_input("RSI Range Max", min_value=0.0, max_value=100.0, value=float(default_max), step=0.5, help="The highest RSI threshold to test.")
+        
+        if rsi_min >= rsi_max:
+            st.sidebar.error("RSI Min must be less than RSI Max")
+    else:
+        rsi_min, rsi_max = default_min, default_max
 else:
-    default_threshold = 60.0
-    st.sidebar.write("Buy signals: Signal RSI ≥ threshold")
-
-rsi_threshold = st.sidebar.number_input("RSI Threshold", min_value=0.0, max_value=100.0, value=float(default_threshold), step=0.5, help="The RSI threshold to test. For 'RSI ≤ threshold', try 20-40. For 'RSI ≥ threshold', try 60-80.")
-
-# RSI Range options
-st.sidebar.subheader("📊 RSI Range Options")
-use_custom_range = st.sidebar.checkbox("Use custom RSI range", help="Check this to specify a custom range of RSI values to test instead of the default range.")
-
-# Set default ranges based on condition
-if comparison == "less_than":
-    default_min, default_max = 0.0, 50.0  # Test from 0 to 50 for less than conditions
-else:
-    default_min, default_max = 50.0, 100.0  # Test from 50 to 100 for greater than conditions
-
-if use_custom_range:
-    col1, col2 = st.sidebar.columns(2)
-    with col1:
-        rsi_min = st.sidebar.number_input("RSI Range Min", min_value=0.0, max_value=100.0, value=float(default_min), step=0.5, help="The lowest RSI threshold to test.")
-    with col2:
-        rsi_max = st.sidebar.number_input("RSI Range Max", min_value=0.0, max_value=100.0, value=float(default_max), step=0.5, help="The highest RSI threshold to test.")
-    
-    if rsi_min >= rsi_max:
-        st.sidebar.error("RSI Min must be less than RSI Max")
-else:
-    rsi_min, rsi_max = default_min, default_max
+    # RSI Comparison mode - set default values for compatibility
+    rsi_threshold = 50.0  # Not used in comparison mode
+    rsi_min, rsi_max = 0.0, 100.0  # Not used in comparison mode
+    use_custom_range = False
 
 # Date range selection
 st.sidebar.subheader("📅 Date Range")
@@ -1392,8 +1440,15 @@ with col1:
     if st.session_state.get('preconditions'):
         st.write("**Preconditions:**")
         for i, precondition in enumerate(st.session_state.preconditions):
-            comparison_symbol = "≤" if precondition['comparison'] == "less_than" else "≥"
-            st.write(f"  • {precondition['signal_ticker']} RSI {comparison_symbol} {precondition['threshold']}")
+            if 'type' in precondition and precondition['type'] == 'comparison':
+                signal_period = precondition.get('signal_rsi_period', 10)
+                comparison_period = precondition.get('comparison_rsi_period', 10)
+                st.write(f"  • {precondition['signal_ticker']} {signal_period}d RSI < {precondition['comparison_ticker']} {comparison_period}d RSI")
+            else:
+                # Handle legacy format or threshold type
+                comparison_symbol = "≤" if precondition.get('comparison') == "less_than" else "≥"
+                rsi_period = precondition.get('rsi_period', 10)
+                st.write(f"  • {precondition['signal_ticker']} {rsi_period}d RSI {comparison_symbol} {precondition.get('threshold', 'N/A')}")
     
     st.write(f"**Analysis Mode:** {analysis_mode}")
     st.write(f"**Signal Ticker:** {signal_ticker} (generates RSI signals)")
