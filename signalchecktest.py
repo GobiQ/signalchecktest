@@ -706,7 +706,7 @@ with tab1:
         signal_name = st.text_input("Signal Name", placeholder="e.g., QQQ RSI Oversold")
         
         # Signal type selection
-        signal_type = st.selectbox("Signal Type", ["Custom Indicator", "RSI Threshold", "RSI Comparison"])
+        signal_type = st.selectbox("Signal Type", ["Custom Indicator", "Static RSI", "RSI Comparison"])
         
         if signal_type == "Custom Indicator":
             st.subheader("📊 Signal Configuration")
@@ -815,7 +815,7 @@ with tab1:
                 st.success(f"Reference Signal '{signal_name}' added!")
                 st.rerun()
         
-        elif signal_type == "RSI Threshold":
+        elif signal_type == "Static RSI":
             col1, col2 = st.columns(2)
             with col1:
                 signal_ticker = st.text_input("Signal Ticker", value="QQQ")
@@ -882,7 +882,7 @@ with tab1:
                         else:
                             indicator2_text = f"{signal['indicator2']}({signal['days2']})" if signal['days2'] else signal['indicator2']
                         st.caption(f"{signal['signal_ticker1']} {indicator1_text} {signal['operator']} {signal['signal_ticker2']} {indicator2_text}")
-                    elif signal['type'] == "RSI Threshold":
+                    elif signal['type'] == "Static RSI":
                         st.caption(f"{signal['signal_ticker']} RSI {signal['rsi_period']}-day {signal['comparison']} {signal['rsi_threshold']} → {signal['target_ticker']}")
                     else:
                         st.caption(f"{signal['signal_ticker']} vs {signal['comparison_ticker']} RSI {signal['comparison_operator']} → {signal['target_ticker']}")
@@ -1206,7 +1206,7 @@ with tab4:
                     if signal['type'] == "Custom Indicator":
                         all_tickers.add(signal['signal_ticker1'])
                         all_tickers.add(signal['signal_ticker2'])
-                    elif signal['type'] == "RSI Threshold":
+                    elif signal['type'] == "Static RSI":
                         all_tickers.add(signal['signal_ticker'])
                         all_tickers.add(signal['target_ticker'])
                     elif signal['type'] == "RSI Comparison":
@@ -1249,7 +1249,7 @@ with tab4:
                         
                         signal_results[signal['name']] = signals
                     
-                    elif signal['type'] == "RSI Threshold":
+                    elif signal['type'] == "Static RSI":
                         rsi = calculate_rsi(data[signal['signal_ticker']], signal['rsi_period'])
                         
                         if signal['comparison'] == "less_than":
