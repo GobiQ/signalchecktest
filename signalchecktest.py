@@ -557,8 +557,8 @@ def run_rsi_analysis(signal_ticker: str, target_ticker: str, rsi_min: float, rsi
     # Calculate benchmark returns for statistical testing
     benchmark_returns = benchmark_data.pct_change().dropna()
     
-    # Generate RSI thresholds (every 0.5)
-    rsi_thresholds = np.arange(rsi_min, rsi_max + 0.5, 0.5)
+    # Use single RSI threshold
+    rsi_thresholds = [rsi_min]  # rsi_min now contains the single threshold value
     
     results = []
     
@@ -892,18 +892,15 @@ custom_benchmark = st.sidebar.text_input("Custom Benchmark Ticker (optional)",
                                         placeholder="e.g., QQQ, VTI, etc.",
                                         help="Enter a custom ticker symbol to use as benchmark. Leave empty to use the selected benchmark above.")
 
+# Set default RSI threshold based on condition
 if comparison == "less_than":
-    default_min, default_max = 5, 37
+    default_threshold = 25.0
     st.sidebar.write("Buy signals: Signal RSI ≤ threshold")
 else:
-    default_min, default_max = 70, 100
+    default_threshold = 75.0
     st.sidebar.write("Buy signals: Signal RSI ≥ threshold")
 
-rsi_min = st.sidebar.number_input("RSI Range Min", min_value=0.0, max_value=100.0, value=float(default_min), step=0.5, help="The lowest RSI threshold to test. For 'RSI ≤ threshold', try 20-40. For 'RSI ≥ threshold', try 60-80.")
-rsi_max = st.sidebar.number_input("RSI Range Max", min_value=0.0, max_value=100.0, value=float(default_max), step=0.5, help="The highest RSI threshold to test. The app will test every 0.5 between min and max.")
-
-if rsi_min >= rsi_max:
-    st.sidebar.error("RSI Min must be less than RSI Max")
+rsi_threshold = st.sidebar.number_input("RSI Threshold", min_value=0.0, max_value=100.0, value=float(default_threshold), step=0.5, help="The RSI threshold to test. For 'RSI ≤ threshold', try 20-40. For 'RSI ≥ threshold', try 60-80.")
 
 # Date range selection
 st.sidebar.subheader("📅 Date Range")
@@ -978,28 +975,6 @@ if use_exclusions:
         if st.sidebar.button("🗑️ Clear All Exclusions", type="secondary"):
             st.session_state.date_exclusions = []
             st.rerun()
-    
-    # Quick add buttons for common exclusions
-    st.sidebar.write("**Quick Add Common Exclusions:**")
-    col1, col2 = st.sidebar.columns(2)
-    with col1:
-        if st.button("COVID Crash", key="add_covid"):
-            covid_exclusion = {
-                'start': datetime(2020, 2, 20),
-                'end': datetime(2020, 4, 7)
-            }
-            if covid_exclusion not in st.session_state.date_exclusions:
-                st.session_state.date_exclusions.append(covid_exclusion)
-                st.rerun()
-    with col2:
-        if st.button("2008 Crisis", key="add_2008"):
-            crisis_exclusion = {
-                'start': datetime(2008, 9, 15),
-                'end': datetime(2009, 3, 9)
-            }
-            if crisis_exclusion not in st.session_state.date_exclusions:
-                st.session_state.date_exclusions.append(crisis_exclusion)
-                st.rerun()
 else:
     # Clear exclusions if feature is disabled
     if 'date_exclusions' in st.session_state:
@@ -1012,10 +987,10 @@ st.sidebar.markdown("---")
 final_benchmark_ticker = custom_benchmark.strip() if custom_benchmark.strip() else benchmark_ticker
 
 if st.sidebar.button("🚀 Run RSI Analysis", type="primary", use_container_width=True):
-    if rsi_min < rsi_max and (not use_date_range or (start_date and end_date and start_date < end_date)):
+    if (not use_date_range or (start_date and end_date and start_date < end_date)):
         try:
             exclusions = st.session_state.get('date_exclusions', []) if use_exclusions else None
-            results_df, benchmark, data_messages = run_rsi_analysis(signal_ticker, target_ticker, rsi_min, rsi_max, comparison, start_date, end_date, rsi_period, rsi_method, final_benchmark_ticker, use_quantstats, st.session_state.get('preconditions', []), exclusions)
+            results_df, benchmark, data_messages = run_rsi_analysis(signal_ticker, target_ticker, rsi_threshold, rsi_threshold, comparison, start_date, end_date, rsi_period, rsi_method, final_benchmark_ticker, use_quantstats, st.session_state.get('preconditions', []), exclusions)
             
             if results_df is not None and benchmark is not None and not results_df.empty:
                 # Store analysis results in session state
@@ -1034,8 +1009,6 @@ if st.sidebar.button("🚀 Run RSI Analysis", type="primary", use_container_widt
         except Exception as e:
             st.sidebar.error(f"❌ Error during analysis: {str(e)}")
     else:
-        if rsi_min >= rsi_max:
-            st.sidebar.error("Please ensure RSI Min is less than RSI Max")
         if use_date_range and (not start_date or not end_date or start_date >= end_date):
             st.sidebar.error("Please ensure start date is before end date")
 
@@ -1069,8 +1042,7 @@ with col1:
     
     st.write(f"**Benchmark:** {benchmark_display} ({benchmark_description})")
     st.write(f"**RSI Period:** {rsi_period}-day RSI")
-    st.write(f"**RSI Condition:** {signal_ticker} RSI {'≤' if comparison == 'less_than' else '≥'} threshold")
-    st.write(f"**RSI Range:** {rsi_min} - {rsi_max}")
+    st.write(f"**RSI Condition:** {signal_ticker} RSI {'≤' if comparison == 'less_than' else '≥'} {rsi_threshold}")
     
     if use_date_range and start_date and end_date:
         st.write(f"**Date Range:** {start_date} to {end_date}")
