@@ -1968,47 +1968,6 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
             st.plotly_chart(fig_equity, use_container_width=True)
         else:
             st.warning("⚠️ Equity curve data not available for display.")
-                        size=abs(non_significant_data['effect_size']) * 20 + 5,  # Scale effect size for visibility
-                        sizemin=5,
-                        sizemode='area',
-                        opacity=0.7
-                    ),
-                    hovertemplate='<b>RSI %{x}</b><br>' +
-                                'Confidence: %{y:.1f}%<br>' +
-                                'Effect Size: %{marker.size:.1f}<br>' +
-                                'Significant: ✗<extra></extra>'
-                ))
-            
-            # Add reference lines
-            fig_confidence_rsi.add_hline(y=95, line_dash="dash", line_color="red", 
-                                       annotation_text="95% Confidence")
-            fig_confidence_rsi.add_hline(y=85, line_dash="dash", line_color="yellow", 
-                                       annotation_text="85% Confidence")
-            
-            # Set appropriate title and axis labels based on analysis mode
-            if 'RSI_Threshold' in valid_signals.columns:
-                title = "Confidence Level vs RSI Threshold (Point Size = Effect Size)"
-                xaxis_title = "RSI Threshold"
-                xaxis_range = [0, 100]
-            else:
-                title = "Confidence Level vs Signal Analysis (Point Size = Effect Size)"
-                xaxis_title = "Signal Ticker"
-                xaxis_range = None  # Let Plotly auto-scale
-            
-            fig_confidence_rsi.update_layout(
-                title=title,
-                xaxis_title=xaxis_title,
-                yaxis_title="Confidence Level (%)",
-                hovermode='closest',
-                showlegend=True,
-                xaxis=dict(range=xaxis_range) if xaxis_range else {},
-                yaxis=dict(range=[0, 100])  # Set y-axis range to show full confidence scale
-            )
-            
-            st.plotly_chart(fig_confidence_rsi, use_container_width=True, key="confidence_rsi_chart")
-            
-                    # Add explanation for the new chart
-        with st.expander("📚 Understanding Confidence vs RSI Threshold"):
             st.write(f"""
 
             **📊 Improved Statistical Analysis:**
