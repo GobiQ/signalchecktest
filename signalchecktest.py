@@ -232,6 +232,97 @@ st.markdown("""
     .sidebar .stSlider > div > div > div > div {
         background: #1976d2 !important;
     }
+    
+    /* Fix main content text colors */
+    .main .stMarkdown {
+        color: #333 !important;
+    }
+    
+    .main .stSubheader {
+        color: #333 !important;
+    }
+    
+    .main .stHeader {
+        color: #333 !important;
+    }
+    
+    .main .stText {
+        color: #333 !important;
+    }
+    
+    .main .stCaption {
+        color: #333 !important;
+    }
+    
+    .main .stInfo {
+        color: #333 !important;
+    }
+    
+    .main .stSuccess {
+        color: #333 !important;
+    }
+    
+    .main .stWarning {
+        color: #333 !important;
+    }
+    
+    .main .stError {
+        color: #333 !important;
+    }
+    
+    /* Fix input field colors */
+    .main .stTextInput > div > div > input {
+        background: white !important;
+        color: #333 !important;
+        border: 1px solid #e1e5e9 !important;
+    }
+    
+    .main .stSelectbox > div > div {
+        background: white !important;
+        color: #333 !important;
+        border: 1px solid #e1e5e9 !important;
+    }
+    
+    .main .stNumberInput > div > div > input {
+        background: white !important;
+        color: #333 !important;
+        border: 1px solid #e1e5e9 !important;
+    }
+    
+    .main .stDateInput > div > div > input {
+        background: white !important;
+        color: #333 !important;
+        border: 1px solid #e1e5e9 !important;
+    }
+    
+    /* Fix label colors */
+    .main label {
+        color: #333 !important;
+    }
+    
+    .main .stLabel {
+        color: #333 !important;
+    }
+    
+    /* Fix metric colors */
+    .main .stMetric {
+        color: #333 !important;
+    }
+    
+    .main .stMetric > div > div {
+        color: #333 !important;
+    }
+    
+    /* Fix container backgrounds */
+    .main .stContainer {
+        background: white !important;
+        color: #333 !important;
+    }
+    
+    .main .stExpander {
+        background: white !important;
+        color: #333 !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
