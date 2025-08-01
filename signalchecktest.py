@@ -11,36 +11,34 @@ warnings.filterwarnings('ignore')
 
 # Page configuration
 st.set_page_config(
-    page_title="Tactical Allocation",
+    page_title="Strategy Validation Tool",
     page_icon="📊",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
-# Custom CSS for testfol.io-like styling
+# Custom CSS for styling
 st.markdown("""
 <style>
     /* Main styling */
     .main {
-        padding: 0;
+        padding: 2rem;
+        background: #f5f5f5;
+        min-height: 100vh;
     }
     
     .stApp {
-        background-color: #f8f9fa;
+        background: #f5f5f5;
     }
     
     /* Header styling */
     .main-header {
         font-size: 2.5rem;
         font-weight: 700;
-        color: #1a1a1a;
+        color: #333;
         text-align: center;
         margin-bottom: 2rem;
         padding: 1rem 0;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
     }
     
     /* Signal card styling */
@@ -69,7 +67,7 @@ st.markdown("""
     .signal-name {
         font-size: 1.2rem;
         font-weight: 600;
-        color: #1a1a1a;
+        color: #333;
         margin: 0;
     }
     
@@ -103,6 +101,7 @@ st.markdown("""
         font-size: 1.5rem;
         font-weight: 700;
         margin-bottom: 0.25rem;
+        color: #333;
     }
     
     .metric-label {
@@ -138,6 +137,7 @@ st.markdown("""
         justify-content: space-between;
         align-items: center;
         margin-bottom: 0.5rem;
+        color: #333;
     }
     
     .allocation-value {
@@ -150,11 +150,17 @@ st.markdown("""
         border-radius: 8px;
         font-weight: 600;
         transition: all 0.3s ease;
+        background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);
+        color: white;
+        border: none;
+        padding: 0.75rem 1.5rem;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
     
     .stButton > button:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        background: linear-gradient(135deg, #1565c0 0%, #0d47a1 100%);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
     }
     
     /* Chart styling */
@@ -169,7 +175,8 @@ st.markdown("""
     
     /* Sidebar styling */
     .css-1d391kg {
-        background-color: #f8f9fa;
+        background-color: white;
+        color: #333;
     }
     
     /* Progress bar styling */
@@ -181,6 +188,7 @@ st.markdown("""
     .dataframe {
         border-radius: 8px;
         overflow: hidden;
+        background: white;
     }
     
     /* Custom container styling */
@@ -191,6 +199,38 @@ st.markdown("""
         padding: 1.5rem;
         margin: 1rem 0;
         box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    /* Fix text colors */
+    .stMarkdown {
+        color: #333 !important;
+    }
+    
+    .stDataFrame {
+        color: #333 !important;
+    }
+    
+    .stPlotlyChart {
+        color: #333 !important;
+    }
+    
+    /* Fix sidebar text colors */
+    .sidebar .stMarkdown {
+        color: #333 !important;
+    }
+    
+    .sidebar .stSelectbox > div > div {
+        background: white !important;
+        color: #333 !important;
+    }
+    
+    .sidebar .stTextInput > div > div > input {
+        background: white !important;
+        color: #333 !important;
+    }
+    
+    .sidebar .stSlider > div > div > div > div {
+        background: #1976d2 !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -378,7 +418,7 @@ def evaluate_signal_condition(indicator1_values: pd.Series, indicator2_values: p
         return pd.Series(0, index=indicator1_values.index)
 
 # Main app
-st.markdown('<h1 class="main-header">📊 Tactical Allocation</h1>', unsafe_allow_html=True)
+st.markdown('<h1 class="main-header">📊 Strategy Validation Tool</h1>', unsafe_allow_html=True)
 
 # Sidebar for signal and allocation management
 with st.sidebar:
