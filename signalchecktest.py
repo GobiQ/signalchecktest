@@ -1373,6 +1373,7 @@ else:
     rsi_threshold = 50.0  # Not used in comparison mode
     rsi_min, rsi_max = 0.0, 100.0  # Not used in comparison mode
     use_custom_range = False
+    rsi_period = signal_rsi_period  # Use signal RSI period for display purposes
 
 # Date range selection
 st.sidebar.subheader("📅 Date Range")
