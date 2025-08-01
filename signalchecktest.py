@@ -729,7 +729,7 @@ with tab1:
                 # First indicator
                 indicator1 = st.selectbox(
                     "Indicator 1",
-                    ["SMA", "EMA", "Current Price", "Cumulative Return", "Max Drawdown", "RSI", "Static RSI", "RSI Comparison"],
+                    ["SMA", "EMA", "Current Price", "Cumulative Return", "Max Drawdown", "Static RSI", "RSI Comparison"],
                     key="indicator1"
                 )
                 
@@ -742,7 +742,7 @@ with tab1:
                         value=14,
                         key="days1"
                     )
-                elif indicator1 in ["RSI", "Static RSI", "RSI Comparison"]:
+                elif indicator1 in ["Static RSI", "RSI Comparison"]:
                     days1 = st.number_input(
                         "RSI Period",
                         min_value=1,
@@ -808,7 +808,7 @@ with tab1:
                 with col4:
                     indicator2 = st.selectbox(
                         "Indicator 2",
-                        ["SMA", "EMA", "Current Price", "Cumulative Return", "Max Drawdown", "RSI", "Static Value"],
+                        ["SMA", "EMA", "Current Price", "Cumulative Return", "Max Drawdown", "Static Value"],
                         key="indicator2"
                     )
                     
@@ -1071,7 +1071,7 @@ with tab3:
             st.subheader("📋 Conditional Logic")
             
             # Dynamic signal builder
-            st.write("**Signals:**")
+            st.write("**IF**")
             
             # Display existing signals
             for i, signal_config in enumerate(st.session_state.strategy_signals):
@@ -1164,78 +1164,346 @@ with tab3:
 
 # Tab 4: Backtest
 with tab4:
-    st.header("📈 Backtest Configuration")
-    
-    # Backtest configuration
-    col1, col2 = st.columns(2)
-    with col1:
-        start_date = st.date_input("Start Date", value=datetime(1900, 1, 1).date())
-        benchmark_ticker = st.text_input("Benchmark Ticker", value="SPY")
-    with col2:
-        end_date = st.date_input("End Date", value=datetime.now())
-    
-    # Quick stats
-    if st.session_state.output_allocations:
-        st.subheader("📊 Quick Stats")
+    # Only show results if backtest has been run
+    if st.session_state.backtest_results:
+        st.header("📈 Backtest Results")
         
-        # Calculate unique allocations used in strategies
-        strategy_allocations = set()
-        for strategy in st.session_state.strategies:
-            strategy_allocations.add(strategy['output_allocation'])
-            strategy_allocations.add(strategy['else_allocation'])
+        # Portfolio overview
+        col1, col2 = st.columns(2)
         
-        # Calculate total allocation only for allocations used in strategies
-        total_allocation = 0
-        for alloc_name in strategy_allocations:
-            if alloc_name in st.session_state.output_allocations:
-                total_allocation += st.session_state.output_allocations[alloc_name]['total_weight']
-        
-        col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("Total Allocations", f"{total_allocation}%")
+            st.subheader("📊 Portfolio Performance")
+            
+            # Key metrics
+            combined_equity = st.session_state.backtest_results['combined_equity']
+            benchmark_equity = st.session_state.backtest_results['benchmark_equity']
+            
+            combined_returns = combined_equity.pct_change().dropna()
+            benchmark_returns = benchmark_equity.pct_change().dropna()
+            
+            combined_metrics = calculate_metrics(combined_equity, combined_returns)
+            benchmark_metrics = st.session_state.backtest_results['benchmark_metrics']
+            
+            col1a, col1b = st.columns(2)
+            
+            with col1a:
+                st.metric("Total Return", f"{combined_metrics['total_return']:.2f}%", 
+                         delta=f"{combined_metrics['total_return'] - benchmark_metrics['total_return']:.2f}%")
+                st.metric("Annualized Return", f"{combined_metrics['annualized_return']:.2f}%")
+                st.metric("Sharpe Ratio", f"{combined_metrics['sharpe_ratio']:.2f}")
+                st.metric("Sortino Ratio", f"{combined_metrics['sortino_ratio']:.2f}")
+                st.metric("Max Drawdown", f"{combined_metrics['max_drawdown']:.2f}%")
+            
+            with col1b:
+                st.metric("Win Rate", f"{combined_metrics['win_rate']:.1f}%")
+                st.metric("Total Trades", combined_metrics['total_trades'])
+                st.metric("Avg Trade Return", f"{combined_metrics['avg_trade_return']:.2f}%")
+                st.metric("Volatility", f"{combined_metrics['volatility']:.2f}%")
+                st.metric("Calmar Ratio", f"{combined_metrics['calmar_ratio']:.2f}")
+        
         with col2:
-            st.metric("Active Signals", len(st.session_state.signals))
-        with col3:
-            st.metric("Active Strategies", len(st.session_state.strategies))
+            st.subheader("📊 Portfolio Distribution")
+            
+            # Strategy allocation pie chart
+            strategy_names = list(st.session_state.backtest_results['strategies'].keys())
+            strategy_returns = [st.session_state.backtest_results['strategies'][name]['metrics']['total_return'] for name in strategy_names]
+            
+            fig_pie = go.Figure(data=[go.Pie(
+                labels=strategy_names,
+                values=strategy_returns,
+                hole=0.3,
+                marker_colors=['#1976d2', '#d32f2f', '#388e3c', '#f57c00', '#7b1fa2']
+            )])
+            fig_pie.update_layout(
+                title="Strategy Performance Distribution",
+                plot_bgcolor='white',
+                paper_bgcolor='white'
+            )
+            st.plotly_chart(fig_pie, use_container_width=True)
         
-        if total_allocation > 100:
-            st.error(f"⚠️ Total allocation exceeds 100% ({total_allocation:.1f}%)")
-        elif total_allocation < 100:
-            st.warning(f"ℹ️ Total allocation: {total_allocation:.1f}% ({(100-total_allocation):.1f}% in cash)")
-        else:
-            st.success(f"✅ Total allocation: {total_allocation:.1f}%")
-    
-    # Strategy overview
-    if st.session_state.strategies:
-        st.subheader("🎯 Strategy Overview")
+        # Equity curve comparison
+        st.subheader("📈 Equity Curve Comparison")
         
-        # Display strategies
-        for strategy in st.session_state.strategies:
+        fig = go.Figure()
+        
+        # Add benchmark
+        fig.add_trace(go.Scatter(
+            x=st.session_state.backtest_results['benchmark_equity'].index,
+            y=st.session_state.backtest_results['benchmark_equity'].values,
+            mode='lines',
+            name='Benchmark',
+            line=dict(color='#d32f2f', width=2, dash='dash')
+        ))
+        
+        # Add portfolio
+        fig.add_trace(go.Scatter(
+            x=st.session_state.backtest_results['combined_equity'].index,
+            y=st.session_state.backtest_results['combined_equity'].values,
+            mode='lines',
+            name='Portfolio',
+            line=dict(color='#1976d2', width=3)
+        ))
+        
+        fig.update_layout(
+            title="Portfolio Performance vs Benchmark",
+            xaxis_title="Date",
+            yaxis_title="Equity Value",
+            hovermode='x unified',
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            legend=dict(
+                font=dict(color='#333'),
+                bgcolor='white',
+                bordercolor='#ccc',
+                borderwidth=1
+            )
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Drawdown chart
+        st.subheader("📉 Drawdown Analysis")
+        
+        # Calculate drawdown for portfolio and benchmark
+        portfolio_rolling_max = combined_equity.expanding().max()
+        portfolio_drawdown = (combined_equity - portfolio_rolling_max) / portfolio_rolling_max * 100
+        
+        benchmark_rolling_max = benchmark_equity.expanding().max()
+        benchmark_drawdown = (benchmark_equity - benchmark_rolling_max) / benchmark_rolling_max * 100
+        
+        fig_drawdown = go.Figure()
+        
+        # Add portfolio drawdown
+        fig_drawdown.add_trace(go.Scatter(
+            x=portfolio_drawdown.index,
+            y=portfolio_drawdown.values,
+            mode='lines',
+            name='Portfolio Drawdown',
+            line=dict(color='#d32f2f', width=2),
+            fill='tonexty'
+        ))
+        
+        # Add benchmark drawdown
+        fig_drawdown.add_trace(go.Scatter(
+            x=benchmark_drawdown.index,
+            y=benchmark_drawdown.values,
+            mode='lines',
+            name='Benchmark Drawdown',
+            line=dict(color='#1976d2', width=2, dash='dash'),
+            fill='tonexty'
+        ))
+        
+        fig_drawdown.update_layout(
+            title="Portfolio vs Benchmark Drawdown",
+            xaxis_title="Date",
+            yaxis_title="Drawdown (%)",
+            hovermode='x unified',
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            legend=dict(
+                font=dict(color='#333'),
+                bgcolor='white',
+                bordercolor='#ccc',
+                borderwidth=1
+            ),
+            yaxis=dict(range=[min(portfolio_drawdown.min(), benchmark_drawdown.min()) * 1.1, 5])
+        )
+        
+        st.plotly_chart(fig_drawdown, use_container_width=True)
+        
+        # Detailed performance comparison table
+        st.subheader("📊 Performance Comparison")
+        
+        # Create comparison table
+        comparison_data = {
+            'Metric': ['Total Return (%)', 'Annualized Return (%)', 'Sharpe Ratio', 'Sortino Ratio', 
+                      'Max Drawdown (%)', 'Volatility (%)', 'Win Rate (%)', 'Total Trades', 'Calmar Ratio'],
+            'Portfolio': [
+                f"{combined_metrics['total_return']:.2f}",
+                f"{combined_metrics['annualized_return']:.2f}",
+                f"{combined_metrics['sharpe_ratio']:.2f}",
+                f"{combined_metrics['sortino_ratio']:.2f}",
+                f"{combined_metrics['max_drawdown']:.2f}",
+                f"{combined_metrics['volatility']:.2f}",
+                f"{combined_metrics['win_rate']:.1f}",
+                combined_metrics['total_trades'],
+                f"{combined_metrics['calmar_ratio']:.2f}"
+            ],
+            'Benchmark': [
+                f"{benchmark_metrics['total_return']:.2f}",
+                f"{benchmark_metrics['annualized_return']:.2f}",
+                f"{benchmark_metrics['sharpe_ratio']:.2f}",
+                f"{benchmark_metrics['sortino_ratio']:.2f}",
+                f"{benchmark_metrics['max_drawdown']:.2f}",
+                f"{benchmark_metrics['volatility']:.2f}",
+                f"{benchmark_metrics['win_rate']:.1f}",
+                benchmark_metrics['total_trades'],
+                f"{benchmark_metrics['calmar_ratio']:.2f}"
+            ],
+            'Excess': [
+                f"{combined_metrics['total_return'] - benchmark_metrics['total_return']:.2f}",
+                f"{combined_metrics['annualized_return'] - benchmark_metrics['annualized_return']:.2f}",
+                f"{combined_metrics['sharpe_ratio'] - benchmark_metrics['sharpe_ratio']:.2f}",
+                f"{combined_metrics['sortino_ratio'] - benchmark_metrics['sortino_ratio']:.2f}",
+                f"{combined_metrics['max_drawdown'] - benchmark_metrics['max_drawdown']:.2f}",
+                f"{combined_metrics['volatility'] - benchmark_metrics['volatility']:.2f}",
+                f"{combined_metrics['win_rate'] - benchmark_metrics['win_rate']:.1f}",
+                combined_metrics['total_trades'] - benchmark_metrics['total_trades'],
+                f"{combined_metrics['calmar_ratio'] - benchmark_metrics['calmar_ratio']:.2f}"
+            ]
+        }
+        
+        df_comparison = pd.DataFrame(comparison_data)
+        st.dataframe(df_comparison, use_container_width=True)
+        
+        # Individual strategy analysis
+        if len(st.session_state.backtest_results['strategies']) > 0:
             with st.container():
-                st.markdown(f"""
-                <div class="signal-card">
-                    <div class="signal-header">
-                        <h3 class="signal-name">{strategy['name']}</h3>
-                        <span class="signal-type">Strategy</span>
-                    </div>
-                    <div class="allocation-container">
-                        <div class="allocation-header">
-                            <span>Condition</span>
+                st.markdown('<div class="custom-container">', unsafe_allow_html=True)
+                st.subheader("🔍 Individual Strategy Analysis")
+                
+                strategy_names = list(st.session_state.backtest_results['strategies'].keys())
+                selected_strategy = st.selectbox("Select Strategy for Detailed Analysis", strategy_names)
+                
+                if selected_strategy:
+                    strategy_result = st.session_state.backtest_results['strategies'][selected_strategy]
+                    
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.subheader(f"📈 {selected_strategy} Performance")
+                        
+                        # Key metrics
+                        metrics = strategy_result['metrics']
+                        col1a, col1b = st.columns(2)
+                        
+                        with col1a:
+                            st.metric("Total Return", f"{metrics['total_return']:.2f}%", 
+                                     delta=f"{metrics['total_return'] - benchmark_metrics['total_return']:.2f}%")
+                            st.metric("Annualized Return", f"{metrics['annualized_return']:.2f}%")
+                            st.metric("Sharpe Ratio", f"{metrics['sharpe_ratio']:.2f}")
+                            st.metric("Sortino Ratio", f"{metrics['sortino_ratio']:.2f}")
+                            st.metric("Max Drawdown", f"{metrics['max_drawdown']:.2f}%")
+                        
+                        with col1b:
+                            st.metric("Win Rate", f"{metrics['win_rate']:.1f}%")
+                            st.metric("Total Trades", metrics['total_trades'])
+                            st.metric("Avg Trade Return", f"{metrics['avg_trade_return']:.2f}%")
+                            st.metric("Volatility", f"{metrics['volatility']:.2f}%")
+                            st.metric("Calmar Ratio", f"{metrics['calmar_ratio']:.2f}")
+                    
+                    with col2:
+                        st.subheader(f"📊 {selected_strategy} Equity Curve")
+                        
+                        # Individual strategy equity curve
+                        strategy_equity = strategy_result['equity_curve']
+                        
+                        fig_strategy = go.Figure()
+                        fig_strategy.add_trace(go.Scatter(
+                            x=strategy_equity.index,
+                            y=strategy_equity.values,
+                            mode='lines',
+                            name=selected_strategy,
+                            line=dict(color='#1976d2', width=2)
+                        ))
+                        fig_strategy.add_trace(go.Scatter(
+                            x=benchmark_equity.index,
+                            y=benchmark_equity.values,
+                            mode='lines',
+                            name='Benchmark',
+                            line=dict(color='#d32f2f', width=2, dash='dash')
+                        ))
+                        fig_strategy.update_layout(
+                            title=f"{selected_strategy} vs Benchmark",
+                            xaxis_title="Date",
+                            yaxis_title="Equity Value",
+                            hovermode='x unified',
+                            plot_bgcolor='white',
+                            paper_bgcolor='white',
+                            legend=dict(
+                                font=dict(color='#333'),
+                                bgcolor='white',
+                                bordercolor='#ccc',
+                                borderwidth=1
+                            )
+                        )
+                        st.plotly_chart(fig_strategy, use_container_width=True)
+                
+                st.markdown('</div>', unsafe_allow_html=True)
+    else:
+        # Show configuration when no results exist
+        st.header("📈 Backtest Configuration")
+        
+        # Backtest configuration
+        col1, col2 = st.columns(2)
+        with col1:
+            start_date = st.date_input("Start Date", value=datetime(1900, 1, 1).date())
+            benchmark_ticker = st.text_input("Benchmark Ticker", value="SPY")
+        with col2:
+            end_date = st.date_input("End Date", value=datetime.now())
+        
+        # Quick stats
+        if st.session_state.output_allocations:
+            st.subheader("📊 Quick Stats")
+            
+            # Calculate unique allocations used in strategies
+            strategy_allocations = set()
+            for strategy in st.session_state.strategies:
+                strategy_allocations.add(strategy['output_allocation'])
+                strategy_allocations.add(strategy['else_allocation'])
+            
+            # Calculate total allocation only for allocations used in strategies
+            total_allocation = 0
+            for alloc_name in strategy_allocations:
+                if alloc_name in st.session_state.output_allocations:
+                    total_allocation += st.session_state.output_allocations[alloc_name]['total_weight']
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Total Allocations", f"{total_allocation}%")
+            with col2:
+                st.metric("Active Signals", len(st.session_state.signals))
+            with col3:
+                st.metric("Active Strategies", len(st.session_state.strategies))
+            
+            if total_allocation > 100:
+                st.error(f"⚠️ Total allocation exceeds 100% ({total_allocation:.1f}%)")
+            elif total_allocation < 100:
+                st.warning(f"ℹ️ Total allocation: {total_allocation:.1f}% ({(100-total_allocation):.1f}% in cash)")
+            else:
+                st.success(f"✅ Total allocation: {total_allocation:.1f}%")
+        
+        # Strategy overview
+        if st.session_state.strategies:
+            st.subheader("🎯 Strategy Overview")
+            
+            # Display strategies
+            for strategy in st.session_state.strategies:
+                with st.container():
+                    st.markdown(f"""
+                    <div class="signal-card">
+                        <div class="signal-header">
+                            <h3 class="signal-name">{strategy['name']}</h3>
+                            <span class="signal-type">Strategy</span>
                         </div>
-                        <p>
-                            <strong>IF</strong> {" ".join([f"{f'NOT {signal_config["signal"]}' if signal_config['negated'] else signal_config['signal']}{f' {signal_config["operator"]}' if signal_idx > 0 else ''}" for signal_idx, signal_config in enumerate(strategy['signals'])])} 
-                            <strong>THEN</strong> {strategy['output_allocation']} <strong>ELSE</strong> {strategy['else_allocation']}
-                        </p>
+                        <div class="allocation-container">
+                            <div class="allocation-header">
+                                <span>Condition</span>
+                            </div>
+                            <p>
+                                <strong>IF</strong> {" ".join([f"{f'NOT {signal_config["signal"]}' if signal_config['negated'] else signal_config['signal']}{f' {signal_config["operator"]}' if signal_idx > 0 else ''}" for signal_idx, signal_config in enumerate(strategy['signals'])])} 
+                                <strong>THEN</strong> {strategy['output_allocation']} <strong>ELSE</strong> {strategy['else_allocation']}
+                            </p>
+                        </div>
                     </div>
-                </div>
-                """, unsafe_allow_html=True)
-    
-    # Run backtest button
-    if st.button("🚀 Run Backtest", type="primary", use_container_width=True):
-        if not st.session_state.signals:
-            st.error("Please add at least one signal before running backtest.")
-        elif not st.session_state.strategies:
-            st.error("Please create at least one strategy before running backtest.")
+                    """, unsafe_allow_html=True)
+        
+        # Run backtest button
+        if st.button("🚀 Run Backtest", type="primary", use_container_width=True):
+            if not st.session_state.signals:
+                st.error("Please add at least one signal before running backtest.")
+            elif not st.session_state.strategies:
+                st.error("Please create at least one strategy before running backtest.")
         else:
             with st.spinner("Running backtest..."):
                 # Fetch data for all tickers
@@ -1379,290 +1647,6 @@ with tab4:
                 }
                 
                 st.success("Backtest completed successfully!")
-
-# Display backtest results
-if st.session_state.backtest_results:
-    st.header("📈 Backtest Results")
-    
-    # Portfolio overview
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("📊 Portfolio Performance")
-        
-        # Key metrics
-        combined_equity = st.session_state.backtest_results['combined_equity']
-        benchmark_equity = st.session_state.backtest_results['benchmark_equity']
-        
-        combined_returns = combined_equity.pct_change().dropna()
-        benchmark_returns = benchmark_equity.pct_change().dropna()
-        
-        combined_metrics = calculate_metrics(combined_equity, combined_returns)
-        benchmark_metrics = st.session_state.backtest_results['benchmark_metrics']
-        
-        col1a, col1b = st.columns(2)
-        
-        with col1a:
-            st.metric("Total Return", f"{combined_metrics['total_return']:.2f}%", 
-                     delta=f"{combined_metrics['total_return'] - benchmark_metrics['total_return']:.2f}%")
-            st.metric("Annualized Return", f"{combined_metrics['annualized_return']:.2f}%")
-            st.metric("Sharpe Ratio", f"{combined_metrics['sharpe_ratio']:.2f}")
-            st.metric("Sortino Ratio", f"{combined_metrics['sortino_ratio']:.2f}")
-            st.metric("Max Drawdown", f"{combined_metrics['max_drawdown']:.2f}%")
-        
-        with col1b:
-            st.metric("Win Rate", f"{combined_metrics['win_rate']:.1f}%")
-            st.metric("Total Trades", combined_metrics['total_trades'])
-            st.metric("Avg Trade Return", f"{combined_metrics['avg_trade_return']:.2f}%")
-            st.metric("Volatility", f"{combined_metrics['volatility']:.2f}%")
-            st.metric("Calmar Ratio", f"{combined_metrics['calmar_ratio']:.2f}")
-    
-    with col2:
-        st.subheader("📊 Portfolio Distribution")
-        
-        # Strategy allocation pie chart
-        strategy_names = list(st.session_state.backtest_results['strategies'].keys())
-        strategy_returns = [st.session_state.backtest_results['strategies'][name]['metrics']['total_return'] for name in strategy_names]
-        
-        fig_pie = go.Figure(data=[go.Pie(
-            labels=strategy_names,
-            values=strategy_returns,
-            hole=0.3,
-            marker_colors=['#1976d2', '#d32f2f', '#388e3c', '#f57c00', '#7b1fa2']
-        )])
-        fig_pie.update_layout(
-            title="Strategy Performance Distribution",
-            plot_bgcolor='white',
-            paper_bgcolor='white'
-        )
-        st.plotly_chart(fig_pie, use_container_width=True)
-    
-    # Equity curve comparison
-    st.subheader("📈 Equity Curve Comparison")
-    
-    fig = go.Figure()
-    
-    # Add benchmark
-    fig.add_trace(go.Scatter(
-        x=st.session_state.backtest_results['benchmark_equity'].index,
-        y=st.session_state.backtest_results['benchmark_equity'].values,
-        mode='lines',
-        name='Benchmark',
-        line=dict(color='#d32f2f', width=2, dash='dash')
-    ))
-    
-    # Add portfolio
-    fig.add_trace(go.Scatter(
-        x=st.session_state.backtest_results['combined_equity'].index,
-        y=st.session_state.backtest_results['combined_equity'].values,
-        mode='lines',
-        name='Portfolio',
-        line=dict(color='#1976d2', width=3)
-    ))
-    
-    fig.update_layout(
-        title="Portfolio Performance vs Benchmark",
-        xaxis_title="Date",
-        yaxis_title="Equity Value",
-        hovermode='x unified',
-        plot_bgcolor='white',
-        paper_bgcolor='white',
-        legend=dict(
-            font=dict(color='#333'),
-            bgcolor='white',
-            bordercolor='#ccc',
-            borderwidth=1
-        )
-    )
-    
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # Drawdown chart
-    st.subheader("📉 Drawdown Analysis")
-    
-    # Calculate drawdown for portfolio and benchmark
-    portfolio_rolling_max = combined_equity.expanding().max()
-    portfolio_drawdown = (combined_equity - portfolio_rolling_max) / portfolio_rolling_max * 100
-    
-    benchmark_rolling_max = benchmark_equity.expanding().max()
-    benchmark_drawdown = (benchmark_equity - benchmark_rolling_max) / benchmark_rolling_max * 100
-    
-    fig_drawdown = go.Figure()
-    
-    # Add portfolio drawdown
-    fig_drawdown.add_trace(go.Scatter(
-        x=portfolio_drawdown.index,
-        y=portfolio_drawdown.values,
-        mode='lines',
-        name='Portfolio Drawdown',
-        line=dict(color='#d32f2f', width=2),
-        fill='tonexty'
-    ))
-    
-    # Add benchmark drawdown
-    fig_drawdown.add_trace(go.Scatter(
-        x=benchmark_drawdown.index,
-        y=benchmark_drawdown.values,
-        mode='lines',
-        name='Benchmark Drawdown',
-        line=dict(color='#1976d2', width=2, dash='dash'),
-        fill='tonexty'
-    ))
-    
-    fig_drawdown.update_layout(
-        title="Portfolio vs Benchmark Drawdown",
-        xaxis_title="Date",
-        yaxis_title="Drawdown (%)",
-        hovermode='x unified',
-        plot_bgcolor='white',
-        paper_bgcolor='white',
-        legend=dict(
-            font=dict(color='#333'),
-            bgcolor='white',
-            bordercolor='#ccc',
-            borderwidth=1
-        ),
-        yaxis=dict(range=[min(portfolio_drawdown.min(), benchmark_drawdown.min()) * 1.1, 5])
-    )
-    
-    st.plotly_chart(fig_drawdown, use_container_width=True)
-    
-    # Detailed performance comparison table
-    st.subheader("📊 Performance Comparison")
-    
-    # Create comparison table
-    comparison_data = {
-        'Metric': ['Total Return (%)', 'Annualized Return (%)', 'Sharpe Ratio', 'Sortino Ratio', 
-                  'Max Drawdown (%)', 'Volatility (%)', 'Win Rate (%)', 'Total Trades', 'Calmar Ratio'],
-        'Portfolio': [
-            f"{combined_metrics['total_return']:.2f}",
-            f"{combined_metrics['annualized_return']:.2f}",
-            f"{combined_metrics['sharpe_ratio']:.2f}",
-            f"{combined_metrics['sortino_ratio']:.2f}",
-            f"{combined_metrics['max_drawdown']:.2f}",
-            f"{combined_metrics['volatility']:.2f}",
-            f"{combined_metrics['win_rate']:.1f}",
-            combined_metrics['total_trades'],
-            f"{combined_metrics['calmar_ratio']:.2f}"
-        ],
-        'Benchmark': [
-            f"{benchmark_metrics['total_return']:.2f}",
-            f"{benchmark_metrics['annualized_return']:.2f}",
-            f"{benchmark_metrics['sharpe_ratio']:.2f}",
-            f"{benchmark_metrics['sortino_ratio']:.2f}",
-            f"{benchmark_metrics['max_drawdown']:.2f}",
-            f"{benchmark_metrics['volatility']:.2f}",
-            f"{benchmark_metrics['win_rate']:.1f}",
-            benchmark_metrics['total_trades'],
-            f"{benchmark_metrics['calmar_ratio']:.2f}"
-        ],
-        'Excess': [
-            f"{combined_metrics['total_return'] - benchmark_metrics['total_return']:.2f}",
-            f"{combined_metrics['annualized_return'] - benchmark_metrics['annualized_return']:.2f}",
-            f"{combined_metrics['sharpe_ratio'] - benchmark_metrics['sharpe_ratio']:.2f}",
-            f"{combined_metrics['sortino_ratio'] - benchmark_metrics['sortino_ratio']:.2f}",
-            f"{combined_metrics['max_drawdown'] - benchmark_metrics['max_drawdown']:.2f}",
-            f"{combined_metrics['volatility'] - benchmark_metrics['volatility']:.2f}",
-            f"{combined_metrics['win_rate'] - benchmark_metrics['win_rate']:.1f}",
-            combined_metrics['total_trades'] - benchmark_metrics['total_trades'],
-            f"{combined_metrics['calmar_ratio'] - benchmark_metrics['calmar_ratio']:.2f}"
-        ]
-    }
-    
-    df_comparison = pd.DataFrame(comparison_data)
-    st.dataframe(df_comparison, use_container_width=True)
-    
-    # Individual strategy analysis
-    if len(st.session_state.backtest_results['strategies']) > 0:
-        with st.container():
-            st.markdown('<div class="custom-container">', unsafe_allow_html=True)
-            st.subheader("🔍 Individual Strategy Analysis")
-            
-            strategy_names = list(st.session_state.backtest_results['strategies'].keys())
-            selected_strategy = st.selectbox("Select Strategy for Detailed Analysis", strategy_names)
-            
-            if selected_strategy:
-                strategy_result = st.session_state.backtest_results['strategies'][selected_strategy]
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.subheader(f"📈 {selected_strategy} Performance")
-                    
-                    # Key metrics
-                    metrics = strategy_result['metrics']
-                    col1a, col1b = st.columns(2)
-                    
-                    with col1a:
-                        st.metric("Total Return", f"{metrics['total_return']:.2f}%", 
-                                 delta=f"{metrics['total_return'] - benchmark_metrics['total_return']:.2f}%")
-                        st.metric("Annualized Return", f"{metrics['annualized_return']:.2f}%")
-                        st.metric("Sharpe Ratio", f"{metrics['sharpe_ratio']:.2f}")
-                        st.metric("Sortino Ratio", f"{metrics['sortino_ratio']:.2f}")
-                        st.metric("Max Drawdown", f"{metrics['max_drawdown']:.2f}%")
-                    
-                    with col1b:
-                        st.metric("Win Rate", f"{metrics['win_rate']:.1f}%")
-                        st.metric("Total Trades", metrics['total_trades'])
-                        st.metric("Avg Trade Return", f"{metrics['avg_trade_return']:.2f}%")
-                        st.metric("Volatility", f"{metrics['volatility']:.2f}%")
-                        st.metric("Calmar Ratio", f"{metrics['calmar_ratio']:.2f}")
-                
-                with col2:
-                    st.subheader("📊 Strategy Distribution")
-                    
-                    # Signal frequency analysis
-                    signals = strategy_result['signals']
-                    signal_frequency = signals.value_counts()
-                    
-                    fig_pie = go.Figure(data=[go.Pie(
-                        labels=['No Signal', 'Signal'],
-                        values=[signal_frequency.get(0, 0), signal_frequency.get(1, 0)],
-                        hole=0.3,
-                        marker_colors=['#e3f2fd', '#1976d2']
-                    )])
-                    fig_pie.update_layout(
-                        title="Strategy Signal Distribution",
-                        plot_bgcolor='white',
-                        paper_bgcolor='white'
-                    )
-                    st.plotly_chart(fig_pie, use_container_width=True)
-                
-                # Strategy equity curve
-                st.subheader("📈 Strategy Equity Curve")
-                
-                fig_strategy = go.Figure()
-                
-                # Add strategy equity curve
-                fig_strategy.add_trace(go.Scatter(
-                    x=strategy_result['equity_curve'].index,
-                    y=strategy_result['equity_curve'].values,
-                    mode='lines',
-                    name=f"{selected_strategy}",
-                    line=dict(color='#1976d2', width=2)
-                ))
-                
-                # Add benchmark
-                fig_strategy.add_trace(go.Scatter(
-                    x=st.session_state.backtest_results['benchmark_equity'].index,
-                    y=st.session_state.backtest_results['benchmark_equity'].values,
-                    mode='lines',
-                    name='Benchmark',
-                    line=dict(color='#d32f2f', width=2, dash='dash')
-                ))
-                
-                fig_strategy.update_layout(
-                    title=f"{selected_strategy} vs Benchmark",
-                    xaxis_title="Date",
-                    yaxis_title="Equity Value",
-                    hovermode='x unified',
-                    plot_bgcolor='white',
-                    paper_bgcolor='white'
-                )
-                
-                st.plotly_chart(fig_strategy, use_container_width=True)
-            
-            st.markdown('</div>', unsafe_allow_html=True)
 
 # Footer
 st.write("---")
