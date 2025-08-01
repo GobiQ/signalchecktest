@@ -795,15 +795,7 @@ rsi_period = st.sidebar.number_input("RSI Period (Days)", min_value=1, max_value
 rsi_method = "wilders"
 
 # Preconditions System
-col1, col2 = st.sidebar.columns([3, 1])
-with col1:
-    st.subheader("🔍 Preconditions")
-with col2:
-    st.markdown("""
-    <div style="display: flex; justify-content: flex-end; align-items: center; height: 100%;">
-        <span title="Preconditions add additional RSI conditions that must ALL be true before the main signal is considered. This allows for more complex multi-condition strategies." style="cursor: help; font-size: 18px;">❓</span>
-    </div>
-    """, unsafe_allow_html=True)
+st.sidebar.subheader("🔍 Preconditions", help="Preconditions add additional RSI conditions that must ALL be true before the main signal is considered. This allows for more complex multi-condition strategies.")
 
 # Initialize preconditions in session state if not exists
 if 'preconditions' not in st.session_state:
