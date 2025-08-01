@@ -400,6 +400,116 @@ def calculate_benchmark_equity_curve(signal_prices: pd.Series, benchmark_prices:
     
     return equity_curve
 
+def calculate_benchmark_equity_curve_comparison(signal_prices: pd.Series, comparison_prices: pd.Series, benchmark_prices: pd.Series, comparison_operator: str = "less_than", rsi_period: int = 14, rsi_method: str = "wilders", preconditions: List[Dict] = None, precondition_data: Dict[str, pd.Series] = None) -> pd.Series:
+    """
+    Calculate benchmark equity curve using identical logic to the comparison strategy but with benchmark prices.
+    This ensures the benchmark follows the exact same conditions and preconditions as the comparison strategy.
+    """
+    # Calculate RSI for both tickers (identical to strategy)
+    signal_rsi = calculate_rsi(signal_prices, window=rsi_period, method=rsi_method)
+    comparison_rsi = calculate_rsi(comparison_prices, window=rsi_period, method=rsi_method)
+    
+    # Generate buy signals based on comparison operator (identical to strategy)
+    if comparison_operator == "greater_than":
+        base_signals = (signal_rsi > comparison_rsi).astype(int)
+    else:  # less_than (default)
+        base_signals = (signal_rsi < comparison_rsi).astype(int)
+    
+    # Apply preconditions if provided (identical to strategy)
+    if preconditions and precondition_data:
+        precondition_mask = pd.Series(True, index=signal_prices.index)
+        
+        # Calculate main signal output for reference
+        main_signal_output = base_signals.copy()
+        
+        # Track precondition signal outputs
+        precondition_outputs = {}
+        
+        for i, precondition in enumerate(preconditions):
+            precondition_ticker = precondition['signal_ticker']
+            if precondition_ticker in precondition_data:
+                # Use custom RSI period if specified, otherwise use default
+                precondition_rsi_period = precondition.get('rsi_period', rsi_period)
+                precondition_rsi = calculate_rsi(precondition_data[precondition_ticker], window=precondition_rsi_period, method=rsi_method)
+                
+                if precondition.get('type') == 'comparison':
+                    # RSI comparison precondition
+                    comparison_ticker = precondition['comparison_ticker']
+                    if comparison_ticker in precondition_data:
+                        # Use custom RSI periods for comparison
+                        signal_rsi_period = precondition.get('signal_rsi_period', rsi_period)
+                        comparison_rsi_period = precondition.get('comparison_rsi_period', rsi_period)
+                        precondition_comparison_operator = precondition.get('comparison_operator', 'less_than')
+                        
+                        signal_precondition_rsi = calculate_rsi(precondition_data[precondition_ticker], window=signal_rsi_period, method=rsi_method)
+                        comparison_precondition_rsi = calculate_rsi(precondition_data[comparison_ticker], window=comparison_rsi_period, method=rsi_method)
+                        
+                        if precondition_comparison_operator == "greater_than":
+                            precondition_condition = (signal_precondition_rsi > comparison_precondition_rsi)
+                        else:  # less_than (default)
+                            precondition_condition = (signal_precondition_rsi < comparison_precondition_rsi)
+                        
+                        # Store precondition output for reference
+                        precondition_outputs[f"Precondition {i+1} Signal"] = precondition_condition.astype(int)
+                    else:
+                        precondition_condition = pd.Series(False, index=signal_prices.index)
+                else:
+                    # RSI threshold precondition
+                    precondition_comparison = precondition.get('comparison', 'less_than')
+                    precondition_threshold = precondition.get('threshold', 50.0)
+                    
+                    if precondition_comparison == "less_than":
+                        precondition_condition = (precondition_rsi <= precondition_threshold)
+                    else:  # greater_than
+                        precondition_condition = (precondition_rsi >= precondition_threshold)
+                
+                precondition_mask = precondition_mask & precondition_condition
+        
+        signals = base_signals & precondition_mask
+    else:
+        signals = base_signals
+    
+    # Calculate equity curve day by day - buy/sell BENCHMARK based on SIGNAL vs COMPARISON RSI (identical logic to strategy)
+    equity_curve = pd.Series(1.0, index=benchmark_prices.index)
+    current_equity = 1.0
+    in_position = False
+    entry_equity = 1.0
+    entry_date = None
+    entry_price = None
+    
+    for i, date in enumerate(benchmark_prices.index):
+        current_signal = signals[date] if date in signals.index else 0
+        current_price = benchmark_prices[date]  # BENCHMARK price
+        
+        if current_signal == 1 and not in_position:
+            # Enter position - buy BENCHMARK when SIGNAL RSI meets comparison condition
+            in_position = True
+            entry_equity = current_equity
+            entry_date = date
+            entry_price = current_price
+            
+        elif current_signal == 0 and in_position:
+            # Exit position - sell BENCHMARK when SIGNAL RSI no longer meets comparison condition
+            trade_return = (current_price - entry_price) / entry_price
+            current_equity = entry_equity * (1 + trade_return)
+            in_position = False
+        
+        # Update equity curve
+        if in_position:
+            # Mark-to-market the BENCHMARK position
+            current_equity = entry_equity * (current_price / entry_price)
+        
+        equity_curve[date] = current_equity
+    
+    # Handle case where we're still in position at the end
+    if in_position:
+        final_price = benchmark_prices.iloc[-1]
+        trade_return = (final_price - entry_price) / entry_price
+        current_equity = entry_equity * (1 + trade_return)
+        equity_curve.iloc[-1] = current_equity
+    
+    return equity_curve
+
 def analyze_rsi_comparison_signals(signal_prices: pd.Series, comparison_prices: pd.Series, target_prices: pd.Series, rsi_period: int = 14, rsi_method: str = "wilders", comparison_operator: str = "less_than", use_quantstats: bool = True, preconditions: List[Dict] = None, precondition_data: Dict[str, pd.Series] = None) -> Dict:
     """
     Analyze RSI comparison signals: when signal RSI < comparison RSI, buy target, else hold cash
@@ -1041,9 +1151,9 @@ def run_rsi_comparison_analysis(signal_ticker: str, comparison_ticker: str, targ
     progress_bar.progress(0.9)
     analysis = analyze_rsi_comparison_signals(signal_data, comparison_data, target_data, rsi_period, rsi_method, comparison, use_quantstats, preconditions, precondition_data)
     
-    # Calculate benchmark equity curve using identical logic to strategy but with benchmark prices
-    benchmark_equity_curve = calculate_benchmark_equity_curve(
-        signal_data, benchmark_data, 0, comparison, rsi_period, rsi_method, 
+    # Calculate benchmark equity curve using identical logic to comparison strategy but with benchmark prices
+    benchmark_equity_curve = calculate_benchmark_equity_curve_comparison(
+        signal_data, comparison_data, benchmark_data, comparison, rsi_period, rsi_method, 
         preconditions, precondition_data
     )
     
