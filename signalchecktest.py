@@ -1740,21 +1740,31 @@ st.sidebar.markdown("---")
 final_benchmark_ticker = custom_benchmark.strip() if custom_benchmark.strip() else benchmark_ticker
 
 if st.sidebar.button("🚀 Run RSI Analysis", type="primary", use_container_width=True):
+    st.sidebar.info("🔄 Starting analysis...")
     if (not use_date_range or (start_date and end_date and start_date < end_date)):
         try:
             exclusions = st.session_state.get('date_exclusions', []) if use_exclusions else None
             
             if analysis_mode == "RSI Threshold":
+                # Ensure RSI range variables are defined
+                rsi_min_to_use = rsi_min if 'rsi_min' in locals() else 0.0
+                rsi_max_to_use = rsi_max if 'rsi_max' in locals() else 100.0
+                
                 # RSI Threshold mode validation
-                if use_custom_range and (not rsi_min or not rsi_max or rsi_min >= rsi_max):
+                if use_custom_range and (not rsi_min_to_use or not rsi_max_to_use or rsi_min_to_use >= rsi_max_to_use):
                     st.sidebar.error("Please ensure RSI Min is less than RSI Max")
                 else:
-                    results_df, benchmark, data_messages = run_rsi_analysis(signal_ticker, target_ticker, rsi_threshold, comparison, start_date, end_date, rsi_period, rsi_method, final_benchmark_ticker, use_quantstats, st.session_state.get('preconditions', []), exclusions)
+                    # Ensure rsi_period is defined for RSI Threshold mode
+                    rsi_period_to_use = rsi_period if 'rsi_period' in locals() else 10
+                    results_df, benchmark, data_messages = run_rsi_analysis(signal_ticker, target_ticker, rsi_threshold, comparison, start_date, end_date, rsi_period_to_use, rsi_method, final_benchmark_ticker, use_quantstats, st.session_state.get('preconditions', []), exclusions)
             else:
                 # RSI Comparison mode
                 # Get buy-and-hold benchmark
                 final_buyhold_benchmark = custom_buyhold if use_custom_buyhold and custom_buyhold.strip() else buyhold_benchmark
-                results_df, benchmark, buyhold_benchmark, data_messages = run_rsi_comparison_analysis(signal_ticker, comparison_ticker, target_ticker, fallback_ticker, signal_rsi_period, comparison_rsi_period, start_date, end_date, rsi_method, final_benchmark_ticker, final_buyhold_benchmark, use_quantstats, st.session_state.get('preconditions', []), exclusions)
+                # Ensure RSI periods are defined for RSI Comparison mode
+                signal_rsi_period_to_use = signal_rsi_period if 'signal_rsi_period' in locals() else 10
+                comparison_rsi_period_to_use = comparison_rsi_period if 'comparison_rsi_period' in locals() else 10
+                results_df, benchmark, buyhold_benchmark, data_messages = run_rsi_comparison_analysis(signal_ticker, comparison_ticker, target_ticker, fallback_ticker, signal_rsi_period_to_use, comparison_rsi_period_to_use, start_date, end_date, rsi_method, final_benchmark_ticker, final_buyhold_benchmark, use_quantstats, st.session_state.get('preconditions', []), exclusions)
             
             if results_df is not None and benchmark is not None and not results_df.empty:
                 # Store analysis results in session state
@@ -1762,7 +1772,12 @@ if st.sidebar.button("🚀 Run RSI Analysis", type="primary", use_container_widt
                 st.session_state['benchmark'] = benchmark
                 st.session_state['signal_data'] = get_stock_data(signal_ticker, start_date, end_date, exclusions)
                 st.session_state['benchmark_data'] = get_stock_data(final_benchmark_ticker, start_date, end_date, exclusions)
-                st.session_state['rsi_period'] = rsi_period
+                # Store the correct RSI period based on analysis mode
+                if analysis_mode == "RSI Threshold":
+                    st.session_state['rsi_period'] = rsi_period_to_use
+                else:
+                    st.session_state['rsi_period'] = signal_rsi_period_to_use
+                
                 st.session_state['comparison'] = comparison
                 st.session_state['benchmark_ticker'] = final_benchmark_ticker
                 st.session_state['analysis_mode'] = analysis_mode
@@ -1774,6 +1789,8 @@ if st.sidebar.button("🚀 Run RSI Analysis", type="primary", use_container_widt
                 st.session_state['data_messages'] = data_messages
                 
                 st.sidebar.success("✅ Analysis completed successfully!")
+            else:
+                st.sidebar.error("❌ Analysis failed - no results generated")
                 
         except Exception as e:
             st.sidebar.error(f"❌ Error during analysis: {str(e)}")
