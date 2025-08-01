@@ -557,13 +557,18 @@ def run_rsi_analysis(signal_ticker: str, target_ticker: str, rsi_threshold: floa
     # Calculate benchmark returns for statistical testing
     benchmark_returns = benchmark_data.pct_change().dropna()
     
-    # Generate RSI thresholds based on condition
-    if comparison == "less_than":
-        # Test values from 0 to the threshold (every 0.5)
-        rsi_thresholds = np.arange(0, rsi_threshold + 0.5, 0.5)
-    else:  # greater_than
-        # Test values from the threshold to 100 (every 0.5)
-        rsi_thresholds = np.arange(rsi_threshold, 100.5, 0.5)
+    # Generate RSI thresholds based on condition and custom range option
+    if rsi_min is not None and rsi_max is not None:
+        # Use custom range
+        rsi_thresholds = np.arange(rsi_min, rsi_max + 0.5, 0.5)
+    else:
+        # Use full range based on condition
+        if comparison == "less_than":
+            # Test values from 0 to the threshold (every 0.5)
+            rsi_thresholds = np.arange(0, rsi_threshold + 0.5, 0.5)
+        else:  # greater_than
+            # Test values from the threshold to 100 (every 0.5)
+            rsi_thresholds = np.arange(rsi_threshold, 100.5, 0.5)
     
     results = []
     
@@ -899,13 +904,29 @@ custom_benchmark = st.sidebar.text_input("Custom Benchmark Ticker (optional)",
 
 # Set default RSI threshold based on condition
 if comparison == "less_than":
-    default_threshold = 25.0
+    default_threshold = 40.0
     st.sidebar.write("Buy signals: Signal RSI ≤ threshold")
 else:
-    default_threshold = 75.0
+    default_threshold = 60.0
     st.sidebar.write("Buy signals: Signal RSI ≥ threshold")
 
 rsi_threshold = st.sidebar.number_input("RSI Threshold", min_value=0.0, max_value=100.0, value=float(default_threshold), step=0.5, help="The RSI threshold to test. For 'RSI ≤ threshold', try 20-40. For 'RSI ≥ threshold', try 60-80.")
+
+# RSI Range options
+st.sidebar.subheader("📊 RSI Range Options")
+use_custom_range = st.sidebar.checkbox("Use custom RSI range", help="Check this to specify a custom range of RSI values to test instead of the full range based on the condition.")
+
+if use_custom_range:
+    col1, col2 = st.sidebar.columns(2)
+    with col1:
+        rsi_min = st.sidebar.number_input("RSI Range Min", min_value=0.0, max_value=100.0, value=float(default_threshold - 10), step=0.5, help="The lowest RSI threshold to test.")
+    with col2:
+        rsi_max = st.sidebar.number_input("RSI Range Max", min_value=0.0, max_value=100.0, value=float(default_threshold + 10), step=0.5, help="The highest RSI threshold to test.")
+    
+    if rsi_min >= rsi_max:
+        st.sidebar.error("RSI Min must be less than RSI Max")
+else:
+    rsi_min, rsi_max = None, None
 
 # Date range selection
 st.sidebar.subheader("📅 Date Range")
@@ -992,7 +1013,7 @@ st.sidebar.markdown("---")
 final_benchmark_ticker = custom_benchmark.strip() if custom_benchmark.strip() else benchmark_ticker
 
 if st.sidebar.button("🚀 Run RSI Analysis", type="primary", use_container_width=True):
-    if (not use_date_range or (start_date and end_date and start_date < end_date)):
+    if (not use_date_range or (start_date and end_date and start_date < end_date)) and (not use_custom_range or (rsi_min and rsi_max and rsi_min < rsi_max)):
         try:
             exclusions = st.session_state.get('date_exclusions', []) if use_exclusions else None
             results_df, benchmark, data_messages = run_rsi_analysis(signal_ticker, target_ticker, rsi_threshold, comparison, start_date, end_date, rsi_period, rsi_method, final_benchmark_ticker, use_quantstats, st.session_state.get('preconditions', []), exclusions)
@@ -1016,6 +1037,8 @@ if st.sidebar.button("🚀 Run RSI Analysis", type="primary", use_container_widt
     else:
         if use_date_range and (not start_date or not end_date or start_date >= end_date):
             st.sidebar.error("Please ensure start date is before end date")
+        if use_custom_range and (not rsi_min or not rsi_max or rsi_min >= rsi_max):
+            st.sidebar.error("Please ensure RSI Min is less than RSI Max")
 
 # Main content
 col1, col2 = st.columns([2, 1])
@@ -1047,10 +1070,13 @@ with col1:
     
     st.write(f"**Benchmark:** {benchmark_display} ({benchmark_description})")
     st.write(f"**RSI Period:** {rsi_period}-day RSI")
-    if comparison == "less_than":
-        st.write(f"**RSI Condition:** {signal_ticker} RSI ≤ {rsi_threshold} (testing 0 to {rsi_threshold})")
+    if use_custom_range and rsi_min is not None and rsi_max is not None:
+        st.write(f"**RSI Condition:** {signal_ticker} RSI {'≤' if comparison == 'less_than' else '≥'} {rsi_threshold} (testing {rsi_min} to {rsi_max})")
     else:
-        st.write(f"**RSI Condition:** {signal_ticker} RSI ≥ {rsi_threshold} (testing {rsi_threshold} to 100)")
+        if comparison == "less_than":
+            st.write(f"**RSI Condition:** {signal_ticker} RSI ≤ {rsi_threshold} (testing 0 to {rsi_threshold})")
+        else:
+            st.write(f"**RSI Condition:** {signal_ticker} RSI ≥ {rsi_threshold} (testing {rsi_threshold} to 100)")
     
     if use_date_range and start_date and end_date:
         st.write(f"**Date Range:** {start_date} to {end_date}")
