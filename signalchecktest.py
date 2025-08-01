@@ -526,10 +526,14 @@ def calculate_additional_metrics(returns: np.ndarray, equity_curve: pd.Series, a
     """Add more comprehensive risk metrics using QuantStats or fallback"""
     if len(returns) == 0 or equity_curve.empty:
         return {
+            'win_rate': 0.0,
+            'total_trades': 0,
+            'avg_hold_days': 0,
+            'sortino_ratio': 0.0,
+            'sharpe_ratio': 0.0,
             'max_drawdown': 0.0,
             'calmar_ratio': 0.0,
             'var_95': 0.0,
-            'sharpe_ratio': 0.0,
             'volatility': 0.0,
             'beta': 0.0,
             'alpha': 0.0,
@@ -538,6 +542,12 @@ def calculate_additional_metrics(returns: np.ndarray, equity_curve: pd.Series, a
     
     # Convert to pandas Series for QuantStats
     returns_series = pd.Series(returns)
+    
+    # Calculate basic metrics
+    win_rate = (returns > 0).mean() if len(returns) > 0 else 0.0
+    total_trades = len(returns)
+    avg_hold_days = len(equity_curve) / total_trades if total_trades > 0 else 0
+    sortino_ratio = calculate_sortino_ratio(returns, use_quantstats=use_quantstats)
     
     # Use QuantStats if available
     if QUANTSTATS_AVAILABLE and use_quantstats:
@@ -561,6 +571,10 @@ def calculate_additional_metrics(returns: np.ndarray, equity_curve: pd.Series, a
             information_ratio = qs.stats.information_ratio(returns_series, returns_series) if len(returns) > 0 else 0.0  # Self-IR as placeholder
             
             return {
+                'win_rate': win_rate,
+                'total_trades': total_trades,
+                'avg_hold_days': avg_hold_days,
+                'sortino_ratio': sortino_ratio,
                 'max_drawdown': max_dd,
                 'calmar_ratio': calmar_ratio if not np.isnan(calmar_ratio) else (annual_return / max_dd if max_dd > 0 else 0.0),
                 'var_95': var_95 if not np.isnan(var_95) else (np.percentile(returns, 5) if len(returns) > 0 else 0.0),
@@ -578,6 +592,10 @@ def calculate_additional_metrics(returns: np.ndarray, equity_curve: pd.Series, a
     sharpe = calculate_sharpe_ratio(returns, use_quantstats=use_quantstats)
     
     return {
+        'win_rate': win_rate,
+        'total_trades': total_trades,
+        'avg_hold_days': avg_hold_days,
+        'sortino_ratio': sortino_ratio,
         'max_drawdown': max_dd,
         'calmar_ratio': annual_return / max_dd if max_dd > 0 else 0.0,
         'var_95': np.percentile(returns, 5) if len(returns) > 0 else 0.0,
