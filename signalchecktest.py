@@ -1219,11 +1219,18 @@ analysis_mode = st.sidebar.selectbox("Analysis Mode",
                                     help="Choose between testing RSI thresholds or comparing RSI between two tickers.")
 
 # Input fields with help tooltips
-signal_ticker = st.sidebar.text_input("Signal Ticker", value="QQQ", help="The ticker that generates RSI signals. This is the stock/ETF whose RSI we'll use to decide when to buy/sell the target ticker.")
+if analysis_mode == "RSI Threshold":
+    signal_ticker = st.sidebar.text_input("Signal Ticker", value="QQQ", help="The ticker that generates RSI signals. This is the stock/ETF whose RSI we'll use to decide when to buy/sell the target ticker.")
+else:
+    signal_ticker = st.sidebar.text_input("Signal Ticker", value="KMLM", help="The ticker whose RSI will be compared against the fallback ticker's RSI.")
 
 # RSI Period selection
-rsi_period = st.sidebar.number_input("RSI Period (Days)", min_value=1, max_value=50, value=10, 
-                                    help="How many days to look back when calculating RSI. 10 is more sensitive to recent changes than the standard 14. Lower numbers make RSI more responsive to recent market movements.")
+if analysis_mode == "RSI Threshold":
+    rsi_period = st.sidebar.number_input("RSI Period (Days)", min_value=1, max_value=50, value=10, 
+                                        help="How many days to look back when calculating RSI. 10 is more sensitive to recent changes than the standard 14. Lower numbers make RSI more responsive to recent market movements.")
+else:
+    rsi_period = st.sidebar.number_input("RSI Period (Days)", min_value=1, max_value=50, value=10, 
+                                        help="How many days to look back when calculating RSI for both the signal ticker and fallback ticker. 10 is more sensitive to recent changes than the standard 14.")
 
 # RSI Calculation Method - Fixed to Wilder's method
 rsi_method = "wilders"
@@ -1236,8 +1243,8 @@ if analysis_mode == "RSI Threshold":
                                    help="Choose when to buy: 'RSI ≥ threshold' means buy when RSI is high (overbought), 'RSI ≤ threshold' means buy when RSI is low (oversold).")
 else:
     # RSI Comparison Mode
-    comparison_ticker = st.sidebar.text_input("Comparison Ticker", value="XLK", 
-                                             help="The second ticker to compare RSI against. The signal will trigger when the signal ticker's RSI is less than this ticker's RSI.")
+    comparison_ticker = st.sidebar.text_input("Fallback Ticker", value="BIL", 
+                                             help="The ticker to hold when the RSI comparison condition is not met. Defaults to BIL (cash equivalent).")
     comparison = "less_than"  # Default for RSI comparison mode
 
 # Set default target ticker based on RSI condition
@@ -1246,7 +1253,10 @@ if comparison == "less_than":
 else:
     default_target = "VIXY"
 
-target_ticker = st.sidebar.text_input("Target Ticker", value=default_target, help="The ticker to buy/sell based on the signal ticker's RSI. This is what you'll actually be trading.")
+if analysis_mode == "RSI Threshold":
+    target_ticker = st.sidebar.text_input("Target Ticker", value=default_target, help="The ticker to buy/sell based on the signal ticker's RSI. This is what you'll actually be trading.")
+else:
+    target_ticker = st.sidebar.text_input("Target Ticker", value="TQQQ", help="The ticker to buy when the signal ticker's RSI is less than the fallback ticker's RSI.")
 
 # Benchmark selection
 benchmark_options = ["SPY", "BIL", "TQQQ"]
@@ -2503,7 +2513,7 @@ if 'data_messages' in st.session_state and st.session_state['data_messages']:
 st.write("---")
 st.markdown("""
 <div style='text-align: center; padding: 20px; color: #666;'>
-    <strong>RSI Threshold Validation Tool</strong><br>
+    <strong>Signal Validation Tool</strong><br>
     Questions? Reach out to @Gobi on Discord
 </div>
 """, unsafe_allow_html=True)
