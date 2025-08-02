@@ -7,7 +7,79 @@ from plotly.subplots import make_subplots
 import plotly.express as px
 from datetime import datetime, timedelta
 import warnings
+import json
+import copy
 warnings.filterwarnings('ignore')
+
+# Initialize session state for logic blocks
+if 'logic_blocks' not in st.session_state:
+    st.session_state.logic_blocks = {}
+
+if 'copied_block' not in st.session_state:
+    st.session_state.copied_block = None
+
+if 'block_clipboard' not in st.session_state:
+    st.session_state.block_clipboard = []
+
+# Logic Block Management Functions
+def create_logic_block(block_type, data, name=None):
+    """Create a logic block with metadata"""
+    if name is None:
+        name = f"{block_type}_{len(st.session_state.logic_blocks) + 1}"
+    
+    block = {
+        'type': block_type,
+        'name': name,
+        'data': copy.deepcopy(data),
+        'created_at': datetime.now().isoformat(),
+        'description': f"{block_type} block with {len(data.get('signals', []))} signals"
+    }
+    
+    st.session_state.logic_blocks[name] = block
+    return name
+
+def copy_logic_block(block_data, block_type="custom"):
+    """Copy a logic block to clipboard"""
+    st.session_state.copied_block = {
+        'type': block_type,
+        'data': copy.deepcopy(block_data),
+        'copied_at': datetime.now().isoformat()
+    }
+    st.session_state.block_clipboard.append(st.session_state.copied_block)
+
+def paste_logic_block(target_location, target_key):
+    """Paste a logic block to target location"""
+    if st.session_state.copied_block:
+        # Deep copy to avoid reference issues
+        pasted_data = copy.deepcopy(st.session_state.copied_block['data'])
+        
+        # Update keys to avoid conflicts
+        if 'signals' in pasted_data:
+            for signal in pasted_data['signals']:
+                signal['signal'] = ''  # Reset signal selection
+        
+        # Add to target location
+        if target_key in target_location:
+            if isinstance(target_location[target_key], list):
+                target_location[target_key].append(pasted_data)
+            else:
+                target_location[target_key] = pasted_data
+        else:
+            target_location[target_key] = pasted_data
+        
+        return True
+    return False
+
+def get_block_preview(block_data):
+    """Generate a preview of the logic block"""
+    if 'signals' in block_data:
+        signal_count = len(block_data['signals'])
+        allocation = block_data.get('allocation', 'Not set')
+        return f"📋 {signal_count} signals → {allocation}"
+    elif 'type' in block_data:
+        return f"📋 {block_data['type']} → {block_data.get('allocation', 'Not set')}"
+    else:
+        return "📋 Custom block"
 
 # Page configuration
 st.set_page_config(
@@ -20,25 +92,172 @@ st.set_page_config(
 # Custom CSS for styling
 st.markdown("""
 <style>
+    /* Global styling */
+    * {
+        color: #333 !important;
+    }
+    
     /* Main styling */
     .main {
         padding: 2rem;
-        background: #f5f5f5;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         min-height: 100vh;
     }
     
     .stApp {
-        background: #f5f5f5;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     }
     
     /* Header styling */
     .main-header {
         font-size: 2.5rem;
         font-weight: 700;
-        color: #333;
+        color: white !important;
         text-align: center;
         margin-bottom: 2rem;
         padding: 1rem 0;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+    }
+    
+    /* Strategy Builder Styling */
+    .strategy-builder {
+        background: white;
+        border-radius: 16px;
+        padding: 2rem;
+        margin: 1rem 0;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        border: 1px solid rgba(255,255,255,0.2);
+    }
+    
+    .branch-container {
+        background: #f8f9fa;
+        border: 2px solid #e9ecef;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin: 1rem 0;
+        position: relative;
+        transition: all 0.3s ease;
+    }
+    
+    .branch-container:hover {
+        border-color: #007bff;
+        box-shadow: 0 4px 12px rgba(0,123,255,0.15);
+    }
+    
+    .branch-header {
+        background: linear-gradient(135deg, #007bff, #0056b3);
+        color: white !important;
+        padding: 0.75rem 1rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+        font-weight: 600;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .condition-block {
+        background: #e3f2fd;
+        border: 1px solid #bbdefb;
+        border-radius: 8px;
+        padding: 1rem;
+        margin: 0.5rem 0;
+        position: relative;
+    }
+    
+    .condition-block::before {
+        content: "IF";
+        position: absolute;
+        top: -8px;
+        left: 12px;
+        background: #1976d2;
+        color: white !important;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 0.7rem;
+        font-weight: 600;
+    }
+    
+    .else-block {
+        background: #fff3e0;
+        border: 1px solid #ffcc80;
+        border-radius: 8px;
+        padding: 1rem;
+        margin: 0.5rem 0;
+        position: relative;
+        margin-left: 20px;
+        border-left: 3px solid #ff9800;
+    }
+    
+    .else-block::before {
+        content: "ELSE";
+        position: absolute;
+        top: -8px;
+        left: 12px;
+        background: #ff9800;
+        color: white !important;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 0.7rem;
+        font-weight: 600;
+    }
+    
+    .nested-else-block {
+        background: #f3e5f5;
+        border: 1px solid #ce93d8;
+        border-radius: 8px;
+        padding: 1rem;
+        margin: 0.5rem 0;
+        position: relative;
+        margin-left: 40px;
+        border-left: 3px solid #9c27b0;
+    }
+    
+    .nested-else-block::before {
+        content: "NESTED ELSE";
+        position: absolute;
+        top: -8px;
+        left: 12px;
+        background: #9c27b0;
+        color: white !important;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 0.7rem;
+        font-weight: 600;
+    }
+    
+    .then-block {
+        background: #e8f5e8;
+        border: 1px solid #a5d6a7;
+        border-radius: 8px;
+        padding: 1rem;
+        margin: 0.5rem 0;
+        position: relative;
+        margin-left: 20px;
+        border-left: 3px solid #4caf50;
+    }
+    
+    .then-block::before {
+        content: "THEN";
+        position: absolute;
+        top: -8px;
+        left: 12px;
+        background: #4caf50;
+        color: white !important;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 0.7rem;
+        font-weight: 600;
+    }
+    
+    .allocation-display {
+        background: #f1f8e9;
+        border: 1px solid #8bc34a;
+        border-radius: 6px;
+        padding: 0.75rem;
+        margin: 0.5rem 0;
+        font-weight: 500;
+        color: #2e7d32 !important;
     }
     
     /* Signal card styling */
@@ -1063,6 +1282,58 @@ with tab2:
 with tab3:
     st.header("🎯 Strategy Builder")
     
+    # Logic Block Management
+    with st.expander("📋 Logic Block Manager", expanded=False):
+        col1, col2, col3 = st.columns([2, 1, 1])
+        
+        with col1:
+            st.subheader("💾 Save Current Block")
+            block_name = st.text_input("Block Name", placeholder="e.g., RSI Strategy Block")
+            block_type = st.selectbox("Block Type", ["IF-THEN", "ELSE", "Nested ELSE", "Custom"])
+            
+            # Create block from current branch
+            if st.button("💾 Save as Logic Block"):
+                if 'strategy_branches' in st.session_state and st.session_state.strategy_branches:
+                    # Save the first branch as a template
+                    branch_data = copy.deepcopy(st.session_state.strategy_branches[0])
+                    block_name = create_logic_block(block_type, branch_data, block_name)
+                    st.success(f"✅ Saved as '{block_name}'")
+                    st.rerun()
+                else:
+                    st.warning("⚠️ No strategy branches to save")
+        
+        with col2:
+            st.subheader("📋 Saved Blocks")
+            if st.session_state.logic_blocks:
+                for block_name, block in st.session_state.logic_blocks.items():
+                    with st.expander(f"📦 {block_name}", expanded=False):
+                        st.write(f"**Type:** {block['type']}")
+                        st.write(f"**Description:** {block['description']}")
+                        st.write(f"**Created:** {block['created_at'][:19]}")
+                        
+                        col_a, col_b = st.columns(2)
+                        with col_a:
+                            if st.button("📋 Copy", key=f"copy_{block_name}"):
+                                copy_logic_block(block['data'], block['type'])
+                                st.success("✅ Copied to clipboard!")
+                        with col_b:
+                            if st.button("🗑️ Delete", key=f"delete_{block_name}"):
+                                del st.session_state.logic_blocks[block_name]
+                                st.rerun()
+            else:
+                st.info("No saved blocks yet")
+        
+        with col3:
+            st.subheader("📋 Clipboard")
+            if st.session_state.block_clipboard:
+                for i, block in enumerate(st.session_state.block_clipboard[-5:]):  # Show last 5
+                    st.write(f"📋 {block['type']} ({block['copied_at'][:19]})")
+                    if st.button("🗑️ Clear", key=f"clear_clipboard_{i}"):
+                        st.session_state.block_clipboard.pop(i)
+                        st.rerun()
+            else:
+                st.info("Clipboard empty")
+    
     # Strategy builder
     with st.expander("➕ Create Strategy", expanded=False):
         strategy_name = st.text_input("Strategy Name", placeholder="e.g., Multi-Signal Strategy")
@@ -1078,9 +1349,37 @@ with tab3:
             for branch_idx, branch in enumerate(st.session_state.strategy_branches):
                 st.markdown("---")
                 
-                st.markdown(f"### Branch {branch_idx + 1} (Weight: {branch.get('weight', 100)}%)")
+                # Branch container with improved styling
+                st.markdown(f"""
+                <div class="branch-container">
+                    <div class="branch-header">
+                        <span>🎯 Branch {branch_idx + 1}</span>
+                        <span>Weight: {branch.get('weight', 100)}%</span>
+                    </div>
+                """, unsafe_allow_html=True)
+                
+                # Copy/Paste controls for this branch
+                col_copy, col_paste, col_save = st.columns([1, 1, 1])
+                with col_copy:
+                    if st.button("📋 Copy Branch", key=f"copy_branch_{branch_idx}"):
+                        copy_logic_block(branch, "branch")
+                        st.success("✅ Branch copied to clipboard!")
+                with col_paste:
+                    if st.button("📋 Paste Block", key=f"paste_branch_{branch_idx}"):
+                        if paste_logic_block(branch, 'signals'):
+                            st.success("✅ Block pasted!")
+                            st.rerun()
+                        else:
+                            st.warning("⚠️ No block in clipboard")
+                with col_save:
+                    if st.button("💾 Save Block", key=f"save_branch_{branch_idx}"):
+                        block_name = f"Branch_{branch_idx + 1}_{datetime.now().strftime('%H%M')}"
+                        create_logic_block("branch", branch, block_name)
+                        st.success(f"✅ Saved as '{block_name}'")
+                        st.rerun()
                 
                 # Branch condition signals
+                st.markdown('<div class="condition-block">', unsafe_allow_html=True)
                 st.markdown("**IF:**")
                 for signal_idx, signal_config in enumerate(branch['signals']):
                     col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
@@ -1114,12 +1413,15 @@ with tab3:
                 if st.button("➕ Add Signal", key=f"add_branch_{branch_idx}_signal"):
                     branch['signals'].append({'signal': '', 'negated': False, 'operator': 'AND'})
                     st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
                 
                 # Branch allocation and weight
+                st.markdown('<div class="then-block">', unsafe_allow_html=True)
+                st.markdown("**THEN:**")
                 col1, col2 = st.columns([2, 1])
                 with col1:
                     branch['allocation'] = st.selectbox(
-                        f"Then Allocate To", 
+                        f"Allocate To", 
                         list(st.session_state.output_allocations.keys()),
                         key=f"branch_{branch_idx}_allocation"
                     )
@@ -1131,8 +1433,10 @@ with tab3:
                         value=100 // len(st.session_state.strategy_branches),
                         key=f"branch_{branch_idx}_weight"
                     )
+                st.markdown('</div>', unsafe_allow_html=True)
                 
                 # ELSE functionality
+                st.markdown('<div class="else-block">', unsafe_allow_html=True)
                 st.markdown("**ELSE:**")
                 col1, col2 = st.columns([3, 1])
                 with col1:
@@ -1146,10 +1450,6 @@ with tab3:
                         if 'nested_else' in branch:
                             del branch['nested_else']
                         st.rerun()
-                
-                # Indent ELSE content
-                with st.container():
-                    st.markdown('<div style="margin-left: 20px; border-left: 2px solid #ccc; padding-left: 10px;">', unsafe_allow_html=True)
                 
                 # ELSE type selection
                 branch['else_type'] = st.selectbox(
@@ -1213,82 +1513,159 @@ with tab3:
                         key=f"branch_{branch_idx}_else_signals_allocation"
                     )
                     
-                    # Nested ELSE functionality
-                    st.markdown("**Nested ELSE:**")
-                    col1, col2 = st.columns([3, 1])
-                    with col1:
-                        pass  # Space for nested ELSE content
-                    with col2:
-                        if st.button("🗑️ Remove Nested ELSE", key=f"remove_nested_else_{branch_idx}"):
-                            if 'nested_else' in branch:
-                                del branch['nested_else']
-                            st.rerun()
-                    
-                    # Initialize nested ELSE if not exists
-                    if 'nested_else' not in branch:
-                        branch['nested_else'] = {'type': 'allocation', 'allocation': '', 'signals': []}
-                    
-                    # Nested ELSE type selection
-                    branch['nested_else']['type'] = st.selectbox(
-                        "Nested ELSE Type",
-                        ["Allocation", "Additional Signals"],
-                        key=f"branch_{branch_idx}_nested_else_type"
-                    )
-                    
-                    if branch['nested_else']['type'] == "Allocation":
-                        # Simple nested ELSE allocation
-                        branch['nested_else']['allocation'] = st.selectbox(
-                            "Nested ELSE Allocate To",
-                            list(st.session_state.output_allocations.keys()),
-                            key=f"branch_{branch_idx}_nested_else_allocation"
-                        )
-                    else:
-                        # Nested ELSE signals
-                        st.markdown("**Nested ELSE Signals:**")
+                    # Recursive ELSE functionality
+                    def render_nested_else(else_config, level=1, parent_key=""):
+                        """Recursively render nested ELSE blocks with unlimited depth"""
+                        indent = "  " * level
+                        level_name = f"Level {level} ELSE" if level > 1 else "Nested ELSE"
                         
-                        # Display existing nested ELSE signals
-                        for nested_signal_idx, nested_signal_config in enumerate(branch['nested_else'].get('signals', [])):
-                            st.markdown(f"**IF:**")
-                            col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
+                        st.markdown(f"**{level_name}:**")
+                        col1, col2 = st.columns([3, 1])
+                        with col1:
+                            pass  # Space for nested ELSE content
+                        with col2:
+                            if st.button(f"🗑️ Remove {level_name}", key=f"remove_{parent_key}_nested_else_{level}"):
+                                if 'nested_else' in else_config:
+                                    del else_config['nested_else']
+                                st.rerun()
+                        
+                        # Initialize nested ELSE if not exists
+                        if 'nested_else' not in else_config:
+                            else_config['nested_else'] = {'type': 'allocation', 'allocation': '', 'signals': []}
+                        
+                        # Nested ELSE type selection
+                        else_config['nested_else']['type'] = st.selectbox(
+                            f"{level_name} Type",
+                            ["Allocation", "Additional Signals"],
+                            key=f"{parent_key}_nested_else_type_{level}"
+                        )
+                        
+                        if else_config['nested_else']['type'] == "Allocation":
+                            # Simple nested ELSE allocation
+                            else_config['nested_else']['allocation'] = st.selectbox(
+                                f"{level_name} Allocate To",
+                                list(st.session_state.output_allocations.keys()),
+                                key=f"{parent_key}_nested_else_allocation_{level}"
+                            )
+                        else:
+                            # Nested ELSE signals
+                            st.markdown(f"**{level_name} Signals:**")
                             
-                            with col1:
-                                nested_signal_config['signal'] = st.selectbox(
-                                    f"Nested ELSE Signal {nested_signal_idx + 1}", 
-                                    [""] + [s['name'] for s in st.session_state.signals], 
-                                    key=f"branch_{branch_idx}_nested_else_signal_{nested_signal_idx}"
+                            # Display existing nested ELSE signals
+                            for nested_signal_idx, nested_signal_config in enumerate(else_config['nested_else'].get('signals', [])):
+                                st.markdown(f"**IF:**")
+                                col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
+                                
+                                with col1:
+                                    nested_signal_config['signal'] = st.selectbox(
+                                        f"{level_name} Signal {nested_signal_idx + 1}", 
+                                        [""] + [s['name'] for s in st.session_state.signals], 
+                                        key=f"{parent_key}_nested_else_signal_{level}_{nested_signal_idx}"
+                                    )
+                                
+                                with col2:
+                                    nested_signal_config['negated'] = st.checkbox("NOT", key=f"{parent_key}_nested_else_negated_{level}_{nested_signal_idx}")
+                                
+                                with col3:
+                                    if nested_signal_idx > 0:  # Don't show operator for first signal
+                                        nested_signal_config['operator'] = st.selectbox(
+                                            "Logic", 
+                                            ["AND", "OR"], 
+                                            key=f"{parent_key}_nested_else_operator_{level}_{nested_signal_idx}"
+                                        )
+                                    else:
+                                        st.write("")  # Empty space for alignment
+                                
+                                with col4:
+                                    if st.button("🗑️", key=f"remove_{parent_key}_nested_else_signal_{level}_{nested_signal_idx}"):
+                                        else_config['nested_else']['signals'].pop(nested_signal_idx)
+                                        st.rerun()
+                            
+                            # Add nested ELSE signal button
+                            if st.button(f"➕ Add {level_name} Signal", key=f"add_{parent_key}_nested_else_signal_{level}"):
+                                if 'signals' not in else_config['nested_else']:
+                                    else_config['nested_else']['signals'] = []
+                                else_config['nested_else']['signals'].append({'signal': '', 'negated': False, 'operator': 'AND'})
+                                st.rerun()
+                            
+                            # Nested ELSE THEN clause
+                            st.markdown("**THEN:**")
+                            nested_else_then_type = st.selectbox(
+                                f"{level_name} THEN Type",
+                                ["Allocation", "Additional Signals"],
+                                key=f"{parent_key}_nested_else_then_type_{level}"
+                            )
+                            
+                            if nested_else_then_type == "Allocation":
+                                # Simple nested ELSE allocation
+                                else_config['nested_else']['allocation'] = st.selectbox(
+                                    f"{level_name} Signals True → Allocate To",
+                                    list(st.session_state.output_allocations.keys()),
+                                    key=f"{parent_key}_nested_else_signals_allocation_{level}"
+                                )
+                            else:
+                                # Nested ELSE THEN signals
+                                st.markdown(f"**{level_name} THEN Signals:**")
+                                
+                                # Initialize nested ELSE THEN signals if not exists
+                                if 'then_signals' not in else_config['nested_else']:
+                                    else_config['nested_else']['then_signals'] = []
+                                
+                                # Display existing nested ELSE THEN signals
+                                for then_signal_idx, then_signal_config in enumerate(else_config['nested_else'].get('then_signals', [])):
+                                    st.markdown(f"**IF:**")
+                                    col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
+                                    
+                                    with col1:
+                                        then_signal_config['signal'] = st.selectbox(
+                                            f"{level_name} THEN Signal {then_signal_idx + 1}", 
+                                            [""] + [s['name'] for s in st.session_state.signals], 
+                                            key=f"{parent_key}_nested_else_then_signal_{level}_{then_signal_idx}"
+                                        )
+                                    
+                                    with col2:
+                                        then_signal_config['negated'] = st.checkbox("NOT", key=f"{parent_key}_nested_else_then_negated_{level}_{then_signal_idx}")
+                                    
+                                    with col3:
+                                        if then_signal_idx > 0:  # Don't show operator for first signal
+                                            then_signal_config['operator'] = st.selectbox(
+                                                "Logic", 
+                                                ["AND", "OR"], 
+                                                key=f"{parent_key}_nested_else_then_operator_{level}_{then_signal_idx}"
+                                            )
+                                        else:
+                                            st.write("")  # Empty space for alignment
+                                    
+                                    with col4:
+                                        if st.button("🗑️", key=f"remove_{parent_key}_nested_else_then_signal_{level}_{then_signal_idx}"):
+                                            else_config['nested_else']['then_signals'].pop(then_signal_idx)
+                                            st.rerun()
+                                
+                                # Add nested ELSE THEN signal button
+                                if st.button(f"➕ Add {level_name} THEN Signal", key=f"add_{parent_key}_nested_else_then_signal_{level}"):
+                                    else_config['nested_else']['then_signals'].append({'signal': '', 'negated': False, 'operator': 'AND'})
+                                    st.rerun()
+                                
+                                # Nested ELSE THEN allocation (for when nested ELSE THEN signals are true)
+                                else_config['nested_else']['then_allocation'] = st.selectbox(
+                                    f"{level_name} THEN Signals True → Allocate To",
+                                    list(st.session_state.output_allocations.keys()),
+                                    key=f"{parent_key}_nested_else_then_signals_allocation_{level}"
                                 )
                             
-                            with col2:
-                                nested_signal_config['negated'] = st.checkbox("NOT", key=f"branch_{branch_idx}_nested_else_negated_{nested_signal_idx}")
+                            # Recursive ELSE - add another level
+                            st.markdown("---")
+                            if st.button(f"➕ Add {level + 1} Level ELSE", key=f"add_{parent_key}_nested_else_level_{level + 1}"):
+                                if 'nested_else' not in else_config['nested_else']:
+                                    else_config['nested_else']['nested_else'] = {'type': 'allocation', 'allocation': '', 'signals': []}
+                                st.rerun()
                             
-                            with col3:
-                                if nested_signal_idx > 0:  # Don't show operator for first signal
-                                    nested_signal_config['operator'] = st.selectbox(
-                                        "Logic", 
-                                        ["AND", "OR"], 
-                                        key=f"branch_{branch_idx}_nested_else_operator_{nested_signal_idx}"
-                                    )
-                                else:
-                                    st.write("")  # Empty space for alignment
-                            
-                            with col4:
-                                if st.button("🗑️", key=f"remove_branch_{branch_idx}_nested_else_signal_{nested_signal_idx}"):
-                                    branch['nested_else']['signals'].pop(nested_signal_idx)
-                                    st.rerun()
-                        
-                        # Add nested ELSE signal button
-                        if st.button("➕ Add Nested ELSE Signal", key=f"add_branch_{branch_idx}_nested_else_signal"):
-                            if 'signals' not in branch['nested_else']:
-                                branch['nested_else']['signals'] = []
-                            branch['nested_else']['signals'].append({'signal': '', 'negated': False, 'operator': 'AND'})
-                            st.rerun()
-                        
-                        # Nested ELSE allocation (for when nested ELSE signals are true)
-                        branch['nested_else']['allocation'] = st.selectbox(
-                            "Nested ELSE Signals True → Allocate To",
-                            list(st.session_state.output_allocations.keys()),
-                            key=f"branch_{branch_idx}_nested_else_signals_allocation"
-                        )
+                            # Recursively render the next level if it exists
+                            if 'nested_else' in else_config['nested_else']:
+                                render_nested_else(else_config['nested_else'], level + 1, f"{parent_key}_level_{level}")
+                    
+                    # Start the recursive ELSE rendering
+                    render_nested_else(branch, level=1, parent_key=f"branch_{branch_idx}")
                     
                     # Close ELSE indentation
                     st.markdown('</div>', unsafe_allow_html=True)
@@ -1996,6 +2373,7 @@ with tab4:
                         branch_signals = []
                         else_signals = []
                         nested_else_signals = []
+                        nested_else_then_signals = []
                         for branch in strategy['branches']:
                             # Main branch signals
                             branch_signal = None
@@ -2063,13 +2441,39 @@ with tab4:
                                             nested_else_signal = (nested_else_signal | nested_signal_values).astype(int)
                                 
                                 nested_else_signals.append(nested_else_signal)
+                                
+                                # Nested ELSE THEN signals (if they exist)
+                                if branch.get('nested_else', {}).get('then_signals'):
+                                    nested_else_then_signal = None
+                                    
+                                    for then_signal_config in branch['nested_else']['then_signals']:
+                                        then_signal_values = signal_results[then_signal_config['signal']]
+                                        
+                                        # Apply negation if needed
+                                        if then_signal_config['negated']:
+                                            then_signal_values = (~then_signal_values.astype(bool)).astype(int)
+                                        
+                                        # Combine with previous nested ELSE THEN signals
+                                        if nested_else_then_signal is None:
+                                            nested_else_then_signal = then_signal_values
+                                        else:
+                                            if then_signal_config['operator'] == "AND":
+                                                nested_else_then_signal = (nested_else_then_signal & then_signal_values).astype(int)
+                                            else:  # OR
+                                                nested_else_then_signal = (nested_else_then_signal | then_signal_values).astype(int)
+                                    
+                                    nested_else_then_signals.append(nested_else_then_signal)
+                                else:
+                                    nested_else_then_signals.append(None)
                             else:
                                 nested_else_signals.append(None)
+                                nested_else_then_signals.append(None)
                         
                         # Calculate equity curves for each branch and ELSE conditions
                         branch_equities = []
                         else_equities = []
                         nested_else_equities = []
+                        nested_else_then_equities = []
                         for branch_idx, branch in enumerate(strategy['branches']):
                             # Main branch equity
                             allocation = st.session_state.output_allocations[branch['allocation']]
@@ -2103,6 +2507,14 @@ with tab4:
                                     nested_else_equities.append(nested_else_equity)
                                 else:
                                     nested_else_equities.append(None)
+                                
+                                # Nested ELSE THEN equity (if nested ELSE THEN signals exist)
+                                if nested_else_then_signals[branch_idx] is not None:
+                                    nested_else_then_allocation = st.session_state.output_allocations[branch['nested_else']['then_allocation']]
+                                    nested_else_then_equity = calculate_multi_ticker_equity_curve(nested_else_then_signals[branch_idx], nested_else_then_allocation, data)
+                                    nested_else_then_equities.append(nested_else_then_equity)
+                                else:
+                                    nested_else_then_equities.append(None)
                         
                         # Calculate default allocation equity curve
                         default_allocation = st.session_state.output_allocations[strategy['default_allocation']]
@@ -2153,16 +2565,28 @@ with tab4:
                                 nested_else_returns = nested_else_equities[branch_idx].pct_change().fillna(0)
                                 combined_returns = combined_returns + (nested_else_returns * nested_else_active)
                                 
-                            elif branch.get('nested_else', {}).get('type') == "Additional Signals" and nested_else_signals[branch_idx] is not None:
-                                # Nested ELSE signals (when main branch and ELSE are false but nested ELSE signals are true)
-                                nested_else_signal = nested_else_signals[branch_idx]
-                                nested_else_active = nested_else_signal & (~branch_signal.astype(bool)).astype(int) & (used_signals == 0)
-                                if else_signals[branch_idx] is not None:
-                                    nested_else_active = nested_else_active & (~else_signals[branch_idx].astype(bool)).astype(int)
-                                used_signals = used_signals | nested_else_active
-                                
-                                nested_else_returns = nested_else_equities[branch_idx].pct_change().fillna(0)
-                                combined_returns = combined_returns + (nested_else_returns * nested_else_active)
+                              elif branch.get('nested_else', {}).get('type') == "Additional Signals" and nested_else_signals[branch_idx] is not None:
+                                  # Nested ELSE signals (when main branch and ELSE are false but nested ELSE signals are true)
+                                  nested_else_signal = nested_else_signals[branch_idx]
+                                  nested_else_active = nested_else_signal & (~branch_signal.astype(bool)).astype(int) & (used_signals == 0)
+                                  if else_signals[branch_idx] is not None:
+                                      nested_else_active = nested_else_active & (~else_signals[branch_idx].astype(bool)).astype(int)
+                                  used_signals = used_signals | nested_else_active
+                                  
+                                  # Check if nested ELSE has THEN signals
+                                  if nested_else_then_signals[branch_idx] is not None:
+                                      # Nested ELSE THEN signals (when nested ELSE signals are true and THEN signals are true)
+                                      nested_else_then_signal = nested_else_then_signals[branch_idx]
+                                      nested_else_then_active = nested_else_then_signal & nested_else_active
+                                      used_signals = used_signals | nested_else_then_active
+                                      
+                                      nested_else_then_returns = nested_else_then_equities[branch_idx].pct_change().fillna(0)
+                                      combined_returns = combined_returns + (nested_else_then_returns * nested_else_then_active)
+                                  
+                                  # If no THEN signals, use nested ELSE allocation directly
+                                  else:
+                                      nested_else_returns = nested_else_equities[branch_idx].pct_change().fillna(0)
+                                      combined_returns = combined_returns + (nested_else_returns * nested_else_active)
                         
                         # Add default allocation returns for periods when no branch was active
                         default_returns = default_equity.pct_change().fillna(0)
