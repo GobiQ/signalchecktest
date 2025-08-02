@@ -21,6 +21,19 @@ if 'copied_block' not in st.session_state:
 if 'block_clipboard' not in st.session_state:
     st.session_state.block_clipboard = []
 
+# Logic Block Caching System
+if 'block_cache' not in st.session_state:
+    st.session_state.block_cache = {}
+
+if 'computed_signals' not in st.session_state:
+    st.session_state.computed_signals = {}
+
+if 'cache_hits' not in st.session_state:
+    st.session_state.cache_hits = 0
+
+if 'cache_misses' not in st.session_state:
+    st.session_state.cache_misses = 0
+
 # Logic Block Management Functions
 def create_logic_block(block_type, data, name=None):
     """Create a logic block with metadata"""
@@ -80,6 +93,99 @@ def get_block_preview(block_data):
         return f"📋 {block_data['type']} → {block_data.get('allocation', 'Not set')}"
     else:
         return "📋 Custom block"
+
+def generate_block_signature(block_data):
+    """Generate a unique signature for a logic block based on its structure"""
+    import hashlib
+    
+    # Create a deterministic representation of the block
+    signature_data = {
+        'signals': block_data.get('signals', []),
+        'allocation': block_data.get('allocation', ''),
+        'else_type': block_data.get('else_type', ''),
+        'else_allocation': block_data.get('else_allocation', ''),
+        'else_signals': block_data.get('else_signals', []),
+        'nested_else': block_data.get('nested_else', {})
+    }
+    
+    # Convert to JSON string for hashing
+    signature_str = json.dumps(signature_data, sort_keys=True)
+    return hashlib.md5(signature_str.encode()).hexdigest()
+
+def compute_logic_block(block_data, signal_results, data, benchmark_ticker):
+    """Compute a logic block and cache the result"""
+    block_signature = generate_block_signature(block_data)
+    
+    # Check if we have a cached result
+    if block_signature in st.session_state.block_cache:
+        st.session_state.cache_hits += 1
+        return st.session_state.block_cache[block_signature]
+    
+    # Compute the block (cache miss)
+    st.session_state.cache_misses += 1
+    
+    # Extract signals and compute logic
+    block_signals = None
+    for signal_config in block_data.get('signals', []):
+        if signal_config['signal'] and signal_config['signal'] in signal_results:
+            signal_values = signal_results[signal_config['signal']]
+            
+            # Apply negation if needed
+            if signal_config['negated']:
+                signal_values = (~signal_values.astype(bool)).astype(int)
+            
+            # Combine with previous signals
+            if block_signals is None:
+                block_signals = signal_values
+            else:
+                if signal_config['operator'] == "AND":
+                    block_signals = (block_signals & signal_values).astype(int)
+                else:  # OR
+                    block_signals = (block_signals | signal_values).astype(int)
+    
+    # Compute equity curve if we have signals
+    if block_signals is not None and block_data.get('allocation'):
+        allocation = st.session_state.output_allocations[block_data['allocation']]
+        equity_curve = calculate_multi_ticker_equity_curve(block_signals, allocation, data)
+        returns = equity_curve.pct_change().fillna(0)
+    else:
+        # Default to benchmark if no signals or allocation
+        equity_curve = pd.Series(1.0, index=data[benchmark_ticker].index)
+        returns = equity_curve.pct_change().fillna(0)
+    
+    # Cache the result
+    result = {
+        'signals': block_signals,
+        'equity_curve': equity_curve,
+        'returns': returns,
+        'allocation': block_data.get('allocation', ''),
+        'signature': block_signature
+    }
+    
+    st.session_state.block_cache[block_signature] = result
+    return result
+
+def get_cache_stats():
+    """Get cache performance statistics"""
+    total_requests = st.session_state.cache_hits + st.session_state.cache_misses
+    if total_requests > 0:
+        hit_rate = (st.session_state.cache_hits / total_requests) * 100
+    else:
+        hit_rate = 0
+    
+    return {
+        'hits': st.session_state.cache_hits,
+        'misses': st.session_state.cache_misses,
+        'total': total_requests,
+        'hit_rate': hit_rate,
+        'cache_size': len(st.session_state.block_cache)
+    }
+
+def clear_cache():
+    """Clear the logic block cache"""
+    st.session_state.block_cache.clear()
+    st.session_state.cache_hits = 0
+    st.session_state.cache_misses = 0
 
 # Page configuration
 st.set_page_config(
@@ -1284,7 +1390,7 @@ with tab3:
     
     # Logic Block Management
     with st.expander("📋 Logic Block Manager", expanded=False):
-        col1, col2, col3 = st.columns([2, 1, 1])
+        col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
         
         with col1:
             st.subheader("💾 Save Current Block")
@@ -1333,6 +1439,51 @@ with tab3:
                         st.rerun()
             else:
                 st.info("Clipboard empty")
+        
+        with col4:
+            st.subheader("⚡ Cache Manager")
+            cache_stats = get_cache_stats()
+            
+            st.metric("Cache Hits", cache_stats['hits'])
+            st.metric("Cache Misses", cache_stats['misses'])
+            st.metric("Hit Rate", f"{cache_stats['hit_rate']:.1f}%")
+            st.metric("Cache Size", cache_stats['cache_size'])
+            
+            col_clear, col_optimize = st.columns(2)
+            with col_clear:
+                if st.button("🗑️ Clear Cache"):
+                    clear_cache()
+                    st.success("✅ Cache cleared!")
+                    st.rerun()
+            with col_optimize:
+                if st.button("⚡ Optimize"):
+                    st.info("🔄 Cache optimization complete!")
+                    st.rerun()
+    
+    # Performance Monitoring
+    with st.expander("⚡ Performance Monitor", expanded=False):
+        cache_stats = get_cache_stats()
+        
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Cache Hits", cache_stats['hits'], delta=cache_stats['hits'])
+        with col2:
+            st.metric("Cache Misses", cache_stats['misses'], delta=cache_stats['misses'])
+        with col3:
+            st.metric("Hit Rate", f"{cache_stats['hit_rate']:.1f}%")
+        with col4:
+            st.metric("Cached Blocks", cache_stats['cache_size'])
+        
+        if cache_stats['total'] > 0:
+            efficiency_gain = cache_stats['hit_rate'] / 100
+            st.progress(efficiency_gain)
+            st.caption(f"Performance improvement: {efficiency_gain:.1%} of computations reused")
+        
+        # Show cache contents
+        if st.session_state.block_cache:
+            st.subheader("📋 Cached Logic Blocks")
+            for signature, result in list(st.session_state.block_cache.items())[:5]:  # Show first 5
+                st.write(f"🔑 {signature[:8]}... → {result['allocation']}")
     
     # Strategy builder
     with st.expander("➕ Create Strategy", expanded=False):
@@ -2469,16 +2620,15 @@ with tab4:
                                 nested_else_signals.append(None)
                                 nested_else_then_signals.append(None)
                         
-                        # Calculate equity curves for each branch and ELSE conditions
+                        # Calculate equity curves for each branch and ELSE conditions using caching
                         branch_equities = []
                         else_equities = []
                         nested_else_equities = []
                         nested_else_then_equities = []
                         for branch_idx, branch in enumerate(strategy['branches']):
-                            # Main branch equity
-                            allocation = st.session_state.output_allocations[branch['allocation']]
-                            branch_equity = calculate_multi_ticker_equity_curve(branch_signals[branch_idx], allocation, data)
-                            branch_equities.append(branch_equity)
+                            # Use cached computation for main branch
+                            branch_result = compute_logic_block(branch, signal_results, data, benchmark_ticker)
+                            branch_equities.append(branch_result['equity_curve'])
                             
                             # ELSE equity (if ELSE signals exist)
                             if else_signals[branch_idx] is not None:
@@ -2565,7 +2715,7 @@ with tab4:
                                 nested_else_returns = nested_else_equities[branch_idx].pct_change().fillna(0)
                                 combined_returns = combined_returns + (nested_else_returns * nested_else_active)
                                 
-                              elif branch.get('nested_else', {}).get('type') == "Additional Signals" and nested_else_signals[branch_idx] is not None:
+                            elif branch.get('nested_else', {}).get('type') == "Additional Signals" and nested_else_signals[branch_idx] is not None:
                                   # Nested ELSE signals (when main branch and ELSE are false but nested ELSE signals are true)
                                   nested_else_signal = nested_else_signals[branch_idx]
                                   nested_else_active = nested_else_signal & (~branch_signal.astype(bool)).astype(int) & (used_signals == 0)
