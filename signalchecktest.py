@@ -1437,6 +1437,161 @@ with tab1:
 with tab2:
     st.header("💰 Allocation Blocks")
     
+    # Pre-built allocation blocks
+    st.subheader("🚀 Quick Start: Pre-built Allocations")
+    st.markdown("Click any allocation below to add it instantly:")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if st.button("📈 TQQQ (3x QQQ)", key="prebuilt_tqqq"):
+            if 'output_allocations' not in st.session_state:
+                st.session_state.output_allocations = {}
+            
+            allocation = {
+                'name': 'TQQQ',
+                'tickers': [{'ticker': 'TQQQ', 'weight': 100}]
+            }
+            st.session_state.output_allocations['TQQQ'] = allocation
+            st.success("✅ TQQQ allocation added!")
+            st.rerun()
+        
+        if st.button("📈 QLD (2x QQQ)", key="prebuilt_qld"):
+            if 'output_allocations' not in st.session_state:
+                st.session_state.output_allocations = {}
+            
+            allocation = {
+                'name': 'QLD',
+                'tickers': [{'ticker': 'QLD', 'weight': 100}]
+            }
+            st.session_state.output_allocations['QLD'] = allocation
+            st.success("✅ QLD allocation added!")
+            st.rerun()
+        
+        if st.button("📈 QQQ (Nasdaq)", key="prebuilt_qqq"):
+            if 'output_allocations' not in st.session_state:
+                st.session_state.output_allocations = {}
+            
+            allocation = {
+                'name': 'QQQ',
+                'tickers': [{'ticker': 'QQQ', 'weight': 100}]
+            }
+            st.session_state.output_allocations['QQQ'] = allocation
+            st.success("✅ QQQ allocation added!")
+            st.rerun()
+    
+    with col2:
+        if st.button("📈 SPY (S&P 500)", key="prebuilt_spy"):
+            if 'output_allocations' not in st.session_state:
+                st.session_state.output_allocations = {}
+            
+            allocation = {
+                'name': 'SPY',
+                'tickers': [{'ticker': 'SPY', 'weight': 100}]
+            }
+            st.session_state.output_allocations['SPY'] = allocation
+            st.success("✅ SPY allocation added!")
+            st.rerun()
+        
+        if st.button("🛡️ XLP (Consumer Staples)", key="prebuilt_xlp"):
+            if 'output_allocations' not in st.session_state:
+                st.session_state.output_allocations = {}
+            
+            allocation = {
+                'name': 'XLP',
+                'tickers': [{'ticker': 'XLP', 'weight': 100}]
+            }
+            st.session_state.output_allocations['XLP'] = allocation
+            st.success("✅ XLP allocation added!")
+            st.rerun()
+        
+        if st.button("🛡️ XLU (Utilities)", key="prebuilt_xlu"):
+            if 'output_allocations' not in st.session_state:
+                st.session_state.output_allocations = {}
+            
+            allocation = {
+                'name': 'XLU',
+                'tickers': [{'ticker': 'XLU', 'weight': 100}]
+            }
+            st.session_state.output_allocations['XLU'] = allocation
+            st.success("✅ XLU allocation added!")
+            st.rerun()
+    
+    with col3:
+        if st.button("💰 BIL (Cash)", key="prebuilt_bil"):
+            if 'output_allocations' not in st.session_state:
+                st.session_state.output_allocations = {}
+            
+            allocation = {
+                'name': 'BIL',
+                'tickers': [{'ticker': 'BIL', 'weight': 100}]
+            }
+            st.session_state.output_allocations['BIL'] = allocation
+            st.success("✅ BIL allocation added!")
+            st.rerun()
+        
+        if st.button("📊 UVXY (Volatility)", key="prebuilt_uvxy"):
+            if 'output_allocations' not in st.session_state:
+                st.session_state.output_allocations = {}
+            
+            allocation = {
+                'name': 'UVXY',
+                'tickers': [{'ticker': 'UVXY', 'weight': 100}]
+            }
+            st.session_state.output_allocations['UVXY'] = allocation
+            st.success("✅ UVXY allocation added!")
+            st.rerun()
+        
+        if st.button("📊 VIXY (VIX)", key="prebuilt_vixy"):
+            if 'output_allocations' not in st.session_state:
+                st.session_state.output_allocations = {}
+            
+            allocation = {
+                'name': 'VIXY',
+                'tickers': [{'ticker': 'VIXY', 'weight': 100}]
+            }
+            st.session_state.output_allocations['VIXY'] = allocation
+            st.success("✅ VIXY allocation added!")
+            st.rerun()
+    
+    # Multi-ticker allocations
+    st.subheader("🔄 Multi-Ticker Allocations")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("🛡️ 50/50 BIL VIXY (Defensive)", key="prebuilt_bil_vixy"):
+            if 'output_allocations' not in st.session_state:
+                st.session_state.output_allocations = {}
+            
+            allocation = {
+                'name': 'BIL VIXY Defensive',
+                'tickers': [
+                    {'ticker': 'BIL', 'weight': 50},
+                    {'ticker': 'VIXY', 'weight': 50}
+                ]
+            }
+            st.session_state.output_allocations['BIL VIXY Defensive'] = allocation
+            st.success("✅ BIL VIXY Defensive allocation added!")
+            st.rerun()
+    
+    with col2:
+        if st.button("🛡️ 50/50 XLP XLU (Defensive)", key="prebuilt_xlp_xlu"):
+            if 'output_allocations' not in st.session_state:
+                st.session_state.output_allocations = {}
+            
+            allocation = {
+                'name': 'XLP XLU Defensive',
+                'tickers': [
+                    {'ticker': 'XLP', 'weight': 50},
+                    {'ticker': 'XLU', 'weight': 50}
+                ]
+            }
+            st.session_state.output_allocations['XLP XLU Defensive'] = allocation
+            st.success("✅ XLP XLU Defensive allocation added!")
+            st.rerun()
+    
+    st.markdown("---")
+    
     # Create allocation
     with st.expander("➕ Create Allocation Block", expanded=False):
         allocation_name = st.text_input("Allocation Name", placeholder="e.g., Aggressive Growth")
