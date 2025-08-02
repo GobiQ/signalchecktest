@@ -706,7 +706,7 @@ with tab1:
     st.header("📊 Reference Signal Blocks")
     
     # Signal creation
-    with st.expander("➕ Create Reference Signal", expanded=True):
+    with st.expander("➕ Create Reference Signal", expanded=False):
         signal_name = st.text_input("Signal Name", placeholder="e.g., QQQ RSI Oversold")
         
         # Signal type selection
@@ -926,7 +926,7 @@ with tab2:
     st.header("💰 Allocation Blocks")
     
     # Create allocation
-    with st.expander("➕ Create Allocation Block", expanded=True):
+    with st.expander("➕ Create Allocation Block", expanded=False):
         allocation_name = st.text_input("Allocation Name", placeholder="e.g., Aggressive Growth")
         
         st.subheader("📊 Ticker Components")
@@ -1064,7 +1064,7 @@ with tab3:
     st.header("🎯 Strategy Builder")
     
     # Strategy builder
-    with st.expander("➕ Create Strategy", expanded=True):
+    with st.expander("➕ Create Strategy", expanded=False):
         strategy_name = st.text_input("Strategy Name", placeholder="e.g., Multi-Signal Strategy")
         
         if st.session_state.signals and st.session_state.output_allocations:
@@ -1072,12 +1072,13 @@ with tab3:
             
             # Initialize strategy branches if not exists
             if 'strategy_branches' not in st.session_state:
-                st.session_state.strategy_branches = [{'signals': [], 'allocation': '', 'else_type': 'allocation', 'else_allocation': '', 'else_signals': [], 'nested_else': {'type': 'allocation', 'allocation': '', 'signals': []}}]
+                st.session_state.strategy_branches = [{'signals': [], 'allocation': '', 'weight': 100, 'else_type': 'allocation', 'else_allocation': '', 'else_signals': [], 'nested_else': {'type': 'allocation', 'allocation': '', 'signals': []}}]
             
             # Display strategy branches
             for branch_idx, branch in enumerate(st.session_state.strategy_branches):
                 st.markdown("---")
-                st.markdown(f"### Branch {branch_idx + 1}")
+                
+                st.markdown(f"### Branch {branch_idx + 1} (Weight: {branch.get('weight', 100)}%)")
                 
                 # Branch condition signals
                 st.markdown("**IF:**")
@@ -1104,22 +1105,32 @@ with tab3:
                         else:
                             st.write("")  # Empty space for alignment
                     
-                        with col4:
-                            if st.button("🗑️", key=f"remove_branch_{branch_idx}_signal_{signal_idx}"):
-                                branch['signals'].pop(signal_idx)
-                                st.rerun()
+                    with col4:
+                        if st.button("🗑️", key=f"remove_branch_{branch_idx}_signal_{signal_idx}"):
+                            branch['signals'].pop(signal_idx)
+                            st.rerun()
                 
                 # Add signal button for this branch
                 if st.button("➕ Add Signal", key=f"add_branch_{branch_idx}_signal"):
                     branch['signals'].append({'signal': '', 'negated': False, 'operator': 'AND'})
                     st.rerun()
                 
-                # Branch allocation
-                branch['allocation'] = st.selectbox(
-                    f"Then Allocate To", 
-                    list(st.session_state.output_allocations.keys()),
-                    key=f"branch_{branch_idx}_allocation"
-                )
+                # Branch allocation and weight
+                col1, col2 = st.columns([2, 1])
+                with col1:
+                    branch['allocation'] = st.selectbox(
+                        f"Then Allocate To", 
+                        list(st.session_state.output_allocations.keys()),
+                        key=f"branch_{branch_idx}_allocation"
+                    )
+                with col2:
+                    branch['weight'] = st.number_input(
+                        "Weight %",
+                        min_value=0,
+                        max_value=100,
+                        value=100 // len(st.session_state.strategy_branches),
+                        key=f"branch_{branch_idx}_weight"
+                    )
                 
                 # ELSE functionality
                 st.markdown("**ELSE:**")
@@ -1135,6 +1146,10 @@ with tab3:
                         if 'nested_else' in branch:
                             del branch['nested_else']
                         st.rerun()
+                
+                # Indent ELSE content
+                with st.container():
+                    st.markdown('<div style="margin-left: 20px; border-left: 2px solid #ccc; padding-left: 10px;">', unsafe_allow_html=True)
                 
                 # ELSE type selection
                 branch['else_type'] = st.selectbox(
@@ -1156,6 +1171,7 @@ with tab3:
                     
                     # Display existing ELSE signals
                     for else_signal_idx, else_signal_config in enumerate(branch.get('else_signals', [])):
+                        st.markdown(f"**IF:**")
                         col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
                         
                         with col1:
@@ -1232,6 +1248,7 @@ with tab3:
                         
                         # Display existing nested ELSE signals
                         for nested_signal_idx, nested_signal_config in enumerate(branch['nested_else'].get('signals', [])):
+                            st.markdown(f"**IF:**")
                             col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
                             
                             with col1:
@@ -1272,6 +1289,9 @@ with tab3:
                             list(st.session_state.output_allocations.keys()),
                             key=f"branch_{branch_idx}_nested_else_signals_allocation"
                         )
+                    
+                    # Close ELSE indentation
+                    st.markdown('</div>', unsafe_allow_html=True)
                 
                 # Remove branch button (except for first branch)
                 if branch_idx > 0:
@@ -1283,8 +1303,32 @@ with tab3:
             
             # Add new branch button
             if st.button("➕ Add Branch", key="add_branch"):
-                st.session_state.strategy_branches.append({'signals': [], 'allocation': '', 'else_type': 'allocation', 'else_allocation': '', 'else_signals': [], 'nested_else': {'type': 'allocation', 'allocation': '', 'signals': []}})
+                # Calculate equal weight distribution
+                num_branches = len(st.session_state.strategy_branches) + 1
+                equal_weight = 100 // num_branches
+                
+                # Update existing branches to equal weight
+                for existing_branch in st.session_state.strategy_branches:
+                    existing_branch['weight'] = equal_weight
+                
+                # Add new branch with equal weight
+                st.session_state.strategy_branches.append({
+                    'signals': [], 
+                    'allocation': '', 
+                    'weight': equal_weight,
+                    'else_type': 'allocation', 
+                    'else_allocation': '', 
+                    'else_signals': [], 
+                    'nested_else': {'type': 'allocation', 'allocation': '', 'signals': []}
+                })
                 st.rerun()
+            
+            # Weight validation and display
+            total_weight = sum(branch.get('weight', 0) for branch in st.session_state.strategy_branches)
+            if total_weight != 100:
+                st.warning(f"⚠️ Total branch weight: {total_weight}% (should be 100%)")
+            else:
+                st.success(f"✅ Total branch weight: {total_weight}%")
             
             # Default allocation (if no branches match)
             default_allocation = st.selectbox(
@@ -1302,6 +1346,7 @@ with tab3:
                         branch_data = {
                             'signals': valid_signals.copy(),
                             'allocation': branch['allocation'],
+                            'weight': branch.get('weight', 100),
                             'else_type': branch['else_type'],
                             'else_allocation': branch['else_allocation']
                         }
@@ -1814,10 +1859,11 @@ with tab4:
                                         branch_signals.append(signal_text)
                                 
                                 branch_condition = " ".join(branch_signals)
+                                branch_weight = branch.get('weight', 100)
                                 if i == 0:
-                                    condition_parts.append(f"<strong>IF</strong> {branch_condition} <strong>THEN</strong> {branch['allocation']}")
+                                    condition_parts.append(f"<strong>IF</strong> {branch_condition} <strong>THEN</strong> {branch['allocation']} ({branch_weight}%)")
                                 else:
-                                    condition_parts.append(f"<strong>ELSE IF</strong> {branch_condition} <strong>THEN</strong> {branch['allocation']}")
+                                    condition_parts.append(f"<strong>ELSE IF</strong> {branch_condition} <strong>THEN</strong> {branch['allocation']} ({branch_weight}%)")
                                 
                                 # Add ELSE conditions if they exist
                                 if branch.get('else_type') == "Allocation" and branch.get('else_allocation'):
@@ -2073,9 +2119,10 @@ with tab4:
                             branch_active = branch_signal & (used_signals == 0)
                             used_signals = used_signals | branch_active
                             
-                            # Get returns for this branch
+                            # Get returns for this branch with weight
+                            branch_weight = strategy['branches'][branch_idx].get('weight', 100) / 100
                             branch_returns = branch_equities[branch_idx].pct_change().fillna(0)
-                            combined_returns = combined_returns + (branch_returns * branch_active)
+                            combined_returns = combined_returns + (branch_returns * branch_active * branch_weight)
                             
                             # Handle ELSE logic
                             if branch.get('else_type') == "Allocation":
