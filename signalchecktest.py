@@ -1936,7 +1936,36 @@ with tab3:
             
             # Initialize strategy branches if not exists
             if 'strategy_branches' not in st.session_state:
-                st.session_state.strategy_branches = [{'signals': [], 'allocations': [{'allocation': '', 'weight': 100}], 'else_type': 'allocation', 'else_allocations': [{'allocation': '', 'weight': 100}], 'else_signals': [], 'nested_else': {'type': 'allocation', 'allocation': '', 'signals': []}}]
+                st.session_state.strategy_branches = []
+            
+            # Initial add button for creating first branch
+            if not st.session_state.strategy_branches:
+                st.markdown("### 🚀 Start Building Your Strategy")
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    initial_add_option = st.selectbox(
+                        "Add to strategy:",
+                        ["", "Allocation", "Signal", "Paste Block"],
+                        key="initial_add_option"
+                    )
+                with col2:
+                    if st.button("➕", key="initial_add_button"):
+                        if initial_add_option == "Allocation":
+                            new_branch = {'allocations': [{'allocation': '', 'weight': 100}]}
+                            st.session_state.strategy_branches.append(new_branch)
+                            st.rerun()
+                        elif initial_add_option == "Signal":
+                            new_branch = {'signals': [{'signal': '', 'negated': False, 'operator': 'AND'}]}
+                            st.session_state.strategy_branches.append(new_branch)
+                            st.rerun()
+                        elif initial_add_option == "Paste Block":
+                            if st.session_state.copied_block:
+                                new_branch = copy.deepcopy(st.session_state.copied_block['data'])
+                                st.session_state.strategy_branches.append(new_branch)
+                                st.success("✅ Block pasted!")
+                                st.rerun()
+                            else:
+                                st.warning("⚠️ No block in clipboard")
             
             # Display strategy branches
             for branch_idx, branch in enumerate(st.session_state.strategy_branches):
