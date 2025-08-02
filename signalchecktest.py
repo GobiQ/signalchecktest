@@ -196,6 +196,13 @@ if 'strategy_branches' not in st.session_state:
 if 'copied_block' not in st.session_state:
     st.session_state.copied_block = None
 
+# Reference Blocks System
+if 'reference_blocks' not in st.session_state:
+    st.session_state.reference_blocks = {}
+
+if 'saved_blocks' not in st.session_state:
+    st.session_state.saved_blocks = {}
+
 # Logic Block Caching System
 if 'block_cache' not in st.session_state:
     st.session_state.block_cache = {}
@@ -278,6 +285,48 @@ def clear_cache():
     st.session_state.block_cache = {}
     st.session_state.cache_hits = 0
     st.session_state.cache_misses = 0
+
+# Reference Block Management Functions
+def save_reference_block(block_data, block_name, block_type="custom"):
+    """Save a logic block as a reference block for reuse"""
+    reference_block = {
+        'name': block_name,
+        'type': block_type,
+        'data': copy.deepcopy(block_data),
+        'created_at': datetime.now().isoformat(),
+        'usage_count': 0
+    }
+    st.session_state.reference_blocks[block_name] = reference_block
+    return block_name
+
+def load_reference_block(block_name):
+    """Load a reference block by name"""
+    if block_name in st.session_state.reference_blocks:
+        block = st.session_state.reference_blocks[block_name]
+        block['usage_count'] += 1
+        return copy.deepcopy(block['data'])
+    return None
+
+def get_reference_block_preview(block_name):
+    """Get a preview of a reference block"""
+    if block_name in st.session_state.reference_blocks:
+        block = st.session_state.reference_blocks[block_name]
+        signals_count = len(block['data'].get('signals', []))
+        allocations_count = len(block['data'].get('allocations', []))
+        usage_count = block['usage_count']
+        return f"📋 {signals_count} signals, {allocations_count} allocations (used {usage_count} times)"
+    return "Block not found"
+
+def delete_reference_block(block_name):
+    """Delete a reference block"""
+    if block_name in st.session_state.reference_blocks:
+        del st.session_state.reference_blocks[block_name]
+        return True
+    return False
+
+def get_all_reference_blocks():
+    """Get all available reference blocks"""
+    return list(st.session_state.reference_blocks.keys())
 
 # Technical Analysis Functions
 def calculate_rsi(prices: pd.Series, window: int = 14, method: str = "wilders") -> pd.Series:
@@ -1047,6 +1096,50 @@ with tab2:
 with tab3:
     st.header("🎯 Strategy Builder")
     
+    # Reference Blocks Management
+    with st.expander("📚 Reference Blocks Manager", expanded=False):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("💾 Save Current Block")
+            block_name = st.text_input("Block Name", placeholder="e.g., RSI Oversold Strategy")
+            if st.button("💾 Save as Reference Block"):
+                if st.session_state.strategy_branches:
+                    # Save the last branch as a reference block
+                    last_branch = st.session_state.strategy_branches[-1]
+                    if block_name:
+                        save_reference_block(last_branch, block_name)
+                        st.success(f"✅ Block '{block_name}' saved as reference!")
+                        st.rerun()
+                    else:
+                        st.error("Please provide a block name.")
+                else:
+                    st.warning("No strategy branches to save.")
+        
+        with col2:
+            st.subheader("📋 Saved Reference Blocks")
+            reference_blocks = get_all_reference_blocks()
+            if reference_blocks:
+                for block_name in reference_blocks:
+                    col_a, col_b, col_c = st.columns([3, 1, 1])
+                    with col_a:
+                        st.write(f"**{block_name}**")
+                        st.caption(get_reference_block_preview(block_name))
+                    with col_b:
+                        if st.button("📋 Load", key=f"load_ref_{block_name}"):
+                            loaded_block = load_reference_block(block_name)
+                            if loaded_block:
+                                st.session_state.strategy_branches.append(loaded_block)
+                                st.success(f"✅ Block '{block_name}' loaded!")
+                                st.rerun()
+                    with col_c:
+                        if st.button("🗑️", key=f"delete_ref_{block_name}"):
+                            delete_reference_block(block_name)
+                            st.success(f"✅ Block '{block_name}' deleted!")
+                            st.rerun()
+            else:
+                st.info("No reference blocks saved yet.")
+    
     # Cache management
     with st.expander("⚡ Cache Manager", expanded=False):
         col1, col2 = st.columns(2)
@@ -1063,41 +1156,41 @@ with tab3:
     # Strategy builder interface
     st.markdown('<div class="strategy-builder">', unsafe_allow_html=True)
     
-    # Initial minimal interface
-    st.subheader("✨ Spell")
+    # Strategy creation interface
+    st.subheader("🎯 Build Your Strategy")
     
-    # Initial "+" button with dropdown
+    # Add new strategy component
     col1, col2 = st.columns([1, 9])
     with col1:
-        spell_component = st.selectbox(
+        component_type = st.selectbox(
             "Add component:",
-            ["", "Ticker", "Weighted", "Filtered", "If/Else", "Switch", "Enter/Exit", "Mixed", "Paste"],
-            key="spell_component",
+            ["", "Ticker", "Weighted", "Filtered", "If/Else", "Switch", "Enter/Exit", "Mixed", "Load Reference Block"],
+            key="component_type",
             label_visibility="collapsed"
         )
     with col2:
-        if st.button("➕", key="add_spell_component"):
-            if spell_component == "Ticker":
+        if st.button("➕", key="add_component"):
+            if component_type == "Ticker":
                 new_branch = {
                     'signals': [],
                     'allocations': [{'allocation': '', 'weight': 100}]
                 }
                 st.session_state.strategy_branches.append(new_branch)
                 st.rerun()
-            elif spell_component == "Weighted":
+            elif component_type == "Weighted":
                 new_branch = {
                     'allocations': [{'allocation': '', 'weight': 100}]
                 }
                 st.session_state.strategy_branches.append(new_branch)
                 st.rerun()
-            elif spell_component == "Filtered":
+            elif component_type == "Filtered":
                 new_branch = {
                     'signals': [],
                     'allocations': [{'allocation': '', 'weight': 100}]
                 }
                 st.session_state.strategy_branches.append(new_branch)
                 st.rerun()
-            elif spell_component == "If/Else":
+            elif component_type == "If/Else":
                 new_branch = {
                     'type': 'if_else',
                     'signals': [],
@@ -1107,17 +1200,30 @@ with tab3:
                 }
                 st.session_state.strategy_branches.append(new_branch)
                 st.rerun()
-            elif spell_component == "Paste":
-                if st.session_state.copied_block:
-                    st.session_state.strategy_branches.append(copy.deepcopy(st.session_state.copied_block))
-                    st.success("Block pasted!")
-                    st.rerun()
+            elif component_type == "Load Reference Block":
+                # Show reference block selector
+                reference_blocks = get_all_reference_blocks()
+                if reference_blocks:
+                    selected_block = st.selectbox("Select Reference Block:", reference_blocks)
+                    if st.button("📋 Load Selected Block"):
+                        loaded_block = load_reference_block(selected_block)
+                        if loaded_block:
+                            st.session_state.strategy_branches.append(loaded_block)
+                            st.success(f"✅ Reference block '{selected_block}' loaded!")
+                            st.rerun()
                 else:
-                    st.warning("⚠️ No block in clipboard")
+                    st.warning("No reference blocks available.")
+            elif st.session_state.copied_block:
+                st.session_state.strategy_branches.append(copy.deepcopy(st.session_state.copied_block))
+                st.success("Block pasted!")
+                st.rerun()
+            else:
+                st.warning("⚠️ No block in clipboard")
     
     # Display strategy branches
     if st.session_state.strategy_branches:
         st.markdown("---")
+        st.subheader("📋 Active Strategy Components")
         
         for branch_idx, branch in enumerate(st.session_state.strategy_branches):
             st.markdown("---")
@@ -1137,7 +1243,7 @@ with tab3:
                 with col_menu:
                     block_menu_action = st.selectbox(
                         '',
-                        ["", "Copy", "Paste", "Delete"],
+                        ["", "Copy", "Paste", "Delete", "Save as Reference"],
                         key=f"block_menu_{branch_idx}",
                         label_visibility="collapsed"
                     )
@@ -1154,6 +1260,15 @@ with tab3:
                     elif block_menu_action == "Delete":
                         st.session_state.strategy_branches.pop(branch_idx)
                         st.rerun()
+                    elif block_menu_action == "Save as Reference":
+                        ref_name = st.text_input("Reference Block Name:", key=f"ref_name_{branch_idx}")
+                        if st.button("💾 Save", key=f"save_ref_{branch_idx}"):
+                            if ref_name:
+                                save_reference_block(branch, ref_name)
+                                st.success(f"✅ Block saved as '{ref_name}'!")
+                                st.rerun()
+                            else:
+                                st.error("Please provide a name.")
                 
                 st.markdown("""
                     </div>
@@ -1347,6 +1462,38 @@ with tab3:
                         <span>Total Weight: {total_branch_weight}%</span>
                     </div>
                 """, unsafe_allow_html=True)
+                
+                # Block operations menu
+                col_menu, col_spacer = st.columns([1, 9])
+                with col_menu:
+                    block_menu_action = st.selectbox(
+                        '',
+                        ["", "Copy", "Paste", "Delete", "Save as Reference"],
+                        key=f"branch_menu_{branch_idx}",
+                        label_visibility="collapsed"
+                    )
+                    if block_menu_action == "Copy":
+                        st.session_state.copied_block = copy.deepcopy(branch)
+                        st.success("Block copied!")
+                    elif block_menu_action == "Paste":
+                        if st.session_state.copied_block:
+                            st.session_state.strategy_branches.insert(branch_idx+1, copy.deepcopy(st.session_state.copied_block))
+                            st.success("Block pasted!")
+                            st.rerun()
+                        else:
+                            st.warning("⚠️ No block in clipboard")
+                    elif block_menu_action == "Delete":
+                        st.session_state.strategy_branches.pop(branch_idx)
+                        st.rerun()
+                    elif block_menu_action == "Save as Reference":
+                        ref_name = st.text_input("Reference Block Name:", key=f"ref_name_{branch_idx}")
+                        if st.button("💾 Save", key=f"save_ref_{branch_idx}"):
+                            if ref_name:
+                                save_reference_block(branch, ref_name)
+                                st.success(f"✅ Block saved as '{ref_name}'!")
+                                st.rerun()
+                            else:
+                                st.error("Please provide a name.")
                 
                 # Simple add button for the branch
                 if st.button("➕", key=f"add_to_branch_{branch_idx}"):
