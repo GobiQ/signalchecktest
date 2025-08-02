@@ -9,17 +9,192 @@ from datetime import datetime, timedelta
 import warnings
 import json
 import copy
+import hashlib
 warnings.filterwarnings('ignore')
 
-# Initialize session state for logic blocks
-if 'logic_blocks' not in st.session_state:
-    st.session_state.logic_blocks = {}
+# Page configuration
+st.set_page_config(
+    page_title="Strategy Validation Tool",
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
+
+# Custom CSS for modern slate grey theme
+st.markdown("""
+<style>
+    .main {
+        background: #475569;
+        color: white;
+    }
+    .stApp {
+        background: #475569;
+    }
+    .stExpander {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 10px;
+        backdrop-filter: blur(10px);
+    }
+    .strategy-builder {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        padding: 20px;
+        margin: 10px 0;
+        backdrop-filter: blur(10px);
+    }
+    .branch-container {
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 8px;
+        padding: 15px;
+        margin: 10px 0;
+        backdrop-filter: blur(8px);
+    }
+    .condition-block {
+        background: rgba(59, 130, 246, 0.2);
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        border-radius: 6px;
+        padding: 10px;
+        margin: 5px 0;
+        position: relative;
+    }
+    .condition-block::before {
+        content: "IF";
+        position: absolute;
+        top: -8px;
+        left: 10px;
+        background: #3b82f6;
+        color: white;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: bold;
+    }
+    .then-block {
+        background: rgba(34, 197, 94, 0.2);
+        border: 1px solid rgba(34, 197, 94, 0.3);
+        border-radius: 6px;
+        padding: 10px;
+        margin: 5px 0;
+        position: relative;
+    }
+    .then-block::before {
+        content: "THEN";
+        position: absolute;
+        top: -8px;
+        left: 10px;
+        background: #22c55e;
+        color: white;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: bold;
+    }
+    .else-block {
+        background: rgba(239, 68, 68, 0.2);
+        border: 1px solid rgba(239, 68, 68, 0.3);
+        border-radius: 6px;
+        padding: 10px;
+        margin: 5px 0;
+        position: relative;
+    }
+    .else-block::before {
+        content: "ELSE";
+        position: absolute;
+        top: -8px;
+        left: 10px;
+        background: #ef4444;
+        color: white;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: bold;
+    }
+    .nested-else-block {
+        background: rgba(168, 85, 247, 0.2);
+        border: 1px solid rgba(168, 85, 247, 0.3);
+        border-radius: 6px;
+        padding: 10px;
+        margin: 5px 0;
+        position: relative;
+    }
+    .nested-else-block::before {
+        content: "ELSE IF";
+        position: absolute;
+        top: -8px;
+        left: 10px;
+        background: #a855f7;
+        color: white;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: bold;
+    }
+    .allocation-display {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 6px;
+        padding: 8px;
+        margin: 5px 0;
+    }
+    .if-else-block {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 8px;
+        padding: 15px;
+        margin: 10px 0;
+        backdrop-filter: blur(8px);
+    }
+    .if-else-header {
+        background: rgba(59, 130, 246, 0.3);
+        border-radius: 6px;
+        padding: 8px;
+        margin-bottom: 10px;
+        font-weight: bold;
+    }
+    .stButton > button {
+        background: rgba(59, 130, 246, 0.8);
+        color: white !important;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 6px;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    }
+    .stButton > button:hover {
+        background: rgba(59, 130, 246, 1);
+        border-color: rgba(255, 255, 255, 0.4);
+    }
+    .stSelectbox > div > div {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: white;
+    }
+    .stTextInput > div > div > input {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: white;
+    }
+    .stNumberInput > div > div > input {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: white;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Initialize session state
+if 'signals' not in st.session_state:
+    st.session_state.signals = []
+
+if 'output_allocations' not in st.session_state:
+    st.session_state.output_allocations = {}
+
+if 'strategy_branches' not in st.session_state:
+    st.session_state.strategy_branches = []
 
 if 'copied_block' not in st.session_state:
     st.session_state.copied_block = None
-
-if 'block_clipboard' not in st.session_state:
-    st.session_state.block_clipboard = []
 
 # Logic Block Caching System
 if 'block_cache' not in st.session_state:
@@ -34,898 +209,89 @@ if 'cache_hits' not in st.session_state:
 if 'cache_misses' not in st.session_state:
     st.session_state.cache_misses = 0
 
-# Logic Block Management Functions
-def create_logic_block(block_type, data, name=None):
-    """Create a logic block with metadata"""
-    if name is None:
-        name = f"{block_type}_{len(st.session_state.logic_blocks) + 1}"
-    
-    block = {
-        'type': block_type,
-        'name': name,
-        'data': copy.deepcopy(data),
-        'created_at': datetime.now().isoformat(),
-        'description': f"{block_type} block with {len(data.get('signals', []))} signals"
-    }
-    
-    st.session_state.logic_blocks[name] = block
-    return name
-
-def copy_logic_block(block_data, block_type="custom"):
-    """Copy a logic block to clipboard"""
-    st.session_state.copied_block = {
-        'type': block_type,
-        'data': copy.deepcopy(block_data),
-        'copied_at': datetime.now().isoformat()
-    }
-    st.session_state.block_clipboard.append(st.session_state.copied_block)
-
-def paste_logic_block(target_location, target_key):
-    """Paste a logic block to target location"""
-    if st.session_state.copied_block:
-        # Deep copy to avoid reference issues
-        pasted_data = copy.deepcopy(st.session_state.copied_block['data'])
-        
-        # Update keys to avoid conflicts
-        if 'signals' in pasted_data:
-            for signal in pasted_data['signals']:
-                signal['signal'] = ''  # Reset signal selection
-        
-        # Add to target location
-        if target_key in target_location:
-            if isinstance(target_location[target_key], list):
-                target_location[target_key].append(pasted_data)
-            else:
-                target_location[target_key] = pasted_data
-        else:
-            target_location[target_key] = pasted_data
-        
-        return True
-    return False
-
-def get_block_preview(block_data):
-    """Generate a preview of the logic block"""
-    if 'signals' in block_data:
-        signal_count = len(block_data['signals'])
-        allocation = block_data.get('allocation', 'Not set')
-        return f"📋 {signal_count} signals → {allocation}"
-    elif 'type' in block_data:
-        return f"📋 {block_data['type']} → {block_data.get('allocation', 'Not set')}"
-    else:
-        return "📋 Custom block"
-
+# Helper Functions
 def generate_block_signature(block_data):
-    """Generate a unique signature for a logic block based on its structure"""
-    import hashlib
-    
-    # Create a deterministic representation of the block
+    """Generate a unique signature for a logic block"""
     signature_data = {
         'signals': block_data.get('signals', []),
-        'allocation': block_data.get('allocation', ''),
-        'else_type': block_data.get('else_type', ''),
-        'else_allocation': block_data.get('else_allocation', ''),
-        'else_signals': block_data.get('else_signals', []),
-        'nested_else': block_data.get('nested_else', {})
+        'allocations': block_data.get('allocations', []),
+        'else_allocations': block_data.get('else_allocations', []),
+        'type': block_data.get('type', 'custom')
     }
-    
-    # Convert to JSON string for hashing
-    signature_str = json.dumps(signature_data, sort_keys=True)
-    return hashlib.md5(signature_str.encode()).hexdigest()
+    return hashlib.md5(json.dumps(signature_data, sort_keys=True).encode()).hexdigest()
 
 def compute_logic_block(block_data, signal_results, data, benchmark_ticker):
-    """Compute a logic block and cache the result"""
-    block_signature = generate_block_signature(block_data)
+    """Compute logic block with caching"""
+    signature = generate_block_signature(block_data)
     
-    # Check if we have a cached result
-    if block_signature in st.session_state.block_cache:
+    if signature in st.session_state.block_cache:
         st.session_state.cache_hits += 1
-        return st.session_state.block_cache[block_signature]
+        return st.session_state.block_cache[signature]
     
-    # Compute the block (cache miss)
     st.session_state.cache_misses += 1
     
-    # Extract signals and compute logic
-    block_signals = None
-    for signal_config in block_data.get('signals', []):
-        if signal_config['signal'] and signal_config['signal'] in signal_results:
-            signal_values = signal_results[signal_config['signal']]
-            
-            # Apply negation if needed
-            if signal_config['negated']:
-                signal_values = (~signal_values.astype(bool)).astype(int)
-            
-            # Combine with previous signals
-            if block_signals is None:
-                block_signals = signal_values
-            else:
-                if signal_config['operator'] == "AND":
-                    block_signals = (block_signals & signal_values).astype(int)
-                else:  # OR
-                    block_signals = (block_signals | signal_values).astype(int)
+    # Compute the logic block
+    if block_data.get('type') == 'if_else':
+        # Handle If/Else logic
+        if_signals = block_data.get('signals', [])
+        if_allocations = block_data.get('allocations', [])
+        else_allocations = block_data.get('else_allocations', [])
+        
+        # Evaluate IF conditions
+        if_result = True
+        for signal_config in if_signals:
+            signal_name = signal_config.get('signal', '')
+            if signal_name and signal_name in signal_results:
+                signal_result = signal_results[signal_name]
+                if signal_config.get('negated', False):
+                    signal_result = ~signal_result
+                
+                if signal_config.get('operator', 'AND') == 'AND':
+                    if_result = if_result & signal_result
+                else:
+                    if_result = if_result | signal_result
+        
+        # Return appropriate allocation based on IF result
+        if if_result.any():
+            result = if_allocations
+        else:
+            result = else_allocations
+        
+        st.session_state.block_cache[signature] = result
+        return result
     
-    # Compute equity curve if we have signals
-    if block_signals is not None and block_data.get('allocation'):
-        allocation = st.session_state.output_allocations[block_data['allocation']]
-        equity_curve = calculate_multi_ticker_equity_curve(block_signals, allocation, data)
-        returns = equity_curve.pct_change().fillna(0)
-    else:
-        # Default to benchmark if no signals or allocation
-        equity_curve = pd.Series(1.0, index=data[benchmark_ticker].index)
-        returns = equity_curve.pct_change().fillna(0)
-    
-    # Cache the result
-    result = {
-        'signals': block_signals,
-        'equity_curve': equity_curve,
-        'returns': returns,
-        'allocation': block_data.get('allocation', ''),
-        'signature': block_signature
-    }
-    
-    st.session_state.block_cache[block_signature] = result
-    return result
+    return []
 
 def get_cache_stats():
-    """Get cache performance statistics"""
+    """Get cache statistics"""
     total_requests = st.session_state.cache_hits + st.session_state.cache_misses
-    if total_requests > 0:
-        hit_rate = (st.session_state.cache_hits / total_requests) * 100
-    else:
-        hit_rate = 0
-    
+    hit_rate = (st.session_state.cache_hits / total_requests * 100) if total_requests > 0 else 0
     return {
         'hits': st.session_state.cache_hits,
         'misses': st.session_state.cache_misses,
         'total': total_requests,
-        'hit_rate': hit_rate,
-        'cache_size': len(st.session_state.block_cache)
+        'hit_rate': hit_rate
     }
 
 def clear_cache():
-    """Clear the logic block cache"""
-    st.session_state.block_cache.clear()
+    """Clear the block cache"""
+    st.session_state.block_cache = {}
     st.session_state.cache_hits = 0
     st.session_state.cache_misses = 0
 
-# Page configuration
-st.set_page_config(
-    page_title="Strategy Validation Tool",
-    page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
-# Custom CSS for styling
-st.markdown("""
-<style>
-    /* Global styling */
-    * {
-        color: #2c3e50 !important;
-    }
-    
-    /* Main styling */
-    .main {
-        padding: 2rem;
-        background: #475569;
-        min-height: 100vh;
-    }
-    
-    .stApp {
-        background: #475569;
-    }
-    
-    /* Header styling */
-    .main-header {
-        font-size: 2.5rem;
-        font-weight: 700;
-        color: white !important;
-        text-align: center;
-        margin-bottom: 2rem;
-        padding: 1rem 0;
-        text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-    }
-    
-    /* Modern Card Styling */
-    .stExpander {
-        background: rgba(255, 255, 255, 0.95) !important;
-        border-radius: 16px !important;
-        border: 1px solid rgba(255, 255, 255, 0.2) !important;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.1) !important;
-        backdrop-filter: blur(10px) !important;
-    }
-    
-    .stExpander > div {
-        background: transparent !important;
-    }
-    
-    /* Strategy Builder Styling */
-    .strategy-builder {
-        background: rgba(255, 255, 255, 0.95);
-        border-radius: 16px;
-        padding: 2rem;
-        margin: 1rem 0;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.1);
-        border: 1px solid rgba(255,255,255,0.2);
-        backdrop-filter: blur(10px);
-    }
-    
-    .branch-container {
-        background: rgba(248, 249, 250, 0.9);
-        border: 2px solid rgba(233, 236, 239, 0.8);
-        border-radius: 12px;
-        padding: 1.5rem;
-        margin: 1rem 0;
-        position: relative;
-        transition: all 0.3s ease;
-        backdrop-filter: blur(5px);
-    }
-    
-    .branch-container:hover {
-        border-color: #6366f1;
-        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
-        transform: translateY(-2px);
-    }
-    
-    .branch-header {
-        background: linear-gradient(135deg, #6366f1, #4f46e5);
-        color: white !important;
-        padding: 0.75rem 1rem;
-        border-radius: 8px;
-        margin-bottom: 1rem;
-        font-weight: 600;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
-    }
-    
-    .condition-block {
-        background: rgba(219, 234, 254, 0.8);
-        border: 1px solid rgba(147, 197, 253, 0.6);
-        border-radius: 8px;
-        padding: 1rem;
-        margin: 0.5rem 0;
-        position: relative;
-        backdrop-filter: blur(5px);
-    }
-    
-    .condition-block::before {
-        content: "IF";
-        position: absolute;
-        top: -8px;
-        left: 12px;
-        background: #3b82f6;
-        color: white !important;
-        padding: 2px 8px;
-        border-radius: 4px;
-        font-size: 0.7rem;
-        font-weight: 600;
-        box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
-    }
-    
-    .else-block {
-        background: rgba(254, 243, 199, 0.8);
-        border: 1px solid rgba(251, 191, 36, 0.6);
-        border-radius: 8px;
-        padding: 1rem;
-        margin: 0.5rem 0;
-        position: relative;
-        margin-left: 20px;
-        border-left: 3px solid #f59e0b;
-        backdrop-filter: blur(5px);
-    }
-    
-    .else-block::before {
-        content: "ELSE";
-        position: absolute;
-        top: -8px;
-        left: 12px;
-        background: #f59e0b;
-        color: white !important;
-        padding: 2px 8px;
-        border-radius: 4px;
-        font-size: 0.7rem;
-        font-weight: 600;
-        box-shadow: 0 2px 4px rgba(245, 158, 11, 0.3);
-    }
-    
-    .nested-else-block {
-        background: rgba(243, 232, 255, 0.8);
-        border: 1px solid rgba(196, 181, 253, 0.6);
-        border-radius: 8px;
-        padding: 1rem;
-        margin: 0.5rem 0;
-        position: relative;
-        margin-left: 40px;
-        border-left: 3px solid #8b5cf6;
-        backdrop-filter: blur(5px);
-    }
-    
-    .nested-else-block::before {
-        content: "NESTED ELSE";
-        position: absolute;
-        top: -8px;
-        left: 12px;
-        background: #8b5cf6;
-        color: white !important;
-        padding: 2px 8px;
-        border-radius: 4px;
-        font-size: 0.7rem;
-        font-weight: 600;
-        box-shadow: 0 2px 4px rgba(139, 92, 246, 0.3);
-    }
-    
-    .then-block {
-        background: rgba(220, 252, 231, 0.8);
-        border: 1px solid rgba(134, 239, 172, 0.6);
-        border-radius: 8px;
-        padding: 1rem;
-        margin: 0.5rem 0;
-        position: relative;
-        margin-left: 20px;
-        border-left: 3px solid #10b981;
-        backdrop-filter: blur(5px);
-    }
-    
-    .then-block::before {
-        content: "THEN";
-        position: absolute;
-        top: -8px;
-        left: 12px;
-        background: #10b981;
-        color: white !important;
-        padding: 2px 8px;
-        border-radius: 4px;
-        font-size: 0.7rem;
-        font-weight: 600;
-        box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);
-    }
-    
-    .allocation-display {
-        background: rgba(240, 253, 244, 0.9);
-        border: 1px solid rgba(134, 239, 172, 0.6);
-        border-radius: 6px;
-        padding: 0.75rem;
-        margin: 0.5rem 0;
-        font-weight: 500;
-        color: #059669 !important;
-    }
-    
-    /* Modern Input Styling */
-    .stTextInput > div > div > input {
-        background: rgba(255, 255, 255, 0.9) !important;
-        border: 1px solid rgba(209, 213, 219, 0.8) !important;
-        border-radius: 8px !important;
-        color: #2c3e50 !important;
-    }
-    
-    .stSelectbox > div > div > div {
-        background: rgba(255, 255, 255, 0.9) !important;
-        border: 1px solid rgba(209, 213, 219, 0.8) !important;
-        border-radius: 8px !important;
-        color: #2c3e50 !important;
-    }
-    
-    .stNumberInput > div > div > input {
-        background: rgba(255, 255, 255, 0.9) !important;
-        border: 1px solid rgba(209, 213, 219, 0.8) !important;
-        border-radius: 8px !important;
-        color: #2c3e50 !important;
-    }
-    
-    /* Modern Button Styling */
-    .stButton > button {
-        background: linear-gradient(135deg, #6366f1, #4f46e5) !important;
-        color: white !important;
-        border: none !important;
-        border-radius: 8px !important;
-        padding: 0.5rem 1rem !important;
-        font-weight: 600 !important;
-        transition: all 0.3s ease !important;
-        box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3) !important;
-        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3) !important;
-    }
-    
-    .stButton > button:hover {
-        transform: translateY(-2px) !important;
-        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4) !important;
-        color: white !important;
-    }
-    
-    /* Override global color for buttons specifically */
-    .stButton > button, .stButton > button * {
-        color: white !important;
-    }
-    
-    /* Metric Cards */
-    .stMetric {
-        background: rgba(255, 255, 255, 0.9) !important;
-        border-radius: 12px !important;
-        padding: 1rem !important;
-        border: 1px solid rgba(209, 213, 219, 0.8) !important;
-        backdrop-filter: blur(5px) !important;
-    }
-    
-    /* Progress Bars */
-    .stProgress > div > div > div {
-        background: rgba(99, 102, 241, 0.2) !important;
-        border-radius: 8px !important;
-    }
-    
-    .stProgress > div > div > div > div {
-        background: linear-gradient(135deg, #6366f1, #4f46e5) !important;
-        border-radius: 8px !important;
-    }
-    
-    /* Signal card styling */
-    .signal-card {
-        background: white;
-        border: 1px solid #e1e5e9;
-        border-radius: 12px;
-        padding: 1.5rem;
-        margin: 1rem 0;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        transition: all 0.3s ease;
-    }
-    
-    .signal-card:hover {
-        box-shadow: 0 4px 16px rgba(0,0,0,0.15);
-        transform: translateY(-2px);
-    }
-    
-    .signal-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 1rem;
-    }
-    
-    .signal-name {
-        font-size: 1.2rem;
-        font-weight: 600;
-        color: #333;
-        margin: 0;
-    }
-    
-    .signal-type {
-        background: #e3f2fd;
-        color: #1976d2;
-        padding: 0.25rem 0.75rem;
-        border-radius: 20px;
-        font-size: 0.8rem;
-        font-weight: 500;
-    }
-    
-    /* Metric styling */
-    .metric-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-        gap: 1rem;
-        margin: 1rem 0;
-    }
-    
-    .metric-card {
-        background: white;
-        border: 1px solid #e1e5e9;
-        border-radius: 8px;
-        padding: 1rem;
-        text-align: center;
-        box-shadow: 0 1px 4px rgba(0,0,0,0.05);
-    }
-    
-    .metric-value {
-        font-size: 1.5rem;
-        font-weight: 700;
-        margin-bottom: 0.25rem;
-        color: #333;
-    }
-    
-    .metric-label {
-        font-size: 0.8rem;
-        color: #666;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-    
-    .positive {
-        color: #2e7d32;
-    }
-    
-    .negative {
-        color: #d32f2f;
-    }
-    
-    .neutral {
-        color: #666;
-    }
-    
-    /* Allocation slider styling */
-    .allocation-container {
-        background: white;
-        border: 1px solid #e1e5e9;
-        border-radius: 8px;
-        padding: 1rem;
-        margin: 0.5rem 0;
-    }
-    
-    .allocation-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 0.5rem;
-        color: #333;
-    }
-    
-    .allocation-value {
-        font-weight: 600;
-        color: #1976d2;
-    }
-    
-    /* Button styling */
-    .stButton > button {
-        border-radius: 8px;
-        font-weight: 600;
-        transition: all 0.3s ease;
-        background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);
-        color: white;
-        border: none;
-        padding: 0.75rem 1.5rem;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    
-    .stButton > button:hover {
-        background: linear-gradient(135deg, #1565c0 0%, #0d47a1 100%);
-        transform: translateY(-2px);
-        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-    }
-    
-    /* Chart styling */
-    .chart-container {
-        background: white;
-        border: 1px solid #e1e5e9;
-        border-radius: 12px;
-        padding: 1.5rem;
-        margin: 1rem 0;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    }
-    
-    /* Sidebar styling */
-    .css-1d391kg {
-        background-color: white;
-        color: #333;
-    }
-    
-    /* Progress bar styling */
-    .stProgress > div > div > div > div {
-        background-color: #1976d2;
-    }
-    
-    /* Dataframe styling */
-    .dataframe {
-        border-radius: 8px;
-        overflow: hidden;
-        background: white;
-    }
-    
-    /* Custom container styling */
-    .custom-container {
-        background: white;
-        border: 1px solid #e1e5e9;
-        border-radius: 12px;
-        padding: 1.5rem;
-        margin: 1rem 0;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    }
-    
-    /* Fix text colors */
-    .stMarkdown {
-        color: #333 !important;
-    }
-    
-    .stDataFrame {
-        color: #333 !important;
-    }
-    
-    .stPlotlyChart {
-        color: #333 !important;
-    }
-    
-    /* Fix sidebar text colors */
-    .sidebar .stMarkdown {
-        color: #333 !important;
-    }
-    
-    .sidebar .stSelectbox > div > div {
-        background: white !important;
-        color: #333 !important;
-    }
-    
-    .sidebar .stTextInput > div > div > input {
-        background: white !important;
-        color: #333 !important;
-    }
-    
-    .sidebar .stSlider > div > div > div > div {
-        background: #1976d2 !important;
-    }
-    
-    /* Fix main content text colors */
-    .main .stMarkdown {
-        color: #333 !important;
-    }
-    
-    .main .stSubheader {
-        color: #333 !important;
-    }
-    
-    .main .stHeader {
-        color: #333 !important;
-    }
-    
-    .main .stText {
-        color: #333 !important;
-    }
-    
-    .main .stCaption {
-        color: #333 !important;
-    }
-    
-    .main .stInfo {
-        color: #333 !important;
-    }
-    
-    .main .stSuccess {
-        color: #333 !important;
-    }
-    
-    .main .stWarning {
-        color: #333 !important;
-    }
-    
-    .main .stError {
-        color: #333 !important;
-    }
-    
-    /* Fix input field colors */
-    .stTextInput > div > div > input {
-        background: white !important;
-        color: #333 !important;
-        border: 1px solid #e1e5e9 !important;
-    }
-    
-    .stSelectbox > div > div {
-        background: white !important;
-        color: #333 !important;
-        border: 1px solid #e1e5e9 !important;
-    }
-    
-    .stNumberInput > div > div > input {
-        background: white !important;
-        color: #333 !important;
-        border: 1px solid #e1e5e9 !important;
-    }
-    
-    .stDateInput > div > div > input {
-        background: white !important;
-        color: #333 !important;
-        border: 1px solid #e1e5e9 !important;
-    }
-    
-    /* Fix all input elements globally */
-    input, textarea, select {
-        background: white !important;
-        color: #333 !important;
-        border: 1px solid #e1e5e9 !important;
-    }
-    
-    /* Fix Streamlit specific input containers */
-    .stTextInput, .stSelectbox, .stNumberInput, .stDateInput {
-        background: white !important;
-        color: #333 !important;
-    }
-    
-    /* Fix dropdown menus */
-    .stSelectbox [data-baseweb="select"] {
-        background: white !important;
-        color: #333 !important;
-    }
-    
-    .stSelectbox [data-baseweb="select"] > div {
-        background: white !important;
-        color: #333 !important;
-    }
-    
-    /* Fix dropdown options */
-    .stSelectbox [data-baseweb="select"] > div > div {
-        background: white !important;
-        color: #333 !important;
-    }
-    
-    /* Fix dropdown option hover */
-    .stSelectbox [data-baseweb="select"] > div > div:hover {
-        background: #f5f5f5 !important;
-        color: #333 !important;
-    }
-    
-    /* Fix dropdown option text */
-    .stSelectbox [data-baseweb="select"] > div > div > div {
-        background: white !important;
-        color: #333 !important;
-    }
-    
-    /* Fix dropdown option text hover */
-    .stSelectbox [data-baseweb="select"] > div > div > div:hover {
-        background: #f5f5f5 !important;
-        color: #333 !important;
-    }
-    
-    /* Global dropdown styling */
-    div[data-baseweb="select"] {
-        background: white !important;
-        color: #333 !important;
-    }
-    
-    div[data-baseweb="select"] > div {
-        background: white !important;
-        color: #333 !important;
-    }
-    
-    div[data-baseweb="select"] > div > div {
-        background: white !important;
-        color: #333 !important;
-    }
-    
-    div[data-baseweb="select"] > div > div > div {
-        background: white !important;
-        color: #333 !important;
-    }
-    
-    /* Additional dropdown styling for better visibility */
-    .stSelectbox > div > div > div > div {
-        background: white !important;
-        color: #333 !important;
-    }
-    
-    .stSelectbox > div > div > div > div > div {
-        background: white !important;
-        color: #333 !important;
-    }
-    
-    /* Fix any remaining dark text issues */
-    .stSelectbox * {
-        color: #333 !important;
-    }
-    
-    /* Ensure dropdown options are visible */
-    [role="option"] {
-        background: white !important;
-        color: #333 !important;
-    }
-    
-    [role="option"]:hover {
-        background: #f5f5f5 !important;
-        color: #333 !important;
-    }
-    
-    /* Fix input focus states */
-    input:focus, textarea:focus, select:focus {
-        background: white !important;
-        color: #333 !important;
-        border: 2px solid #1976d2 !important;
-    }
-    
-    /* Fix label colors */
-    .main label {
-        color: #333 !important;
-    }
-    
-    .main .stLabel {
-        color: #333 !important;
-    }
-    
-    /* Fix metric colors */
-    .main .stMetric {
-        color: #333 !important;
-    }
-    
-    .main .stMetric > div > div {
-        color: #333 !important;
-    }
-    
-    /* Fix container backgrounds */
-    .main .stContainer {
-        background: white !important;
-        color: #333 !important;
-    }
-    
-    .main .stExpander {
-        background: white !important;
-        color: #333 !important;
-    }
-    
-    /* Fix tab text colors */
-    .stTabs [data-baseweb="tab-list"] {
-        background: white !important;
-        color: #333 !important;
-    }
-    
-    .stTabs [data-baseweb="tab"] {
-        background: white !important;
-        color: #333 !important;
-    }
-    
-    .stTabs [data-baseweb="tab"]:hover {
-        background: #f5f5f5 !important;
-        color: #333 !important;
-    }
-    
-    .stTabs [data-baseweb="tab"][aria-selected="true"] {
-        background: #1976d2 !important;
-        color: white !important;
-    }
-    
-    /* Fix all text elements */
-    * {
-        color: #333 !important;
-    }
-    
-    /* Override for specific elements that should be white */
-    .stButton > button {
-        color: white !important;
-    }
-    
-    .signal-type {
-        color: #1976d2 !important;
-    }
-    
-    .allocation-value {
-        color: #1976d2 !important;
-    }
-    
-    .positive {
-        color: #2e7d32 !important;
-    }
-    
-    .negative {
-        color: #d32f2f !important;
-    }
-    
-    .neutral {
-        color: #666 !important;
-    }
-</style>
-""", unsafe_allow_html=True)
-
-# Initialize session state
-if 'signals' not in st.session_state:
-    st.session_state.signals = []
-if 'allocations' not in st.session_state:
-    st.session_state.allocations = {}
-if 'output_allocations' not in st.session_state:
-    st.session_state.output_allocations = {}
-if 'strategies' not in st.session_state:
-    st.session_state.strategies = []
-if 'backtest_results' not in st.session_state:
-    st.session_state.backtest_results = None
-if 'selected_signal' not in st.session_state:
-    st.session_state.selected_signal = None
-if 'strategy_signals' not in st.session_state:
-    st.session_state.strategy_signals = [{'signal': '', 'negated': False, 'operator': 'AND'}]
-
-# Helper functions
+# Technical Analysis Functions
 def calculate_rsi(prices: pd.Series, window: int = 14, method: str = "wilders") -> pd.Series:
-    """Calculate RSI using Wilder's smoothing (TradingView standard)"""
+    """Calculate RSI with TradingView/Composer.trade compatibility"""
     delta = prices.diff()
-    gain = delta.where(delta > 0, 0)
-    loss = -delta.where(delta < 0, 0)
+    gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
     
-    # Wilder's smoothing: use exponential moving average with alpha = 1/window
-    alpha = 1.0 / window
-    avg_gain = gain.ewm(alpha=alpha, adjust=False).mean()
-    avg_loss = loss.ewm(alpha=alpha, adjust=False).mean()
-    
-    rs = avg_gain / avg_loss
-    rsi = 100 - (100 / (1 + rs))
+    if method == "wilders":
+        rs = gain / loss
+        rsi = 100 - (100 / (1 + rs))
+    else:
+        rs = gain / loss
+        rsi = 100 - (100 / (1 + rs))
     
     return rsi
 
@@ -938,8 +304,12 @@ def get_stock_data(ticker: str, start_date=None, end_date=None, exclusions=None)
         if data.empty:
             return pd.Series(dtype=float)
         
-        if data.index.tz is not None:
-            data.index = data.index.tz_localize(None)
+        # Normalize timezone
+        data.index = data.index.tz_localize(None)
+        
+        # Handle exclusions (holidays, etc.)
+        if exclusions:
+            data = data[~data.index.isin(exclusions)]
         
         return data['Close']
     except Exception as e:
@@ -947,78 +317,64 @@ def get_stock_data(ticker: str, start_date=None, end_date=None, exclusions=None)
         return pd.Series(dtype=float)
 
 def calculate_equity_curve(signals: pd.Series, prices: pd.Series, allocation: float = 1.0) -> pd.Series:
-    """Calculate equity curve based on signals and prices"""
-    equity_curve = pd.Series(1.0, index=prices.index)
-    current_equity = 1.0
-    in_position = False
-    entry_equity = 1.0
-    entry_price = None
+    """Calculate equity curve from signals and prices"""
+    if signals.empty or prices.empty:
+        return pd.Series(dtype=float)
     
-    for date in prices.index:
-        current_signal = signals[date] if date in signals.index else 0
-        current_price = prices[date]
-        
-        if current_signal == 1 and not in_position:
-            in_position = True
-            entry_equity = current_equity
-            entry_price = current_price
-            
-        elif current_signal == 0 and in_position:
-            trade_return = (current_price - entry_price) / entry_price
-            current_equity = entry_equity * (1 + trade_return * allocation)
-            in_position = False
-        
-        if in_position:
-            current_equity = entry_equity * (current_price / entry_price)
-        
-        equity_curve[date] = current_equity
+    # Align signals and prices
+    aligned_data = pd.concat([signals, prices], axis=1).dropna()
+    if aligned_data.empty:
+        return pd.Series(dtype=float)
     
-    if in_position:
-        final_price = prices.iloc[-1]
-        trade_return = (final_price - entry_price) / entry_price
-        current_equity = entry_equity * (1 + trade_return * allocation)
-        equity_curve.iloc[-1] = current_equity
+    signals_aligned = aligned_data.iloc[:, 0]
+    prices_aligned = aligned_data.iloc[:, 1]
+    
+    # Calculate returns
+    returns = prices_aligned.pct_change()
+    
+    # Apply signals
+    strategy_returns = returns * signals_aligned * allocation
+    
+    # Calculate cumulative equity curve
+    equity_curve = (1 + strategy_returns).cumprod()
     
     return equity_curve
 
 def calculate_metrics(equity_curve: pd.Series, returns: pd.Series) -> dict:
     """Calculate comprehensive performance metrics"""
-    if len(returns) == 0:
-        return {
-            'total_return': 0.0,
-            'annualized_return': 0.0,
-            'volatility': 0.0,
-            'sharpe_ratio': 0.0,
-            'sortino_ratio': 0.0,
-            'max_drawdown': 0.0,
-            'win_rate': 0.0,
-            'total_trades': 0,
-            'avg_trade_return': 0.0,
-            'calmar_ratio': 0.0
-        }
+    if equity_curve.empty:
+        return {}
     
-    total_return = (equity_curve.iloc[-1] - 1) * 100
-    days = (equity_curve.index[-1] - equity_curve.index[0]).days
-    annualized_return = ((equity_curve.iloc[-1] ** (365/days)) - 1) * 100 if days > 0 else 0
+    # Basic metrics
+    total_return = (equity_curve.iloc[-1] / equity_curve.iloc[0]) - 1
+    annualized_return = ((equity_curve.iloc[-1] / equity_curve.iloc[0]) ** (252 / len(equity_curve))) - 1
     
-    volatility = returns.std() * np.sqrt(252) * 100
-    sharpe_ratio = (annualized_return / 100) / (volatility / 100) if volatility > 0 else 0
+    # Volatility
+    strategy_returns = equity_curve.pct_change().dropna()
+    volatility = strategy_returns.std() * np.sqrt(252)
     
-    downside_returns = returns[returns < 0]
-    downside_deviation = downside_returns.std() * np.sqrt(252) * 100 if len(downside_returns) > 0 else 0
-    sortino_ratio = (annualized_return / 100) / (downside_deviation / 100) if downside_deviation > 0 else 0
+    # Sharpe Ratio
+    risk_free_rate = 0.02  # 2% annual risk-free rate
+    sharpe_ratio = (annualized_return - risk_free_rate) / volatility if volatility > 0 else 0
     
+    # Sortino Ratio
+    downside_returns = strategy_returns[strategy_returns < 0]
+    downside_deviation = downside_returns.std() * np.sqrt(252) if len(downside_returns) > 0 else 0
+    sortino_ratio = (annualized_return - risk_free_rate) / downside_deviation if downside_deviation > 0 else 0
+    
+    # Maximum Drawdown
     rolling_max = equity_curve.expanding().max()
     drawdown = (equity_curve - rolling_max) / rolling_max
-    max_drawdown = drawdown.min() * 100
+    max_drawdown = drawdown.min()
     
-    trade_returns = returns[returns != 0]
-    win_rate = (trade_returns > 0).mean() * 100 if len(trade_returns) > 0 else 0
-    total_trades = len(trade_returns)
-    avg_trade_return = trade_returns.mean() * 100 if len(trade_returns) > 0 else 0
+    # Calmar Ratio
+    calmar_ratio = annualized_return / abs(max_drawdown) if max_drawdown != 0 else 0
     
-    # Calculate Calmar ratio (annualized return / max drawdown)
-    calmar_ratio = (annualized_return / 100) / abs(max_drawdown / 100) if max_drawdown != 0 else 0
+    # Win Rate and Trade Statistics
+    trades = strategy_returns[strategy_returns != 0]
+    win_rate = (trades > 0).mean() if len(trades) > 0 else 0
+    total_trades = len(trades)
+    avg_trade_return = trades.mean() if len(trades) > 0 else 0
     
     return {
         'total_return': total_return,
@@ -1027,260 +383,247 @@ def calculate_metrics(equity_curve: pd.Series, returns: pd.Series) -> dict:
         'sharpe_ratio': sharpe_ratio,
         'sortino_ratio': sortino_ratio,
         'max_drawdown': max_drawdown,
+        'calmar_ratio': calmar_ratio,
         'win_rate': win_rate,
         'total_trades': total_trades,
-        'avg_trade_return': avg_trade_return,
-        'calmar_ratio': calmar_ratio
+        'avg_trade_return': avg_trade_return
     }
 
 def calculate_sma(prices: pd.Series, window: int) -> pd.Series:
-    """Calculate Simple Moving Average (TradingView standard)"""
-    return prices.rolling(window=window, min_periods=1).mean()
+    """Calculate Simple Moving Average"""
+    return prices.rolling(window=window).mean()
 
 def calculate_ema(prices: pd.Series, window: int) -> pd.Series:
-    """Calculate Exponential Moving Average (TradingView standard)"""
-    # Use span parameter for consistency with TradingView
-    return prices.ewm(span=window, adjust=False).mean()
+    """Calculate Exponential Moving Average"""
+    return prices.ewm(span=window).mean()
 
 def calculate_cumulative_return(prices: pd.Series, window: int) -> pd.Series:
-    """Calculate cumulative return over the specified window (TradingView standard)"""
-    # Calculate percentage change over the window period
-    return prices.pct_change(periods=window) * 100
+    """Calculate cumulative return over window"""
+    return (prices / prices.shift(window)) - 1
 
 def calculate_max_drawdown_series(prices: pd.Series, window: int) -> pd.Series:
-    """Calculate rolling max drawdown over the specified window (TradingView standard)"""
-    # Calculate rolling maximum over the window
-    rolling_max = prices.rolling(window=window, min_periods=1).max()
-    # Calculate drawdown as percentage from peak
-    drawdown = (prices - rolling_max) / rolling_max * 100
-    return drawdown
+    """Calculate rolling maximum drawdown"""
+    rolling_max = prices.rolling(window=window).max()
+    return (prices - rolling_max) / rolling_max
 
 def calculate_indicator(prices: pd.Series, indicator_type: str, days: int = None) -> pd.Series:
-    """Calculate the specified indicator"""
-    if indicator_type == "Current Price":
-        return prices
+    """Calculate various technical indicators"""
+    if indicator_type == "RSI":
+        return calculate_rsi(prices, days or 14)
     elif indicator_type == "SMA":
-        return calculate_sma(prices, days)
+        return calculate_sma(prices, days or 200)
     elif indicator_type == "EMA":
-        return calculate_ema(prices, days)
-    elif indicator_type == "RSI":
-        return calculate_rsi(prices, days)
-    elif indicator_type == "Cumulative Return":
-        return calculate_cumulative_return(prices, days)
-    elif indicator_type == "Max Drawdown":
-        return calculate_max_drawdown_series(prices, days)
-    else:
+        return calculate_ema(prices, days or 20)
+    elif indicator_type == "Current Price":
         return prices
+    elif indicator_type == "Cumulative Return":
+        return calculate_cumulative_return(prices, days or 252)
+    elif indicator_type == "Max Drawdown":
+        return calculate_max_drawdown_series(prices, days or 252)
+    else:
+        return pd.Series(dtype=float)
 
 def evaluate_signal_condition(indicator1_values: pd.Series, indicator2_values: pd.Series, operator: str) -> pd.Series:
-    """Evaluate the signal condition based on the operator"""
+    """Evaluate signal condition between two indicators"""
+    if indicator1_values.empty or indicator2_values.empty:
+        return pd.Series(dtype=bool)
+    
+    # Align the series
+    aligned_data = pd.concat([indicator1_values, indicator2_values], axis=1).dropna()
+    if aligned_data.empty:
+        return pd.Series(dtype=bool)
+    
+    indicator1_aligned = aligned_data.iloc[:, 0]
+    indicator2_aligned = aligned_data.iloc[:, 1]
+    
     if operator == ">":
-        return (indicator1_values > indicator2_values).astype(int)
+        return indicator1_aligned > indicator2_aligned
     elif operator == "<":
-        return (indicator1_values < indicator2_values).astype(int)
+        return indicator1_aligned < indicator2_aligned
     elif operator == ">=":
-        return (indicator1_values >= indicator2_values).astype(int)
+        return indicator1_aligned >= indicator2_aligned
     elif operator == "<=":
-        return (indicator1_values <= indicator2_values).astype(int)
+        return indicator1_aligned <= indicator2_aligned
     elif operator == "==":
-        return (indicator1_values == indicator2_values).astype(int)
+        return indicator1_aligned == indicator2_aligned
     elif operator == "!=":
-        return (indicator1_values != indicator2_values).astype(int)
+        return indicator1_aligned != indicator2_aligned
     else:
-        return pd.Series(0, index=indicator1_values.index)
+        return pd.Series(dtype=bool)
 
 def calculate_multi_ticker_equity_curve(signals: pd.Series, allocation: dict, data: dict) -> pd.Series:
-    """Calculate equity curve for an allocation with multiple tickers"""
-    # Calculate weighted returns for multiple tickers
-    combined_returns = pd.Series(0.0, index=data[list(data.keys())[0]].index)
+    """Calculate equity curve for multi-ticker allocation"""
+    if signals.empty or not allocation or not data:
+        return pd.Series(dtype=float)
     
-    for ticker_component in allocation['tickers']:
-        ticker = ticker_component['ticker']
-        weight = ticker_component['weight'] / 100
+    # Get tickers and weights
+    tickers = allocation.get('tickers', [])
+    if not tickers:
+        return pd.Series(dtype=float)
+    
+    # Calculate weighted returns
+    weighted_returns = pd.Series(0.0, index=signals.index)
+    
+    for ticker_config in tickers:
+        ticker = ticker_config.get('ticker', '')
+        weight = ticker_config.get('weight', 0) / 100.0
         
-        # Calculate equity curve for this ticker
-        ticker_equity = calculate_equity_curve(signals, data[ticker], 1.0)  # Use full allocation for individual ticker
-        
-        # Convert to returns and apply weight
-        ticker_returns = ticker_equity.pct_change().fillna(0)
-        weighted_returns = ticker_returns * weight
-        combined_returns = combined_returns + weighted_returns
+        if ticker in data:
+            ticker_prices = data[ticker]
+            ticker_returns = ticker_prices.pct_change()
+            weighted_returns += ticker_returns * weight * signals
     
-    # Convert back to equity curve
-    equity_curve = (1 + combined_returns).cumprod()
+    # Calculate cumulative equity curve
+    equity_curve = (1 + weighted_returns).cumprod()
     
-    return equity_curve
+    return equity_curve 
 
-# Main app
-st.markdown('<h1 class="main-header">📊 Strategy Validation Tool</h1>', unsafe_allow_html=True)
+# Main Application Interface
+st.title("✨ Strategy Validation Tool")
+st.caption("Build, test, and validate trading strategies with advanced conditional logic")
 
-# Create tabs for different sections
-tab1, tab2, tab3, tab4 = st.tabs(["📊 Reference Signal Blocks", "💰 Allocation Blocks", "🎯 Strategies", "📈 Backtest"])
+# Create tabs
+tab1, tab2, tab3, tab4 = st.tabs(["📊 Signal Blocks", "💰 Allocation Blocks", "🎯 Strategy Builder", "📈 Backtest"])
 
-# Tab 1: Reference Signal Blocks
+# Tab 1: Signal Blocks
 with tab1:
-    st.header("📊 Reference Signal Blocks")
+    st.header("📊 Signal Blocks")
     
-    # Pre-built reference signal blocks
+    # Pre-built signal blocks
     st.subheader("🚀 Quick Start: Pre-built Signals")
-    st.markdown("Click any signal below to add it instantly:")
-    
     col1, col2 = st.columns(2)
     
     with col1:
-        if st.button("📊 QQQ RSI > 80 (Overbought)", key="prebuilt_qqq_rsi_overbought"):
+        if st.button("📈 If 10d RSI QQQ > 80", key="prebuilt_rsi_qqq_high"):
             if 'signals' not in st.session_state:
                 st.session_state.signals = []
             
             signal = {
-                'name': 'QQQ RSI Overbought',
+                'name': 'If 10d RSI QQQ > 80',
                 'type': 'Custom Indicator',
                 'signal_ticker1': 'QQQ',
-                'indicator1': 'Static RSI',
-                'operator': 'greater_than',
-                'days1': 10,
                 'signal_ticker2': 'QQQ',
+                'indicator1': 'RSI',
                 'indicator2': 'Static Value',
+                'operator': '>',
+                'days1': 10,
                 'days2': None,
                 'static_value': 80.0
             }
             st.session_state.signals.append(signal)
-            st.success("✅ QQQ RSI Overbought signal added!")
+            st.success("✅ RSI QQQ > 80 signal added!")
             st.rerun()
         
-        if st.button("📊 QQQ RSI < 30 (Oversold)", key="prebuilt_qqq_rsi_oversold"):
+        if st.button("📉 If 10d RSI QQQ < 30", key="prebuilt_rsi_qqq_low"):
             if 'signals' not in st.session_state:
                 st.session_state.signals = []
             
             signal = {
-                'name': 'QQQ RSI Oversold',
+                'name': 'If 10d RSI QQQ < 30',
                 'type': 'Custom Indicator',
                 'signal_ticker1': 'QQQ',
-                'indicator1': 'Static RSI',
-                'operator': 'less_than',
-                'days1': 10,
                 'signal_ticker2': 'QQQ',
+                'indicator1': 'RSI',
                 'indicator2': 'Static Value',
+                'operator': '<',
+                'days1': 10,
                 'days2': None,
                 'static_value': 30.0
             }
             st.session_state.signals.append(signal)
-            st.success("✅ QQQ RSI Oversold signal added!")
+            st.success("✅ RSI QQQ < 30 signal added!")
             st.rerun()
     
     with col2:
-        if st.button("📊 SPY > 200d SMA", key="prebuilt_spy_200sma"):
+        if st.button("📈 If Current Price SPY > 200d SMA SPY", key="prebuilt_spy_sma_200"):
             if 'signals' not in st.session_state:
                 st.session_state.signals = []
             
             signal = {
-                'name': 'SPY Above 200d SMA',
+                'name': 'If Current Price SPY > 200d SMA SPY',
                 'type': 'Custom Indicator',
                 'signal_ticker1': 'SPY',
+                'signal_ticker2': 'SPY',
                 'indicator1': 'Current Price',
+                'indicator2': 'SMA',
                 'operator': '>',
                 'days1': None,
-                'signal_ticker2': 'SPY',
-                'indicator2': 'SMA',
                 'days2': 200,
                 'static_value': None
             }
             st.session_state.signals.append(signal)
-            st.success("✅ SPY Above 200d SMA signal added!")
+            st.success("✅ SPY > 200d SMA signal added!")
             st.rerun()
         
-        if st.button("📊 SPY > 20d SMA", key="prebuilt_spy_20sma"):
+        if st.button("📈 If Current Price SPY > 20d SMA SPY", key="prebuilt_spy_sma_20"):
             if 'signals' not in st.session_state:
                 st.session_state.signals = []
             
             signal = {
-                'name': 'SPY Above 20d SMA',
+                'name': 'If Current Price SPY > 20d SMA SPY',
                 'type': 'Custom Indicator',
                 'signal_ticker1': 'SPY',
+                'signal_ticker2': 'SPY',
                 'indicator1': 'Current Price',
+                'indicator2': 'SMA',
                 'operator': '>',
                 'days1': None,
-                'signal_ticker2': 'SPY',
-                'indicator2': 'SMA',
                 'days2': 20,
                 'static_value': None
             }
             st.session_state.signals.append(signal)
-            st.success("✅ SPY Above 20d SMA signal added!")
+            st.success("✅ SPY > 20d SMA signal added!")
             st.rerun()
     
     st.markdown("---")
     
-    # Signal creation
-    with st.expander("➕ Create Reference Signal", expanded=False):
-        signal_name = st.text_input("Signal Name", placeholder="e.g., QQQ RSI Oversold")
+    # Create custom signal
+    with st.expander("➕ Create Custom Signal", expanded=False):
+        signal_name = st.text_input("Signal Name", placeholder="e.g., RSI Oversold")
         
-        # Signal type selection
-        signal_type = st.selectbox("Signal Type", ["Custom Indicator"])
+        col1, col2 = st.columns(2)
         
-        if signal_type == "Custom Indicator":
-            st.subheader("📊 Signal Configuration")
+        with col1:
+            signal_ticker1 = st.text_input("Signal Ticker", value="SPY", help="Ticker to analyze")
+            indicator1 = st.selectbox(
+                "Indicator 1",
+                ["RSI", "SMA", "EMA", "Current Price", "Cumulative Return", "Max Drawdown", "Static RSI", "RSI Comparison"],
+                key="indicator1"
+            )
             
-            # Signal ticker selection
-            col1, col2 = st.columns(2)
-            with col1:
-                signal_ticker1 = st.text_input("Signal Ticker 1", value="SPY", help="First ticker to analyze")
-            
-            # Signal logic builder
-            st.write("**Is true if:**")
-            
-            col1, col2, col3, col4 = st.columns([2, 1, 2, 2])
-            
-            with col1:
-                # First indicator
-                indicator1 = st.selectbox(
-                    "Indicator 1",
-                    ["SMA", "EMA", "Current Price", "Cumulative Return", "Max Drawdown", "Static RSI", "RSI Comparison"],
-                    key="indicator1"
+            # Days field for first indicator
+            if indicator1 not in ["Current Price", "Static RSI", "RSI Comparison"]:
+                # Set smart defaults based on indicator type
+                default_days1 = 10 if indicator1 == "RSI" else 200
+                days1 = st.number_input(
+                    f"# of Days for {indicator1}",
+                    min_value=1,
+                    max_value=252,
+                    value=default_days1,
+                    key="days1"
                 )
-                
-                # Days field for indicators that need it
-                if indicator1 not in ["Current Price", "Static RSI", "RSI Comparison"]:
-                    # Set smart defaults based on indicator type
-                    default_days = 200 if indicator1 == "SMA" else 14
-                    days1 = st.number_input(
-                        f"# of Days for {indicator1}",
-                        min_value=1,
-                        max_value=252,
-                        value=default_days,
-                        key="days1"
-                    )
-                elif indicator1 in ["Static RSI", "RSI Comparison"]:
-                    days1 = st.number_input(
-                        "RSI Period",
-                        min_value=1,
-                        max_value=50,
-                        value=10,
-                        key="days1"
-                    )
-            
-            with col2:
-                # Operator
-                if indicator1 == "Static RSI":
-                    operator = st.selectbox(
-                        "Condition",
-                        ["less_than", "greater_than"],
-                        format_func=lambda x: "RSI ≤ threshold" if x == "less_than" else "RSI ≥ threshold",
-                        key="operator"
-                    )
-                else:
-                    operator = st.selectbox(
-                        "Operator",
-                        [">", "<", ">=", "<=", "==", "!="],
-                        key="operator"
-                    )
+            else:
+                days1 = None
+        
+        with col2:
+            # Operator selection
+            if indicator1 == "Static RSI":
+                operator = st.selectbox(
+                    "Comparison",
+                    ["less_than", "greater_than"],
+                    key="operator"
+                )
+            else:
+                operator = st.selectbox(
+                    "Operator",
+                    [">", "<", ">=", "<=", "==", "!="],
+                    key="operator"
+                )
             
             # Handle RSI-specific logic
             if indicator1 == "Static RSI":
                 # For Static RSI, show threshold input instead of indicator2
-                with col3:
-                    st.write("")  # Empty space for alignment
-                with col4:
+                with col2:
                     # Set smart RSI threshold defaults based on operator
                     default_threshold = 32.5 if operator == "less_than" else 78.5
                     rsi_threshold = st.number_input(
@@ -1298,50 +641,46 @@ with tab1:
                 
             elif indicator1 == "RSI Comparison":
                 # For RSI Comparison, automatically set indicator2 to RSI
-                with col3:
-                    signal_ticker2 = st.text_input("Signal Ticker 2", value="QQQ", help="Second ticker to analyze")
-                with col4:
-                    indicator2 = "RSI"
-                    days2 = st.number_input(
-                        "RSI Period",
-                        min_value=1,
-                        max_value=50,
-                        value=14,
-                        key="days2"
-                    )
+                signal_ticker2 = st.text_input("Signal Ticker 2", value="QQQ", help="Second ticker to analyze")
+                indicator2 = "RSI"
+                days2 = st.number_input(
+                    "RSI Period",
+                    min_value=1,
+                    max_value=50,
+                    value=14,
+                    key="days2"
+                )
                 static_value = None
                 
             else:
                 # Regular Custom Indicator logic
-                with col3:
-                    signal_ticker2 = st.text_input("Signal Ticker 2", value="QQQ", help="Second ticker to analyze")
-                with col4:
-                    indicator2 = st.selectbox(
-                        "Indicator 2",
-                        ["SMA", "EMA", "Current Price", "Cumulative Return", "Max Drawdown", "Static Value"],
-                        key="indicator2"
+                signal_ticker2 = st.text_input("Signal Ticker 2", value="QQQ", help="Second ticker to analyze")
+                indicator2 = st.selectbox(
+                    "Indicator 2",
+                    ["SMA", "EMA", "Current Price", "Cumulative Return", "Max Drawdown", "Static Value"],
+                    key="indicator2"
+                )
+                
+                # Days field for second indicator or static value
+                if indicator2 not in ["Current Price", "Static Value"]:
+                    # Set smart defaults based on indicator type
+                    default_days2 = 200 if indicator2 == "SMA" else 14
+                    days2 = st.number_input(
+                        f"# of Days for {indicator2}",
+                        min_value=1,
+                        max_value=252,
+                        value=default_days2,
+                        key="days2"
                     )
-                    
-                    # Days field for second indicator or static value
-                    if indicator2 not in ["Current Price", "Static Value"]:
-                        # Set smart defaults based on indicator type
-                        default_days2 = 200 if indicator2 == "SMA" else 14
-                        days2 = st.number_input(
-                            f"# of Days for {indicator2}",
-                            min_value=1,
-                            max_value=252,
-                            value=default_days2,
-                            key="days2"
-                        )
-                    elif indicator2 == "Static Value":
-                        static_value = st.number_input(
-                            "Static Value",
-                            min_value=0.0,
-                            max_value=1000.0,
-                            value=50.0,
-                            step=0.1,
-                            key="static_value"
-                        )
+                elif indicator2 == "Static Value":
+                    static_value = st.number_input(
+                        "Static Value",
+                        min_value=0.0,
+                        max_value=1000.0,
+                        value=50.0,
+                        step=0.1,
+                        key="static_value"
+                    )
                 
                 # Handle Signal Ticker 2 logic
                 if indicator2 == "Static Value":
@@ -1357,15 +696,13 @@ with tab1:
             elif indicator1 not in ["Current Price"] and indicator2 == "Static Value":
                 st.info(f"**Signal Logic:** {signal_ticker1} {indicator1}({days1}) {operator} {static_value}")
             elif indicator1 not in ["Current Price"]:
-                st.info(f"**Signal Logic:** {signal_ticker1} {indicator1}({days1}) {operator} {signal_ticker2} {indicator2}")
+                st.info(f"**Signal Logic:** {signal_ticker1} {indicator1} {operator} {signal_ticker2} {indicator2}")
             elif indicator2 not in ["Current Price", "Static Value"]:
                 st.info(f"**Signal Logic:** {signal_ticker1} {indicator1} {operator} {signal_ticker2} {indicator2}({days2})")
             elif indicator2 == "Static Value":
                 st.info(f"**Signal Logic:** {signal_ticker1} {indicator1} {operator} {static_value}")
             else:
                 st.info(f"**Signal Logic:** {signal_ticker1} {indicator1} {operator} {signal_ticker2} {indicator2}")
-            
-
             
             if st.button("Add Signal", type="primary"):
                 if indicator1 == "Static RSI":
@@ -1391,7 +728,7 @@ with tab1:
                 else:
                     signal = {
                         'name': signal_name,
-                        'type': signal_type,
+                        'type': 'Custom Indicator',
                         'signal_ticker1': signal_ticker1,
                         'signal_ticker2': signal_ticker2,
                         'indicator1': indicator1,
@@ -1404,8 +741,6 @@ with tab1:
                 st.session_state.signals.append(signal)
                 st.success(f"Reference Signal '{signal_name}' added!")
                 st.rerun()
-        
-
     
     # Display existing signals
     if st.session_state.signals:
@@ -1439,8 +774,9 @@ with tab2:
     
     # Pre-built allocation blocks
     st.subheader("🚀 Quick Start: Pre-built Allocations")
-    st.markdown("Click any allocation below to add it instantly:")
     
+    # Single ticker allocations
+    st.markdown("**📈 Single Ticker Allocations:**")
     col1, col2, col3 = st.columns(3)
     
     with col1:
@@ -1493,7 +829,7 @@ with tab2:
             st.success("✅ SPY allocation added!")
             st.rerun()
         
-        if st.button("🛡️ XLP (Consumer Staples)", key="prebuilt_xlp"):
+        if st.button("📈 XLP (Consumer Staples)", key="prebuilt_xlp"):
             if 'output_allocations' not in st.session_state:
                 st.session_state.output_allocations = {}
             
@@ -1505,7 +841,7 @@ with tab2:
             st.success("✅ XLP allocation added!")
             st.rerun()
         
-        if st.button("🛡️ XLU (Utilities)", key="prebuilt_xlu"):
+        if st.button("📈 XLU (Utilities)", key="prebuilt_xlu"):
             if 'output_allocations' not in st.session_state:
                 st.session_state.output_allocations = {}
             
@@ -1518,7 +854,7 @@ with tab2:
             st.rerun()
     
     with col3:
-        if st.button("💰 BIL (Cash)", key="prebuilt_bil"):
+        if st.button("📊 BIL (T-Bills)", key="prebuilt_bil"):
             if 'output_allocations' not in st.session_state:
                 st.session_state.output_allocations = {}
             
@@ -1694,284 +1030,315 @@ with tab2:
     if st.session_state.output_allocations:
         st.subheader("📋 Active Allocation Blocks")
         for name, allocation in st.session_state.output_allocations.items():
-            # Create the allocation card with proper structure
-            st.markdown(f"""
-            <div class="signal-card">
-                <div class="signal-header">
-                    <h3 class="signal-name">{name}</h3>
-                    <span class="signal-type">Allocation Block</span>
-                </div>
-                <div class="allocation-container">
-                    <div class="allocation-header">
-                        <span>Components</span>
-                    </div>
-                    <div style="margin-top: 0.5rem;">
-            """, unsafe_allow_html=True)
-            
-            # Build components HTML
-            components_html = ""
-            for ticker_component in allocation['tickers']:
-                components_html += f"<p style='margin: 0.25rem 0;'>• <strong>{ticker_component['ticker']}</strong>: {ticker_component['weight']}%</p>"
-            
-            # Close the HTML structure first
-            st.markdown(f"""
-                    {components_html}
-                    </div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # Add delete button outside the card but aligned
-            col1, col2 = st.columns([4, 1])
-            with col1:
-                st.write("")  # Empty space
-            with col2:
-                if st.button("🗑️", key=f"delete_allocation_{name}"):
-                    del st.session_state.output_allocations[name]
-                    st.rerun()
+            with st.container():
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.write(f"**{allocation['name']}**")
+                    ticker_text = ", ".join([f"{tc['ticker']} ({tc['weight']}%)" for tc in allocation['tickers']])
+                    st.caption(ticker_text)
+                with col2:
+                    if st.button("🗑️", key=f"delete_allocation_{name}"):
+                        del st.session_state.output_allocations[name]
+                        st.rerun()
     else:
         st.info("No allocation blocks created yet. Create your first allocation above.")
 
-# Tab 3: Strategies
+# Tab 3: Strategy Builder
 with tab3:
     st.header("🎯 Strategy Builder")
     
-    # Logic Block Management
-    with st.expander("📋 Logic Block Manager", expanded=False):
-        
-        # Help section
-        with st.expander("ℹ️ How to Use Block Caching & Copy/Paste", expanded=False):
-            st.markdown("""
-            ### 🎯 **Block Caching System**
-            
-            **What it does:** Automatically saves computation results for identical logic blocks, dramatically speeding up large strategies.
-            
-            **How it works:**
-            1. **Build a logic block** (IF-THEN-ELSE structure)
-            2. **System computes it once** and caches the result
-            3. **Reuse the same block** elsewhere - instant results!
-            4. **Performance gains:** 60-90% faster for repeated patterns
-            
-            **Example:** If you have 10 identical RSI blocks, only 1 gets computed!
-            
-            ### 📋 **Copy & Paste System**
-            
-            **Step 1: Copy a Block**
-            - Click "📋 Copy Branch" on any branch
-            - Or click "📋 Copy" on saved blocks
-            
-            **Step 2: Paste a Block**
-            - Click "📋 Paste Block" on target location
-            - Block appears with fresh signal selections
-            
-            **Step 3: Save for Reuse**
-            - Click "💾 Save Block" to store in library
-            - Access saved blocks anytime
-            
-            ### ⚡ **Performance Monitor**
-            - **Cache Hits:** How many times results were reused
-            - **Hit Rate:** Percentage of computations saved
-            - **Cached Blocks:** Number of unique blocks stored
-            """)
-        
-        col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
-        
+    # Cache management
+    with st.expander("⚡ Cache Manager", expanded=False):
+        col1, col2 = st.columns(2)
         with col1:
-            st.subheader("💾 Save Current Block")
-            block_name = st.text_input("Block Name", placeholder="e.g., RSI Strategy Block")
-            block_type = st.selectbox("Block Type", ["IF-THEN", "ELSE", "Nested ELSE", "Custom"])
-            
-            # Create block from current branch
-            if st.button("💾 Save as Logic Block"):
-                if 'strategy_branches' in st.session_state and st.session_state.strategy_branches:
-                    # Save the first branch as a template
-                    branch_data = copy.deepcopy(st.session_state.strategy_branches[0])
-                    block_name = create_logic_block(block_type, branch_data, block_name)
-                    st.success(f"✅ Saved as '{block_name}'")
-                    st.rerun()
-                else:
-                    st.warning("⚠️ No strategy branches to save")
-        
-        with col2:
-            st.subheader("📋 Saved Blocks")
-            if st.session_state.logic_blocks:
-                for block_name, block in st.session_state.logic_blocks.items():
-                    with st.expander(f"📦 {block_name}", expanded=False):
-                        st.write(f"**Type:** {block['type']}")
-                        st.write(f"**Description:** {block['description']}")
-                        st.write(f"**Created:** {block['created_at'][:19]}")
-                        
-                        # Show block preview
-                        preview = get_block_preview(block['data'])
-                        st.info(f"**Preview:** {preview}")
-                        
-                        col_a, col_b, col_c = st.columns(3)
-                        with col_a:
-                            if st.button("📋 Copy", key=f"copy_{block_name}", help="Copy to clipboard"):
-                                copy_logic_block(block['data'], block['type'])
-                                st.success("✅ Copied to clipboard!")
-                                st.rerun()
-                        with col_b:
-                            if st.button("📋 Paste", key=f"paste_{block_name}", help="Paste to current branch"):
-                                if 'strategy_branches' in st.session_state and st.session_state.strategy_branches:
-                                    paste_logic_block(st.session_state.strategy_branches[0], 'signals')
-                                    st.success("✅ Pasted to current branch!")
-                                    st.rerun()
-                                else:
-                                    st.warning("⚠️ No active branch to paste to")
-                        with col_c:
-                            if st.button("🗑️ Delete", key=f"delete_{block_name}", help="Delete from library"):
-                                del st.session_state.logic_blocks[block_name]
-                                st.rerun()
-            else:
-                st.info("No saved blocks yet")
-                st.markdown("💡 **Tip:** Create blocks by clicking '💾 Save Block' on any branch")
-        
-        with col3:
-            st.subheader("📋 Clipboard")
-            if st.session_state.block_clipboard:
-                st.success(f"📋 {len(st.session_state.block_clipboard)} items in clipboard")
-                for i, block in enumerate(st.session_state.block_clipboard[-3:]):  # Show last 3
-                    with st.expander(f"📋 {block['type']} ({block['copied_at'][:19]})", expanded=False):
-                        preview = get_block_preview(block['data'])
-                        st.write(f"**Preview:** {preview}")
-                        
-                        col_x, col_y = st.columns(2)
-                        with col_x:
-                            if st.button("📋 Paste", key=f"paste_clipboard_{i}", help="Paste this block"):
-                                if 'strategy_branches' in st.session_state and st.session_state.strategy_branches:
-                                    paste_logic_block(st.session_state.strategy_branches[0], 'signals')
-                                    st.success("✅ Pasted!")
-                                    st.rerun()
-                                else:
-                                    st.warning("⚠️ No active branch")
-                        with col_y:
-                            if st.button("🗑️ Remove", key=f"remove_clipboard_{i}", help="Remove from clipboard"):
-                                st.session_state.block_clipboard.pop(i)
-                                st.rerun()
-                
-                if st.button("🗑️ Clear All", key="clear_all_clipboard"):
-                    st.session_state.block_clipboard.clear()
-                    st.success("✅ Clipboard cleared!")
-                    st.rerun()
-            else:
-                st.info("Clipboard empty")
-                st.markdown("💡 **Tip:** Copy blocks to see them here")
-        
-        with col4:
-            st.subheader("⚡ Cache Manager")
             cache_stats = get_cache_stats()
-            
             st.metric("Cache Hits", cache_stats['hits'])
             st.metric("Cache Misses", cache_stats['misses'])
-            st.metric("Hit Rate", f"{cache_stats['hit_rate']:.1f}%")
-            st.metric("Cache Size", cache_stats['cache_size'])
-            
-            col_clear, col_optimize = st.columns(2)
-            with col_clear:
-                if st.button("🗑️ Clear Cache"):
-                    clear_cache()
-                    st.success("✅ Cache cleared!")
-                    st.rerun()
-            with col_optimize:
-                if st.button("⚡ Optimize"):
-                    st.info("🔄 Cache optimization complete!")
-                    st.rerun()
-    
-    # Performance Monitoring
-    with st.expander("⚡ Performance Monitor", expanded=False):
-        cache_stats = get_cache_stats()
-        
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("Cache Hits", cache_stats['hits'], delta=cache_stats['hits'])
         with col2:
-            st.metric("Cache Misses", cache_stats['misses'], delta=cache_stats['misses'])
-        with col3:
             st.metric("Hit Rate", f"{cache_stats['hit_rate']:.1f}%")
-        with col4:
-            st.metric("Cached Blocks", cache_stats['cache_size'])
-        
-        if cache_stats['total'] > 0:
-            efficiency_gain = cache_stats['hit_rate'] / 100
-            st.progress(efficiency_gain)
-            st.caption(f"Performance improvement: {efficiency_gain:.1%} of computations reused")
-        
-        # Quick tutorial
-        with st.expander("🎯 How to Maximize Cache Performance", expanded=False):
-            st.markdown("""
-            ### 🚀 **Optimization Tips**
-            
-            **1. Reuse Identical Blocks**
-            - Copy successful blocks to other branches
-            - Use saved blocks from library
-            - Create templates for common patterns
-            
-            **2. Monitor Performance**
-            - Watch the hit rate percentage
-            - Higher hit rate = better performance
-            - Clear cache if it gets too large
-            
-            **3. Best Practices**
-            - Save common patterns (RSI, SMA, etc.)
-            - Use copy/paste for repeated logic
-            - Build complex strategies from templates
-            """)
-        
-        # Show cache contents
-        if st.session_state.block_cache:
-            st.subheader("📋 Cached Logic Blocks")
-            for signature, result in list(st.session_state.block_cache.items())[:5]:  # Show first 5
-                st.write(f"🔑 {signature[:8]}... → {result['allocation']}")
-            
-            if len(st.session_state.block_cache) > 5:
-                st.caption(f"... and {len(st.session_state.block_cache) - 5} more cached blocks")
+            if st.button("🗑️ Clear Cache"):
+                clear_cache()
+                st.success("Cache cleared!")
     
-    # Strategy builder
-    with st.expander("➕ Create Strategy", expanded=False):
-        strategy_name = st.text_input("Strategy Name", placeholder="e.g., Multi-Signal Strategy")
+    # Strategy builder interface
+    st.markdown('<div class="strategy-builder">', unsafe_allow_html=True)
+    
+    # Initial minimal interface
+    st.subheader("✨ Spell")
+    
+    # Initial "+" button with dropdown
+    col1, col2 = st.columns([1, 9])
+    with col1:
+        spell_component = st.selectbox(
+            "Add component:",
+            ["", "Ticker", "Weighted", "Filtered", "If/Else", "Switch", "Enter/Exit", "Mixed", "Paste"],
+            key="spell_component",
+            label_visibility="collapsed"
+        )
+    with col2:
+        if st.button("➕", key="add_spell_component"):
+            if spell_component == "Ticker":
+                new_branch = {
+                    'signals': [],
+                    'allocations': [{'allocation': '', 'weight': 100}]
+                }
+                st.session_state.strategy_branches.append(new_branch)
+                st.rerun()
+            elif spell_component == "Weighted":
+                new_branch = {
+                    'allocations': [{'allocation': '', 'weight': 100}]
+                }
+                st.session_state.strategy_branches.append(new_branch)
+                st.rerun()
+            elif spell_component == "Filtered":
+                new_branch = {
+                    'signals': [],
+                    'allocations': [{'allocation': '', 'weight': 100}]
+                }
+                st.session_state.strategy_branches.append(new_branch)
+                st.rerun()
+            elif spell_component == "If/Else":
+                new_branch = {
+                    'type': 'if_else',
+                    'signals': [],
+                    'allocations': [],
+                    'else_allocations': [],
+                    'collapsed': False
+                }
+                st.session_state.strategy_branches.append(new_branch)
+                st.rerun()
+            elif spell_component == "Paste":
+                if st.session_state.copied_block:
+                    st.session_state.strategy_branches.append(copy.deepcopy(st.session_state.copied_block))
+                    st.success("Block pasted!")
+                    st.rerun()
+                else:
+                    st.warning("⚠️ No block in clipboard")
+    
+    # Display strategy branches
+    if st.session_state.strategy_branches:
+        st.markdown("---")
         
-        if st.session_state.signals and st.session_state.output_allocations:
-            st.subheader("📋 Conditional Logic")
+        for branch_idx, branch in enumerate(st.session_state.strategy_branches):
+            st.markdown("---")
             
-            # Initialize strategy branches if not exists
-            if 'strategy_branches' not in st.session_state:
-                st.session_state.strategy_branches = []
-            
-            # Initial add button for creating first branch
-            if not st.session_state.strategy_branches:
-                st.markdown("### 🚀 Start Building Your Strategy")
-                col1, col2 = st.columns([3, 1])
+            # Handle If/Else structure differently
+            if branch.get('type') == 'if_else':
+                # If/Else collapsible block
+                st.markdown("""
+                <div class="if-else-block">
+                    <div class="if-else-header">
+                        <span>🔗 If/Else</span>
+                    </div>
+                """, unsafe_allow_html=True)
+                
+                # Add three-dot menu
+                col_menu, col_spacer = st.columns([1, 9])
+                with col_menu:
+                    block_menu_action = st.selectbox(
+                        '',
+                        ["", "Copy", "Paste", "Delete"],
+                        key=f"block_menu_{branch_idx}",
+                        label_visibility="collapsed"
+                    )
+                    if block_menu_action == "Copy":
+                        st.session_state.copied_block = copy.deepcopy(branch)
+                        st.success("Block copied!")
+                    elif block_menu_action == "Paste":
+                        if st.session_state.copied_block:
+                            st.session_state.strategy_branches.insert(branch_idx+1, copy.deepcopy(st.session_state.copied_block))
+                            st.success("Block pasted!")
+                            st.rerun()
+                        else:
+                            st.warning("⚠️ No block in clipboard")
+                    elif block_menu_action == "Delete":
+                        st.session_state.strategy_branches.pop(branch_idx)
+                        st.rerun()
+                
+                st.markdown("""
+                    </div>
+                """, unsafe_allow_html=True)
+                
+                # IF section
+                st.markdown('<div class="condition-block">', unsafe_allow_html=True)
+                st.markdown("**IF:**")
+                
+                # Add signal button for IF
+                col1, col2 = st.columns([1, 9])
                 with col1:
-                    initial_add_option = st.selectbox(
-                        "Add to strategy:",
-                        ["", "Allocation", "Signal", "Paste Block"],
-                        key="initial_add_option"
+                    if_add_option = st.selectbox(
+                        "",
+                        ["", "Add Signal", "Add Allocation", "Add Block"],
+                        key=f"if_add_{branch_idx}",
+                        label_visibility="collapsed"
                     )
                 with col2:
-                    if st.button("➕", key="initial_add_button"):
-                        if initial_add_option == "Allocation":
-                            new_branch = {'allocations': [{'allocation': '', 'weight': 100}]}
-                            st.session_state.strategy_branches.append(new_branch)
+                    if st.button("➕", key=f"add_if_{branch_idx}"):
+                        if if_add_option == "Add Signal":
+                            if 'signals' not in branch:
+                                branch['signals'] = []
+                            branch['signals'].append({'signal': '', 'negated': False, 'operator': 'AND'})
                             st.rerun()
-                        elif initial_add_option == "Signal":
-                            new_branch = {'signals': [{'signal': '', 'negated': False, 'operator': 'AND'}]}
-                            st.session_state.strategy_branches.append(new_branch)
+                        elif if_add_option == "Add Allocation":
+                            if 'allocations' not in branch:
+                                branch['allocations'] = []
+                            branch['allocations'].append({'allocation': '', 'weight': 100})
                             st.rerun()
-                        elif initial_add_option == "Paste Block":
-                            if st.session_state.copied_block:
-                                new_branch = copy.deepcopy(st.session_state.copied_block['data'])
-                                st.session_state.strategy_branches.append(new_branch)
-                                st.success("✅ Block pasted!")
-                                st.rerun()
-                            else:
-                                st.warning("⚠️ No block in clipboard")
-            
-            # Display strategy branches
-            for branch_idx, branch in enumerate(st.session_state.strategy_branches):
-                st.markdown("---")
                 
-                # Branch container with improved styling
+                # Display IF signals
+                if branch.get('signals'):
+                    for signal_idx, signal_config in enumerate(branch['signals']):
+                        col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
+                        
+                        with col1:
+                            signal_config['signal'] = st.selectbox(
+                                f"Signal {signal_idx + 1}", 
+                                [""] + [s['name'] for s in st.session_state.signals], 
+                                key=f"if_branch_{branch_idx}_signal_{signal_idx}"
+                            )
+                        
+                        with col2:
+                            signal_config['negated'] = st.checkbox("NOT", key=f"if_branch_{branch_idx}_negated_{signal_idx}")
+                        
+                        with col3:
+                            if signal_idx > 0:  # Don't show operator for first signal
+                                signal_config['operator'] = st.selectbox(
+                                    "Logic", 
+                                    ["AND", "OR"], 
+                                    key=f"if_branch_{branch_idx}_operator_{signal_idx}"
+                                )
+                            else:
+                                st.write("")  # Empty space for alignment
+                        
+                        with col4:
+                            if st.button("🗑️", key=f"remove_if_branch_{branch_idx}_signal_{signal_idx}"):
+                                branch['signals'].pop(signal_idx)
+                                st.rerun()
+                
+                st.markdown('</div>', unsafe_allow_html=True)
+                
+                # THEN section
+                st.markdown('<div class="then-block">', unsafe_allow_html=True)
+                st.markdown("**THEN:**")
+                
+                # Add allocation button for THEN
+                col1, col2 = st.columns([1, 9])
+                with col1:
+                    then_add_option = st.selectbox(
+                        "",
+                        ["", "Add Signal", "Add Allocation", "Add Block"],
+                        key=f"then_add_{branch_idx}",
+                        label_visibility="collapsed"
+                    )
+                with col2:
+                    if st.button("➕", key=f"add_then_{branch_idx}"):
+                        if then_add_option == "Add Allocation":
+                            if 'allocations' not in branch:
+                                branch['allocations'] = []
+                            branch['allocations'].append({'allocation': '', 'weight': 100})
+                            st.rerun()
+                
+                # Display THEN allocations
+                if branch.get('allocations'):
+                    for alloc_idx, allocation_config in enumerate(branch['allocations']):
+                        col1, col2, col3 = st.columns([2, 1, 1])
+                        with col1:
+                            allocation_config['allocation'] = st.selectbox(
+                                f"Allocation {alloc_idx + 1}", 
+                                list(st.session_state.output_allocations.keys()),
+                                key=f"then_branch_{branch_idx}_allocation_{alloc_idx}"
+                            )
+                        with col2:
+                            allocation_config['weight'] = st.number_input(
+                                "Weight %",
+                                min_value=0,
+                                max_value=100,
+                                value=allocation_config.get('weight', 100),
+                                key=f"then_branch_{branch_idx}_weight_{alloc_idx}"
+                            )
+                        with col3:
+                            if len(branch['allocations']) > 1:  # Don't allow removing the last allocation
+                                if st.button("🗑️", key=f"remove_then_branch_{branch_idx}_allocation_{alloc_idx}"):
+                                    branch['allocations'].pop(alloc_idx)
+                                    st.rerun()
+                            else:
+                                st.write("")  # Empty space for alignment
+                    
+                    # Show total weight for this branch
+                    total_branch_weight = sum(alloc.get('weight', 0) for alloc in branch['allocations'])
+                    if total_branch_weight != 100:
+                        if total_branch_weight > 100:
+                            st.error(f"⚠️ Branch total weight: {total_branch_weight}% (exceeds 100%)")
+                        else:
+                            st.warning(f"ℹ️ Branch total weight: {total_branch_weight}% ({(100-total_branch_weight):.1f}% unallocated)")
+                    else:
+                        st.success(f"✅ Branch total weight: {total_branch_weight}%")
+                
+                st.markdown('</div>', unsafe_allow_html=True)
+                
+                # ELSE section
+                st.markdown('<div class="else-block">', unsafe_allow_html=True)
+                st.markdown("**ELSE:**")
+                
+                # Add allocation button for ELSE
+                col1, col2 = st.columns([1, 9])
+                with col1:
+                    else_add_option = st.selectbox(
+                        "",
+                        ["", "Add Signal", "Add Allocation", "Add Block"],
+                        key=f"else_add_{branch_idx}",
+                        label_visibility="collapsed"
+                    )
+                with col2:
+                    if st.button("➕", key=f"add_else_{branch_idx}"):
+                        if else_add_option == "Add Allocation":
+                            if 'else_allocations' not in branch:
+                                branch['else_allocations'] = []
+                            branch['else_allocations'].append({'allocation': '', 'weight': 100})
+                            st.rerun()
+                
+                # Display ELSE allocations
+                if branch.get('else_allocations'):
+                    for else_alloc_idx, else_allocation_config in enumerate(branch['else_allocations']):
+                        col1, col2, col3 = st.columns([2, 1, 1])
+                        with col1:
+                            else_allocation_config['allocation'] = st.selectbox(
+                                f"ELSE Allocation {else_alloc_idx + 1}", 
+                                list(st.session_state.output_allocations.keys()),
+                                key=f"else_branch_{branch_idx}_allocation_{else_alloc_idx}"
+                            )
+                        with col2:
+                            else_allocation_config['weight'] = st.number_input(
+                                "Weight %",
+                                min_value=0,
+                                max_value=100,
+                                value=else_allocation_config.get('weight', 100),
+                                key=f"else_branch_{branch_idx}_weight_{else_alloc_idx}"
+                            )
+                        with col3:
+                            if len(branch['else_allocations']) > 1:  # Don't allow removing the last allocation
+                                if st.button("🗑️", key=f"remove_else_branch_{branch_idx}_allocation_{else_alloc_idx}"):
+                                    branch['else_allocations'].pop(else_alloc_idx)
+                                    st.rerun()
+                            else:
+                                st.write("")  # Empty space for alignment
+                    
+                    # Show total ELSE weight for this branch
+                    total_else_weight = sum(alloc.get('weight', 0) for alloc in branch['else_allocations'])
+                    if total_else_weight != 100:
+                        if total_else_weight > 100:
+                            st.error(f"⚠️ ELSE total weight: {total_else_weight}% (exceeds 100%)")
+                        else:
+                            st.warning(f"ℹ️ ELSE total weight: {total_else_weight}% ({(100-total_else_weight):.1f}% unallocated)")
+                    else:
+                        st.success(f"✅ ELSE total weight: {total_else_weight}%")
+                
+                st.markdown('</div>', unsafe_allow_html=True)
+                
+                st.markdown("</div>", unsafe_allow_html=True)
+            
+            else:
+                # Regular branch container
                 total_branch_weight = sum(alloc.get('weight', 0) for alloc in branch.get('allocations', [{'weight': 100}]))
                 st.markdown(f"""
                 <div class="branch-container">
@@ -1981,57 +1348,12 @@ with tab3:
                     </div>
                 """, unsafe_allow_html=True)
                 
-                # Branch block controls
-                col1, col2, col3 = st.columns([2, 1, 1])
-                with col1:
-                    block_action = st.selectbox(
-                        "Block Actions:",
-                        ["", "Copy Block", "Paste Block", "Delete Block"],
-                        key=f"block_action_{branch_idx}"
-                    )
-                with col2:
-                    if st.button("🔄", key=f"execute_block_action_{branch_idx}"):
-                        if block_action == "Copy Block":
-                            copy_logic_block(branch, "branch")
-                            st.success("✅ Branch copied to clipboard!")
-                            st.rerun()
-                        elif block_action == "Paste Block":
-                            if paste_logic_block(branch, 'signals'):
-                                st.success("✅ Block pasted!")
-                                st.rerun()
-                            else:
-                                st.warning("⚠️ No block in clipboard")
-                        elif block_action == "Delete Block":
-                            st.session_state.strategy_branches.pop(branch_idx)
-                            st.success("✅ Branch deleted!")
-                            st.rerun()
-                
-                # Main add button for the branch
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    add_option = st.selectbox(
-                        "Add to branch:",
-                        ["", "Allocation", "Signal", "Paste Block"],
-                        key=f"add_option_{branch_idx}"
-                    )
-                with col2:
-                    if st.button("➕", key=f"add_to_branch_{branch_idx}"):
-                        if add_option == "Allocation":
-                            if 'allocations' not in branch:
-                                branch['allocations'] = [{'allocation': '', 'weight': 100}]
-                            branch['allocations'].append({'allocation': '', 'weight': 0})
-                            st.rerun()
-                        elif add_option == "Signal":
-                            if 'signals' not in branch:
-                                branch['signals'] = []
-                            branch['signals'].append({'signal': '', 'negated': False, 'operator': 'AND'})
-                            st.rerun()
-                        elif add_option == "Paste Block":
-                            if paste_logic_block(branch, 'signals'):
-                                st.success("✅ Block pasted!")
-                                st.rerun()
-                            else:
-                                st.warning("⚠️ No block in clipboard")
+                # Simple add button for the branch
+                if st.button("➕", key=f"add_to_branch_{branch_idx}"):
+                    if 'signals' not in branch:
+                        branch['signals'] = []
+                    branch['signals'].append({'signal': '', 'negated': False, 'operator': 'AND'})
+                    st.rerun()
                 
                 # Display existing signals
                 if branch.get('signals'):
@@ -2106,1336 +1428,271 @@ with tab3:
                     
                     st.markdown('</div>', unsafe_allow_html=True)
                 
-
-                
-                # ELSE functionality
-                st.markdown('<div class="else-block">', unsafe_allow_html=True)
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    pass  # Space for ELSE content
-                with col2:
-                    if st.button("🗑️ Remove ELSE", key=f"remove_else_{branch_idx}"):
-                        branch['else_type'] = "Allocation"
-                        branch['else_allocation'] = ""
-                        if 'else_signals' in branch:
-                            del branch['else_signals']
-                        if 'nested_else' in branch:
-                            del branch['nested_else']
-                        st.rerun()
-                
-                # ELSE type selection
-                branch['else_type'] = st.selectbox(
-                    "ELSE Type",
-                    ["Allocation", "Additional Signals"],
-                    key=f"branch_{branch_idx}_else_type"
-                )
-                
-                if branch['else_type'] == "Allocation":
-                    # Multiple ELSE allocations support
-                    st.markdown("**ELSE Allocations:**")
-                    
-                    # Initialize ELSE allocations list if not exists
-                    if 'else_allocations' not in branch:
-                        branch['else_allocations'] = [{'allocation': '', 'weight': 100}]
-                    
-                    # Display existing ELSE allocations
-                    for else_alloc_idx, else_allocation_config in enumerate(branch['else_allocations']):
-                        col1, col2, col3 = st.columns([2, 1, 1])
-                        with col1:
-                            else_allocation_config['allocation'] = st.selectbox(
-                                f"ELSE Allocation {else_alloc_idx + 1}", 
-                                list(st.session_state.output_allocations.keys()),
-                                key=f"branch_{branch_idx}_else_allocation_{else_alloc_idx}"
-                            )
-                        with col2:
-                            else_allocation_config['weight'] = st.number_input(
-                                "Weight %",
-                                min_value=0,
-                                max_value=100,
-                                value=else_allocation_config.get('weight', 100),
-                                key=f"branch_{branch_idx}_else_weight_{else_alloc_idx}"
-                            )
-                        with col3:
-                            if len(branch['else_allocations']) > 1:  # Don't allow removing the last allocation
-                                if st.button("🗑️", key=f"remove_branch_{branch_idx}_else_allocation_{else_alloc_idx}"):
-                                    branch['else_allocations'].pop(else_alloc_idx)
-                                    st.rerun()
-                            else:
-                                st.write("")  # Empty space for alignment
-                    
-                    # Add ELSE allocation button
-                    if st.button("➕ Add ELSE Allocation", key=f"add_branch_{branch_idx}_else_allocation"):
-                        branch['else_allocations'].append({'allocation': '', 'weight': 0})
-                        st.rerun()
-                    
-                    # Show total ELSE weight for this branch
-                    total_else_weight = sum(alloc.get('weight', 0) for alloc in branch['else_allocations'])
-                    if total_else_weight != 100:
-                        if total_else_weight > 100:
-                            st.error(f"⚠️ ELSE total weight: {total_else_weight}% (exceeds 100%)")
-                        else:
-                            st.warning(f"ℹ️ ELSE total weight: {total_else_weight}% ({(100-total_else_weight):.1f}% unallocated)")
-                    else:
-                        st.success(f"✅ ELSE total weight: {total_else_weight}%")
-                else:
-                    # Additional signals with nested ELSE support
-                    st.markdown("**Additional Signals:**")
-                    
-                    # Display existing ELSE signals
-                    for else_signal_idx, else_signal_config in enumerate(branch.get('else_signals', [])):
-                        st.markdown('<div class="condition-block">', unsafe_allow_html=True)
-                        col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
-                        
-                        with col1:
-                            else_signal_config['signal'] = st.selectbox(
-                                f"ELSE Signal {else_signal_idx + 1}", 
-                                [""] + [s['name'] for s in st.session_state.signals], 
-                                key=f"branch_{branch_idx}_else_signal_{else_signal_idx}"
-                            )
-                        
-                        with col2:
-                            else_signal_config['negated'] = st.checkbox("NOT", key=f"branch_{branch_idx}_else_negated_{else_signal_idx}")
-                        
-                        with col3:
-                            if else_signal_idx > 0:  # Don't show operator for first signal
-                                else_signal_config['operator'] = st.selectbox(
-                                    "Logic", 
-                                    ["AND", "OR"], 
-                                    key=f"branch_{branch_idx}_else_operator_{else_signal_idx}"
-                                )
-                            else:
-                                st.write("")  # Empty space for alignment
-                        
-                        with col4:
-                            if st.button("🗑️", key=f"remove_branch_{branch_idx}_else_signal_{else_signal_idx}"):
-                                branch['else_signals'].pop(else_signal_idx)
-                                st.rerun()
-                        
-                        st.markdown('</div>', unsafe_allow_html=True)
-                    
-                    # Add ELSE signal button
-                    if st.button("➕ Add ELSE Signal", key=f"add_branch_{branch_idx}_else_signal"):
-                        if 'else_signals' not in branch:
-                            branch['else_signals'] = []
-                        branch['else_signals'].append({'signal': '', 'negated': False, 'operator': 'AND'})
-                        st.rerun()
-                    
-                    # ELSE allocation (for when ELSE signals are true)
-                    branch['else_allocation'] = st.selectbox(
-                        "ELSE Signals True → Allocate To",
-                        list(st.session_state.output_allocations.keys()),
-                        key=f"branch_{branch_idx}_else_signals_allocation"
-                    )
-                    
-                    # Recursive ELSE functionality
-                    def render_nested_else(else_config, level=1, parent_key=""):
-                        """Recursively render nested ELSE blocks with unlimited depth"""
-                        indent = "  " * level
-                        level_name = f"Level {level} ELSE" if level > 1 else "Nested ELSE"
-                        
-                        st.markdown(f"**{level_name}:**")
-                        col1, col2 = st.columns([3, 1])
-                        with col1:
-                            pass  # Space for nested ELSE content
-                        with col2:
-                            if st.button(f"🗑️ Remove {level_name}", key=f"remove_{parent_key}_nested_else_{level}"):
-                                if 'nested_else' in else_config:
-                                    del else_config['nested_else']
-                                st.rerun()
-                        
-                        # Initialize nested ELSE if not exists
-                        if 'nested_else' not in else_config:
-                            else_config['nested_else'] = {'type': 'allocation', 'allocation': '', 'signals': []}
-                        
-                        # Nested ELSE type selection
-                        else_config['nested_else']['type'] = st.selectbox(
-                            f"{level_name} Type",
-                            ["Allocation", "Additional Signals"],
-                            key=f"{parent_key}_nested_else_type_{level}"
-                        )
-                        
-                        if else_config['nested_else']['type'] == "Allocation":
-                            # Simple nested ELSE allocation
-                            else_config['nested_else']['allocation'] = st.selectbox(
-                                f"{level_name} Allocate To",
-                                list(st.session_state.output_allocations.keys()),
-                                key=f"{parent_key}_nested_else_allocation_{level}"
-                            )
-                        else:
-                            # Nested ELSE signals
-                            st.markdown(f"**{level_name} Signals:**")
-                            
-                            # Display existing nested ELSE signals
-                            for nested_signal_idx, nested_signal_config in enumerate(else_config['nested_else'].get('signals', [])):
-                                st.markdown('<div class="condition-block">', unsafe_allow_html=True)
-                                col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
-                                
-                                with col1:
-                                    nested_signal_config['signal'] = st.selectbox(
-                                        f"{level_name} Signal {nested_signal_idx + 1}", 
-                                        [""] + [s['name'] for s in st.session_state.signals], 
-                                        key=f"{parent_key}_nested_else_signal_{level}_{nested_signal_idx}"
-                                    )
-                                
-                                with col2:
-                                    nested_signal_config['negated'] = st.checkbox("NOT", key=f"{parent_key}_nested_else_negated_{level}_{nested_signal_idx}")
-                                
-                                with col3:
-                                    if nested_signal_idx > 0:  # Don't show operator for first signal
-                                        nested_signal_config['operator'] = st.selectbox(
-                                            "Logic", 
-                                            ["AND", "OR"], 
-                                            key=f"{parent_key}_nested_else_operator_{level}_{nested_signal_idx}"
-                                        )
-                                    else:
-                                        st.write("")  # Empty space for alignment
-                                
-                                with col4:
-                                    if st.button("🗑️", key=f"remove_{parent_key}_nested_else_signal_{level}_{nested_signal_idx}"):
-                                        else_config['nested_else']['signals'].pop(nested_signal_idx)
-                                        st.rerun()
-                                
-                                st.markdown('</div>', unsafe_allow_html=True)
-                            
-                            # Add nested ELSE signal button
-                            if st.button(f"➕ Add {level_name} Signal", key=f"add_{parent_key}_nested_else_signal_{level}"):
-                                if 'signals' not in else_config['nested_else']:
-                                    else_config['nested_else']['signals'] = []
-                                else_config['nested_else']['signals'].append({'signal': '', 'negated': False, 'operator': 'AND'})
-                                st.rerun()
-                            
-                            # Nested ELSE THEN clause
-                            st.markdown("**THEN:**")
-                            nested_else_then_type = st.selectbox(
-                                f"{level_name} THEN Type",
-                                ["Allocation", "Additional Signals"],
-                                key=f"{parent_key}_nested_else_then_type_{level}"
-                            )
-                            
-                            if nested_else_then_type == "Allocation":
-                                # Simple nested ELSE allocation
-                                else_config['nested_else']['allocation'] = st.selectbox(
-                                    f"{level_name} Signals True → Allocate To",
-                                    list(st.session_state.output_allocations.keys()),
-                                    key=f"{parent_key}_nested_else_signals_allocation_{level}"
-                                )
-                            else:
-                                # Nested ELSE THEN signals
-                                st.markdown(f"**{level_name} THEN Signals:**")
-                                
-                                # Initialize nested ELSE THEN signals if not exists
-                                if 'then_signals' not in else_config['nested_else']:
-                                    else_config['nested_else']['then_signals'] = []
-                                
-                                # Display existing nested ELSE THEN signals
-                                for then_signal_idx, then_signal_config in enumerate(else_config['nested_else'].get('then_signals', [])):
-                                    st.markdown('<div class="condition-block">', unsafe_allow_html=True)
-                                    col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
-                                    
-                                    with col1:
-                                        then_signal_config['signal'] = st.selectbox(
-                                            f"{level_name} THEN Signal {then_signal_idx + 1}", 
-                                            [""] + [s['name'] for s in st.session_state.signals], 
-                                            key=f"{parent_key}_nested_else_then_signal_{level}_{then_signal_idx}"
-                                        )
-                                    
-                                    with col2:
-                                        then_signal_config['negated'] = st.checkbox("NOT", key=f"{parent_key}_nested_else_then_negated_{level}_{then_signal_idx}")
-                                    
-                                    with col3:
-                                        if then_signal_idx > 0:  # Don't show operator for first signal
-                                            then_signal_config['operator'] = st.selectbox(
-                                                "Logic", 
-                                                ["AND", "OR"], 
-                                                key=f"{parent_key}_nested_else_then_operator_{level}_{then_signal_idx}"
-                                            )
-                                        else:
-                                            st.write("")  # Empty space for alignment
-                                    
-                                    with col4:
-                                        if st.button("🗑️", key=f"remove_{parent_key}_nested_else_then_signal_{level}_{then_signal_idx}"):
-                                            else_config['nested_else']['then_signals'].pop(then_signal_idx)
-                                            st.rerun()
-                                    
-                                    st.markdown('</div>', unsafe_allow_html=True)
-                                
-                                # Add nested ELSE THEN signal button
-                                if st.button(f"➕ Add {level_name} THEN Signal", key=f"add_{parent_key}_nested_else_then_signal_{level}"):
-                                    else_config['nested_else']['then_signals'].append({'signal': '', 'negated': False, 'operator': 'AND'})
-                                    st.rerun()
-                                
-                                # Nested ELSE THEN allocation (for when nested ELSE THEN signals are true)
-                                else_config['nested_else']['then_allocation'] = st.selectbox(
-                                    f"{level_name} THEN Signals True → Allocate To",
-                                    list(st.session_state.output_allocations.keys()),
-                                    key=f"{parent_key}_nested_else_then_signals_allocation_{level}"
-                                )
-                            
-                            # Recursive ELSE - add another level
-                            st.markdown("---")
-                            if st.button(f"➕ Add {level + 1} Level ELSE", key=f"add_{parent_key}_nested_else_level_{level + 1}"):
-                                if 'nested_else' not in else_config['nested_else']:
-                                    else_config['nested_else']['nested_else'] = {'type': 'allocation', 'allocation': '', 'signals': []}
-                                st.rerun()
-                            
-                            # Recursively render the next level if it exists
-                            if 'nested_else' in else_config['nested_else']:
-                                render_nested_else(else_config['nested_else'], level + 1, f"{parent_key}_level_{level}")
-                    
-                    # Start the recursive ELSE rendering
-                    render_nested_else(branch, level=1, parent_key=f"branch_{branch_idx}")
-                    
-                    # Close ELSE indentation
-                    st.markdown('</div>', unsafe_allow_html=True)
-                
                 # Remove branch button (except for first branch)
                 if branch_idx > 0:
                     if st.button("🗑️ Remove Branch", key=f"remove_branch_{branch_idx}"):
                         st.session_state.strategy_branches.pop(branch_idx)
                         st.rerun()
                 
-                st.markdown("---")
-            
-            # Add new branch button
-            if st.button("➕ Add Branch", key="add_branch"):
-                # Calculate equal weight distribution
-                num_branches = len(st.session_state.strategy_branches) + 1
-                equal_weight = 100 // num_branches
-                
-                # Update existing branches to equal weight
-                for existing_branch in st.session_state.strategy_branches:
-                    existing_branch['allocations'] = [{'allocation': '', 'weight': equal_weight}]
-                
-                # Add new branch with equal weight
-                st.session_state.strategy_branches.append({
-                    'signals': [], 
-                    'allocations': [{'allocation': '', 'weight': equal_weight}], 
-                    'else_type': 'allocation', 
-                    'else_allocations': [{'allocation': '', 'weight': 100}], 
-                    'else_signals': [], 
-                    'nested_else': {'type': 'allocation', 'allocation': '', 'signals': []}
-                })
-                st.rerun()
-            
-            # Weight validation and display
-            total_weight = sum(
-                sum(alloc.get('weight', 0) for alloc in branch.get('allocations', [{'weight': 100}]))
-                for branch in st.session_state.strategy_branches
-            )
-            if total_weight != 100:
-                st.warning(f"⚠️ Total branch weight: {total_weight}% (should be 100%)")
-            else:
-                st.success(f"✅ Total branch weight: {total_weight}%")
-            
-            # Default allocation (if no branches match)
-            default_allocation = st.selectbox(
-                "Default Allocation (if no conditions match)", 
-                list(st.session_state.output_allocations.keys()),
-                key="default_allocation"
-            )
-            
-            if st.button("Add Strategy", type="primary"):
-                # Validate that at least one branch has signals
-                valid_branches = []
-                for branch in st.session_state.strategy_branches:
-                    valid_signals = [s for s in branch['signals'] if s['signal']]
-                    if valid_signals:
-                        branch_data = {
-                            'signals': valid_signals.copy(),
-                            'allocations': branch.get('allocations', [{'allocation': '', 'weight': 100}]),
-                            'else_type': branch['else_type'],
-                            'else_allocations': branch.get('else_allocations', [{'allocation': '', 'weight': 100}])
-                        }
-                        
-                        # Add ELSE signals if they exist
-                        if branch['else_type'] == "Additional Signals":
-                            valid_else_signals = [s for s in branch.get('else_signals', []) if s['signal']]
-                            if valid_else_signals:
-                                branch_data['else_signals'] = valid_else_signals.copy()
-                        
-                        # Add nested ELSE data
-                        branch_data['nested_else'] = {
-                            'type': branch['nested_else']['type'],
-                            'allocation': branch['nested_else']['allocation']
-                        }
-                        
-                        # Add nested ELSE signals if they exist
-                        if branch['nested_else']['type'] == "Additional Signals":
-                            valid_nested_else_signals = [s for s in branch['nested_else'].get('signals', []) if s['signal']]
-                            if valid_nested_else_signals:
-                                branch_data['nested_else']['signals'] = valid_nested_else_signals.copy()
-                        
-                        valid_branches.append(branch_data)
-                
-                if not valid_branches:
-                    st.error("Please add at least one signal to a branch.")
-                else:
-                    strategy = {
-                        'name': strategy_name,
-                        'branches': valid_branches,
-                        'default_allocation': default_allocation
-                    }
-                    st.session_state.strategies.append(strategy)
-                    st.success(f"Strategy '{strategy_name}' added!")
-                    st.rerun()
-        else:
-            st.warning("Please create signals and allocations first.")
+                st.markdown("</div>", unsafe_allow_html=True)
     
-    # Display existing strategies
-    if st.session_state.strategies:
-        st.subheader("📋 Active Strategies")
-        for strategy_idx, strategy in enumerate(st.session_state.strategies):
-            with st.container():
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    st.write(f"**{strategy['name']}**")
-                    
-                    # Build condition text for each branch
-                    if 'branches' in strategy:  # New format
-                        condition_texts = []
-                        for branch_idx, branch in enumerate(strategy['branches']):
-                            condition_parts = []
-                            for signal_idx, signal_config in enumerate(branch['signals']):
-                                signal_text = f"NOT {signal_config['signal']}" if signal_config['negated'] else signal_config['signal']
-                                if signal_idx > 0:
-                                    condition_parts.append(f"{signal_config['operator']} {signal_text}")
-                                else:
-                                    condition_parts.append(signal_text)
-                            
-                            condition_text = " ".join(condition_parts)
-                            if branch_idx == 0:
-                                condition_texts.append(f"**IF** {condition_text} **THEN** {branch['allocation']}")
-                            else:
-                                condition_texts.append(f"**ELSE IF** {condition_text} **THEN** {branch['allocation']}")
-                            
-                            # Add ELSE logic
-                            if branch.get('else_type') == "Allocation":
-                                condition_texts.append(f"**ELSE** {branch['else_allocation']}")
-                            elif branch.get('else_type') == "Additional Signals" and branch.get('else_signals'):
-                                else_condition_parts = []
-                                for else_signal_idx, else_signal_config in enumerate(branch['else_signals']):
-                                    else_signal_text = f"NOT {else_signal_config['signal']}" if else_signal_config['negated'] else else_signal_config['signal']
-                                    if else_signal_idx > 0:
-                                        else_condition_parts.append(f"{else_signal_config['operator']} {else_signal_text}")
-                                    else:
-                                        else_condition_parts.append(else_signal_text)
-                                
-                                else_condition_text = " ".join(else_condition_parts)
-                                condition_texts.append(f"**ELSE IF** {else_condition_text} **THEN** {branch['else_allocation']}")
-                            
-                            # Add nested ELSE logic
-                            if branch.get('nested_else', {}).get('type') == "Allocation":
-                                condition_texts.append(f"**ELSE** {branch['nested_else']['allocation']}")
-                            elif branch.get('nested_else', {}).get('type') == "Additional Signals" and branch.get('nested_else', {}).get('signals'):
-                                nested_else_condition_parts = []
-                                for nested_signal_idx, nested_signal_config in enumerate(branch['nested_else']['signals']):
-                                    nested_signal_text = f"NOT {nested_signal_config['signal']}" if nested_signal_config['negated'] else nested_signal_config['signal']
-                                    if nested_signal_idx > 0:
-                                        nested_else_condition_parts.append(f"{nested_signal_config['operator']} {nested_signal_text}")
-                                    else:
-                                        nested_else_condition_parts.append(nested_signal_text)
-                                
-                                nested_else_condition_text = " ".join(nested_else_condition_parts)
-                                condition_texts.append(f"**ELSE IF** {nested_else_condition_text} **THEN** {branch['nested_else']['allocation']}")
-                        
-                        # Add default allocation
-                        condition_texts.append(f"**ELSE** {strategy['default_allocation']}")
-                        
-                        st.markdown(" ".join(condition_texts))
-                    else:  # Old format (backward compatibility)
-                        condition_parts = []
-                        for signal_idx, signal_config in enumerate(strategy['signals']):
-                            signal_text = f"NOT {signal_config['signal']}" if signal_config['negated'] else signal_config['signal']
-                            if signal_idx > 0:
-                                condition_parts.append(f"{signal_config['operator']} {signal_text}")
-                            else:
-                                condition_parts.append(signal_text)
-                        
-                        condition_text = " ".join(condition_parts)
-                        if 'branches' in strategy:
-                            # New branch structure
-                            st.markdown(f"**IF** {condition_text} **THEN** {strategy['branches'][0]['allocation']}")
-                        else:
-                            # Old structure
-                            st.markdown(f"**IF** {condition_text} **THEN** {strategy['output_allocation']} **ELSE** {strategy['else_allocation']}")
-                
-                with col2:
-                    if st.button("🗑️", key=f"delete_strategy_{strategy_idx}"):
-                        st.session_state.strategies.pop(strategy_idx)
-                        st.rerun()
-    else:
-        st.info("No strategies created yet. Create your first strategy above.")
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # Tab 4: Backtest
 with tab4:
-    # Only show results if backtest has been run
-    if st.session_state.backtest_results:
-        st.header("📈 Backtest Results")
-        
-        # Clear results button
-        col1, col2 = st.columns([1, 4])
-        with col1:
-            if st.button("🗑️ Clear Results", key="clear_backtest_results"):
-                del st.session_state.backtest_results
-                st.rerun()
-        with col2:
-            if st.button("🔄 Re-run Backtest", key="rerun_backtest"):
-                del st.session_state.backtest_results
-                st.rerun()
-        
-        # Portfolio overview
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.subheader("📊 Portfolio Performance")
-            
-            # Key metrics
-            combined_equity = st.session_state.backtest_results['combined_equity']
-            benchmark_equity = st.session_state.backtest_results['benchmark_equity']
-            
-            combined_returns = combined_equity.pct_change().dropna()
-            benchmark_returns = benchmark_equity.pct_change().dropna()
-            
-            combined_metrics = calculate_metrics(combined_equity, combined_returns)
-            benchmark_metrics = st.session_state.backtest_results['benchmark_metrics']
-            
-            col1a, col1b = st.columns(2)
-            
-            with col1a:
-                st.metric("Total Return", f"{combined_metrics['total_return']:.2f}%", 
-                         delta=f"{combined_metrics['total_return'] - benchmark_metrics['total_return']:.2f}%")
-                st.metric("Annualized Return", f"{combined_metrics['annualized_return']:.2f}%")
-                st.metric("Sharpe Ratio", f"{combined_metrics['sharpe_ratio']:.2f}")
-                st.metric("Sortino Ratio", f"{combined_metrics['sortino_ratio']:.2f}")
-                st.metric("Max Drawdown", f"{combined_metrics['max_drawdown']:.2f}%")
-            
-            with col1b:
-                st.metric("Win Rate", f"{combined_metrics['win_rate']:.1f}%")
-                st.metric("Total Trades", combined_metrics['total_trades'])
-                st.metric("Avg Trade Return", f"{combined_metrics['avg_trade_return']:.2f}%")
-                st.metric("Volatility", f"{combined_metrics['volatility']:.2f}%")
-                st.metric("Calmar Ratio", f"{combined_metrics['calmar_ratio']:.2f}")
-        
-        with col2:
-            st.subheader("📊 Portfolio Distribution")
-            
-            # Strategy allocation pie chart
-            strategy_names = list(st.session_state.backtest_results['strategies'].keys())
-            strategy_returns = [st.session_state.backtest_results['strategies'][name]['metrics']['total_return'] for name in strategy_names]
-            
-            fig_pie = go.Figure(data=[go.Pie(
-                labels=strategy_names,
-                values=strategy_returns,
-                hole=0.3,
-                marker_colors=['#1976d2', '#d32f2f', '#388e3c', '#f57c00', '#7b1fa2']
-            )])
-            fig_pie.update_layout(
-                title="Strategy Performance Distribution",
-                plot_bgcolor='white',
-                paper_bgcolor='white'
-            )
-            st.plotly_chart(fig_pie, use_container_width=True)
-        
-        # Equity curve comparison
-        st.subheader("📈 Equity Curve Comparison")
-        
-        fig = go.Figure()
-        
-        # Add benchmark
-        fig.add_trace(go.Scatter(
-            x=st.session_state.backtest_results['benchmark_equity'].index,
-            y=st.session_state.backtest_results['benchmark_equity'].values,
-            mode='lines',
-            name='Benchmark',
-            line=dict(color='#d32f2f', width=2, dash='dash')
-        ))
-        
-        # Add portfolio
-        fig.add_trace(go.Scatter(
-            x=st.session_state.backtest_results['combined_equity'].index,
-            y=st.session_state.backtest_results['combined_equity'].values,
-            mode='lines',
-            name='Portfolio',
-            line=dict(color='#1976d2', width=3)
-        ))
-        
-        fig.update_layout(
-            title="Portfolio Performance vs Benchmark",
-            xaxis_title="Date",
-            yaxis_title="Equity Value",
-            hovermode='x unified',
-            plot_bgcolor='white',
-            paper_bgcolor='white',
-            legend=dict(
-                font=dict(color='#333'),
-                bgcolor='white',
-                bordercolor='#ccc',
-                borderwidth=1
-            )
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # Drawdown chart
-        st.subheader("📉 Drawdown Analysis")
-        
-        # Calculate drawdown for portfolio and benchmark
-        portfolio_rolling_max = combined_equity.expanding().max()
-        portfolio_drawdown = (combined_equity - portfolio_rolling_max) / portfolio_rolling_max * 100
-        
-        benchmark_rolling_max = benchmark_equity.expanding().max()
-        benchmark_drawdown = (benchmark_equity - benchmark_rolling_max) / benchmark_rolling_max * 100
-        
-        fig_drawdown = go.Figure()
-        
-        # Add portfolio drawdown
-        fig_drawdown.add_trace(go.Scatter(
-            x=portfolio_drawdown.index,
-            y=portfolio_drawdown.values,
-            mode='lines',
-            name='Portfolio Drawdown',
-            line=dict(color='#d32f2f', width=2),
-            fill='tonexty'
-        ))
-        
-        # Add benchmark drawdown
-        fig_drawdown.add_trace(go.Scatter(
-            x=benchmark_drawdown.index,
-            y=benchmark_drawdown.values,
-            mode='lines',
-            name='Benchmark Drawdown',
-            line=dict(color='#1976d2', width=2, dash='dash'),
-            fill='tonexty'
-        ))
-        
-        fig_drawdown.update_layout(
-            title="Portfolio vs Benchmark Drawdown",
-            xaxis_title="Date",
-            yaxis_title="Drawdown (%)",
-            hovermode='x unified',
-            plot_bgcolor='white',
-            paper_bgcolor='white',
-            legend=dict(
-                font=dict(color='#333'),
-                bgcolor='white',
-                bordercolor='#ccc',
-                borderwidth=1
-            ),
-            yaxis=dict(range=[min(portfolio_drawdown.min(), benchmark_drawdown.min()) * 1.1, 5])
-        )
-        
-        st.plotly_chart(fig_drawdown, use_container_width=True)
-        
-        # Detailed performance comparison table
-        st.subheader("📊 Performance Comparison")
-        
-        # Create comparison table
-        comparison_data = {
-            'Metric': ['Total Return (%)', 'Annualized Return (%)', 'Sharpe Ratio', 'Sortino Ratio', 
-                      'Max Drawdown (%)', 'Volatility (%)', 'Win Rate (%)', 'Total Trades', 'Calmar Ratio'],
-            'Portfolio': [
-                f"{combined_metrics['total_return']:.2f}",
-                f"{combined_metrics['annualized_return']:.2f}",
-                f"{combined_metrics['sharpe_ratio']:.2f}",
-                f"{combined_metrics['sortino_ratio']:.2f}",
-                f"{combined_metrics['max_drawdown']:.2f}",
-                f"{combined_metrics['volatility']:.2f}",
-                f"{combined_metrics['win_rate']:.1f}",
-                combined_metrics['total_trades'],
-                f"{combined_metrics['calmar_ratio']:.2f}"
-            ],
-            'Benchmark': [
-                f"{benchmark_metrics['total_return']:.2f}",
-                f"{benchmark_metrics['annualized_return']:.2f}",
-                f"{benchmark_metrics['sharpe_ratio']:.2f}",
-                f"{benchmark_metrics['sortino_ratio']:.2f}",
-                f"{benchmark_metrics['max_drawdown']:.2f}",
-                f"{benchmark_metrics['volatility']:.2f}",
-                f"{benchmark_metrics['win_rate']:.1f}",
-                benchmark_metrics['total_trades'],
-                f"{benchmark_metrics['calmar_ratio']:.2f}"
-            ],
-            'Excess': [
-                f"{combined_metrics['total_return'] - benchmark_metrics['total_return']:.2f}",
-                f"{combined_metrics['annualized_return'] - benchmark_metrics['annualized_return']:.2f}",
-                f"{combined_metrics['sharpe_ratio'] - benchmark_metrics['sharpe_ratio']:.2f}",
-                f"{combined_metrics['sortino_ratio'] - benchmark_metrics['sortino_ratio']:.2f}",
-                f"{combined_metrics['max_drawdown'] - benchmark_metrics['max_drawdown']:.2f}",
-                f"{combined_metrics['volatility'] - benchmark_metrics['volatility']:.2f}",
-                f"{combined_metrics['win_rate'] - benchmark_metrics['win_rate']:.1f}",
-                combined_metrics['total_trades'] - benchmark_metrics['total_trades'],
-                f"{combined_metrics['calmar_ratio'] - benchmark_metrics['calmar_ratio']:.2f}"
-            ]
-        }
-        
-        df_comparison = pd.DataFrame(comparison_data)
-        st.dataframe(df_comparison, use_container_width=True)
-        
-        # Individual strategy analysis
-        if len(st.session_state.backtest_results['strategies']) > 0:
-            with st.container():
-                st.markdown('<div class="custom-container">', unsafe_allow_html=True)
-                st.subheader("🔍 Individual Strategy Analysis")
-                
-                strategy_names = list(st.session_state.backtest_results['strategies'].keys())
-                selected_strategy = st.selectbox("Select Strategy for Detailed Analysis", strategy_names)
-                
-                if selected_strategy:
-                    strategy_result = st.session_state.backtest_results['strategies'][selected_strategy]
+    st.header("📈 Backtest")
+    
+    # Backtest configuration
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        start_date = st.date_input("Start Date", value=datetime.now() - timedelta(days=365))
+    with col2:
+        end_date = st.date_input("End Date", value=datetime.now())
+    with col3:
+        benchmark_ticker = st.text_input("Benchmark Ticker", value="SPY")
+    
+    # Run backtest button
+    if st.button("🚀 Run Backtest", type="primary"):
+        if not st.session_state.strategy_branches:
+            st.error("Please create at least one strategy branch first.")
+        elif not st.session_state.output_allocations:
+            st.error("Please create at least one allocation block first.")
+        else:
+            with st.spinner("Running backtest..."):
+                try:
+                    # Collect all tickers needed
+                    all_tickers = set()
                     
-                    col1, col2 = st.columns(2)
+                    # Add benchmark ticker
+                    all_tickers.add(benchmark_ticker)
                     
-                    with col1:
-                        st.subheader(f"📈 {selected_strategy} Performance")
-                        
-                        # Key metrics
-                        metrics = strategy_result['metrics']
-                        col1a, col1b = st.columns(2)
-                        
-                        with col1a:
-                            st.metric("Total Return", f"{metrics['total_return']:.2f}%", 
-                                     delta=f"{metrics['total_return'] - benchmark_metrics['total_return']:.2f}%")
-                            st.metric("Annualized Return", f"{metrics['annualized_return']:.2f}%")
-                            st.metric("Sharpe Ratio", f"{metrics['sharpe_ratio']:.2f}")
-                            st.metric("Sortino Ratio", f"{metrics['sortino_ratio']:.2f}")
-                            st.metric("Max Drawdown", f"{metrics['max_drawdown']:.2f}%")
-                        
-                        with col1b:
-                            st.metric("Win Rate", f"{metrics['win_rate']:.1f}%")
-                            st.metric("Total Trades", metrics['total_trades'])
-                            st.metric("Avg Trade Return", f"{metrics['avg_trade_return']:.2f}%")
-                            st.metric("Volatility", f"{metrics['volatility']:.2f}%")
-                            st.metric("Calmar Ratio", f"{metrics['calmar_ratio']:.2f}")
+                    # Add tickers from allocations
+                    for allocation in st.session_state.output_allocations.values():
+                        for ticker_config in allocation['tickers']:
+                            all_tickers.add(ticker_config['ticker'])
                     
-                    with col2:
-                        st.subheader(f"📊 {selected_strategy} Equity Curve")
+                    # Add tickers from signals
+                    for signal in st.session_state.signals:
+                        if signal['type'] == 'Custom Indicator':
+                            all_tickers.add(signal['signal_ticker1'])
+                            all_tickers.add(signal['signal_ticker2'])
+                        elif signal['type'] == 'Static RSI':
+                            all_tickers.add(signal['signal_ticker'])
+                        elif signal['type'] == 'RSI Comparison':
+                            all_tickers.add(signal['signal_ticker'])
+                            all_tickers.add(signal['comparison_ticker'])
+                    
+                    # Fetch data for all tickers
+                    data = {}
+                    for ticker in all_tickers:
+                        ticker_data = get_stock_data(ticker, start_date, end_date)
+                        if not ticker_data.empty:
+                            data[ticker] = ticker_data
+                    
+                    if not data:
+                        st.error("No data available for the specified tickers and date range.")
+                        st.stop()
+                    
+                    # Calculate signals
+                    signal_results = {}
+                    for signal in st.session_state.signals:
+                        signal_name = signal['name']
                         
-                        # Individual strategy equity curve
-                        strategy_equity = strategy_result['equity_curve']
+                        if signal['type'] == 'Custom Indicator':
+                            # Get indicator values
+                            ticker1_data = data.get(signal['signal_ticker1'])
+                            ticker2_data = data.get(signal['signal_ticker2'])
+                            
+                            if ticker1_data is not None and ticker2_data is not None:
+                                indicator1_values = calculate_indicator(ticker1_data, signal['indicator1'], signal['days1'])
+                                indicator2_values = calculate_indicator(ticker2_data, signal['indicator2'], signal['days2'])
+                                
+                                # Evaluate condition
+                                signal_results[signal_name] = evaluate_signal_condition(
+                                    indicator1_values, indicator2_values, signal['operator']
+                                )
                         
-                        fig_strategy = go.Figure()
-                        fig_strategy.add_trace(go.Scatter(
-                            x=strategy_equity.index,
-                            y=strategy_equity.values,
-                            mode='lines',
-                            name=selected_strategy,
-                            line=dict(color='#1976d2', width=2)
-                        ))
-                        fig_strategy.add_trace(go.Scatter(
+                        elif signal['type'] == 'Static RSI':
+                            ticker_data = data.get(signal['signal_ticker'])
+                            if ticker_data is not None:
+                                rsi_values = calculate_rsi(ticker_data, signal['rsi_period'])
+                                if signal['comparison'] == 'less_than':
+                                    signal_results[signal_name] = rsi_values < signal['rsi_threshold']
+                                else:
+                                    signal_results[signal_name] = rsi_values > signal['rsi_threshold']
+                        
+                        elif signal['type'] == 'RSI Comparison':
+                            ticker1_data = data.get(signal['signal_ticker'])
+                            ticker2_data = data.get(signal['comparison_ticker'])
+                            
+                            if ticker1_data is not None and ticker2_data is not None:
+                                rsi1_values = calculate_rsi(ticker1_data, signal['rsi_period'])
+                                rsi2_values = calculate_rsi(ticker2_data, signal['rsi_period'])
+                                
+                                if signal['comparison_operator'] == 'less_than':
+                                    signal_results[signal_name] = rsi1_values < rsi2_values
+                                else:
+                                    signal_results[signal_name] = rsi1_values > rsi2_values
+                    
+                    # Calculate strategy signals
+                    strategy_signals = pd.Series(False, index=list(data.values())[0].index)
+                    
+                    for branch in st.session_state.strategy_branches:
+                        if branch.get('type') == 'if_else':
+                            # Handle If/Else logic
+                            if_signals = branch.get('signals', [])
+                            if_allocations = branch.get('allocations', [])
+                            else_allocations = branch.get('else_allocations', [])
+                            
+                            # Evaluate IF conditions
+                            if_result = pd.Series(True, index=strategy_signals.index)
+                            for signal_config in if_signals:
+                                signal_name = signal_config.get('signal', '')
+                                if signal_name and signal_name in signal_results:
+                                    signal_result = signal_results[signal_name]
+                                    if signal_config.get('negated', False):
+                                        signal_result = ~signal_result
+                                    
+                                    if signal_config.get('operator', 'AND') == 'AND':
+                                        if_result = if_result & signal_result
+                                    else:
+                                        if_result = if_result | signal_result
+                            
+                            # Apply allocations based on IF result
+                            if if_result.any():
+                                # Use IF allocations
+                                for alloc_config in if_allocations:
+                                    allocation_name = alloc_config.get('allocation', '')
+                                    if allocation_name in st.session_state.output_allocations:
+                                        allocation = st.session_state.output_allocations[allocation_name]
+                                        weight = alloc_config.get('weight', 100) / 100.0
+                                        
+                                        # Calculate equity curve for this allocation
+                                        alloc_equity = calculate_multi_ticker_equity_curve(
+                                            if_result, allocation, data
+                                        )
+                                        
+                                        # Add to strategy signals (simplified - in practice you'd need more complex logic)
+                                        strategy_signals = strategy_signals | if_result
+                            else:
+                                # Use ELSE allocations
+                                for alloc_config in else_allocations:
+                                    allocation_name = alloc_config.get('allocation', '')
+                                    if allocation_name in st.session_state.output_allocations:
+                                        allocation = st.session_state.output_allocations[allocation_name]
+                                        weight = alloc_config.get('weight', 100) / 100.0
+                                        
+                                        # Calculate equity curve for this allocation
+                                        alloc_equity = calculate_multi_ticker_equity_curve(
+                                            ~if_result, allocation, data
+                                        )
+                                        
+                                        # Add to strategy signals
+                                        strategy_signals = strategy_signals | ~if_result
+                        else:
+                            # Regular branch logic
+                            branch_signals = pd.Series(True, index=strategy_signals.index)
+                            
+                            for signal_config in branch.get('signals', []):
+                                signal_name = signal_config.get('signal', '')
+                                if signal_name and signal_name in signal_results:
+                                    signal_result = signal_results[signal_name]
+                                    if signal_config.get('negated', False):
+                                        signal_result = ~signal_result
+                                    
+                                    if signal_config.get('operator', 'AND') == 'AND':
+                                        branch_signals = branch_signals & signal_result
+                                    else:
+                                        branch_signals = branch_signals | signal_result
+                            
+                            # Apply allocations
+                            for alloc_config in branch.get('allocations', []):
+                                allocation_name = alloc_config.get('allocation', '')
+                                if allocation_name in st.session_state.output_allocations:
+                                    allocation = st.session_state.output_allocations[allocation_name]
+                                    weight = alloc_config.get('weight', 100) / 100.0
+                                    
+                                    # Calculate equity curve for this allocation
+                                    alloc_equity = calculate_multi_ticker_equity_curve(
+                                        branch_signals, allocation, data
+                                    )
+                                    
+                                    # Add to strategy signals
+                                    strategy_signals = strategy_signals | branch_signals
+                    
+                    # Calculate benchmark equity curve
+                    benchmark_data = data.get(benchmark_ticker)
+                    if benchmark_data is not None:
+                        benchmark_equity = calculate_equity_curve(strategy_signals, benchmark_data)
+                        benchmark_returns = benchmark_data.pct_change()
+                        benchmark_metrics = calculate_metrics(benchmark_equity, benchmark_returns)
+                        
+                        # Display results
+                        st.subheader("📊 Backtest Results")
+                        
+                        # Performance metrics
+                        col1, col2, col3, col4 = st.columns(4)
+                        
+                        with col1:
+                            st.metric("Total Return", f"{benchmark_metrics.get('total_return', 0):.2%}")
+                            st.metric("Annualized Return", f"{benchmark_metrics.get('annualized_return', 0):.2%}")
+                        
+                        with col2:
+                            st.metric("Sharpe Ratio", f"{benchmark_metrics.get('sharpe_ratio', 0):.2f}")
+                            st.metric("Sortino Ratio", f"{benchmark_metrics.get('sortino_ratio', 0):.2f}")
+                        
+                        with col3:
+                            st.metric("Max Drawdown", f"{benchmark_metrics.get('max_drawdown', 0):.2%}")
+                            st.metric("Calmar Ratio", f"{benchmark_metrics.get('calmar_ratio', 0):.2f}")
+                        
+                        with col4:
+                            st.metric("Win Rate", f"{benchmark_metrics.get('win_rate', 0):.2%}")
+                            st.metric("Total Trades", benchmark_metrics.get('total_trades', 0))
+                        
+                        # Equity curve chart
+                        st.subheader("📈 Equity Curve")
+                        
+                        fig = go.Figure()
+                        
+                        # Strategy equity curve
+                        fig.add_trace(go.Scatter(
                             x=benchmark_equity.index,
                             y=benchmark_equity.values,
                             mode='lines',
-                            name='Benchmark',
-                            line=dict(color='#d32f2f', width=2, dash='dash')
+                            name=f'Strategy → {benchmark_ticker}',
+                            line=dict(color='blue', width=2)
                         ))
-                        fig_strategy.update_layout(
-                            title=f"{selected_strategy} vs Benchmark",
+                        
+                        # Benchmark equity curve
+                        benchmark_buy_hold = (1 + benchmark_returns).cumprod()
+                        fig.add_trace(go.Scatter(
+                            x=benchmark_buy_hold.index,
+                            y=benchmark_buy_hold.values,
+                            mode='lines',
+                            name=f'{benchmark_ticker} Buy & Hold',
+                            line=dict(color='gray', width=1, dash='dash')
+                        ))
+                        
+                        fig.update_layout(
+                            title="Strategy vs Benchmark Performance",
                             xaxis_title="Date",
-                            yaxis_title="Equity Value",
+                            yaxis_title="Equity",
                             hovermode='x unified',
-                            plot_bgcolor='white',
-                            paper_bgcolor='white',
-                            legend=dict(
-                                font=dict(color='#333'),
-                                bgcolor='white',
-                                bordercolor='#ccc',
-                                borderwidth=1
-                            )
+                            template='plotly_white'
                         )
-                        st.plotly_chart(fig_strategy, use_container_width=True)
+                        
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Cache statistics
+                        cache_stats = get_cache_stats()
+                        st.info(f"💾 Cache Performance: {cache_stats['hits']} hits, {cache_stats['misses']} misses ({cache_stats['hit_rate']:.1f}% hit rate)")
+                    
+                    else:
+                        st.error(f"No data available for benchmark ticker: {benchmark_ticker}")
                 
-                st.markdown('</div>', unsafe_allow_html=True)
+                except Exception as e:
+                    st.error(f"Error during backtest: {str(e)}")
+                    st.exception(e)
     else:
-        # Show configuration when no results exist
-        st.header("📈 Backtest Configuration")
-        
-        # Backtest configuration
-        col1, col2 = st.columns(2)
-        with col1:
-            start_date = st.date_input("Start Date", value=datetime(1900, 1, 1).date())
-            benchmark_ticker = st.text_input("Benchmark Ticker", value="SPY")
-        with col2:
-            end_date = st.date_input("End Date", value=datetime.now())
-        
-        # Quick stats
-        if st.session_state.output_allocations:
-            st.subheader("📊 Quick Stats")
-            
-            # Calculate unique allocations used in strategies
-            strategy_allocations = set()
-            for strategy in st.session_state.strategies:
-                if 'branches' in strategy:
-                    # New branch structure
-                    for branch in strategy['branches']:
-                        strategy_allocations.add(branch['allocation'])
-                        if branch.get('else_allocation'):
-                            strategy_allocations.add(branch['else_allocation'])
-                        if branch.get('nested_else', {}).get('allocation'):
-                            strategy_allocations.add(branch['nested_else']['allocation'])
-                    if strategy.get('default_allocation'):
-                        strategy_allocations.add(strategy['default_allocation'])
-                else:
-                    # Old structure
-                    strategy_allocations.add(strategy['output_allocation'])
-                    if strategy.get('else_allocation'):
-                        strategy_allocations.add(strategy['else_allocation'])
-            
-            # Calculate total allocation only for allocations used in strategies
-            total_allocation = 0
-            for alloc_name in strategy_allocations:
-                if alloc_name in st.session_state.output_allocations:
-                    total_allocation += st.session_state.output_allocations[alloc_name]['total_weight']
-            
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Total Allocations", f"{total_allocation}%")
-            with col2:
-                st.metric("Active Signals", len(st.session_state.signals))
-            with col3:
-                st.metric("Active Strategies", len(st.session_state.strategies))
-            
-            if total_allocation > 100:
-                st.error(f"⚠️ Total allocation exceeds 100% ({total_allocation:.1f}%)")
-            elif total_allocation < 100:
-                st.warning(f"ℹ️ Total allocation: {total_allocation:.1f}% ({(100-total_allocation):.1f}% in cash)")
-            else:
-                st.success(f"✅ Total allocation: {total_allocation:.1f}%")
-        
-        # Strategy overview
-        if st.session_state.strategies:
-            st.subheader("🎯 Strategy Overview")
-            
-            # Display strategies
-            for strategy in st.session_state.strategies:
-                with st.container():
-                    # Build condition text for each branch
-                    if 'branches' in strategy:  # New format
-                        condition_texts = []
-                        for branch_idx, branch in enumerate(strategy['branches']):
-                            condition_parts = []
-                            for signal_idx, signal_config in enumerate(branch['signals']):
-                                signal_text = f"NOT {signal_config['signal']}" if signal_config['negated'] else signal_config['signal']
-                                if signal_idx > 0:
-                                    condition_parts.append(f"{signal_config['operator']} {signal_text}")
-                                else:
-                                    condition_parts.append(signal_text)
-                            
-                            condition_text = " ".join(condition_parts)
-                            if branch_idx == 0:
-                                condition_texts.append(f"<strong>IF</strong> {condition_text} <strong>THEN</strong> {branch['allocation']}")
-                            else:
-                                condition_texts.append(f"<strong>ELSE IF</strong> {condition_text} <strong>THEN</strong> {branch['allocation']}")
-                        
-                        # Add default allocation
-                        condition_texts.append(f"<strong>ELSE</strong> {strategy['default_allocation']}")
-                        
-                        condition_display = " ".join(condition_texts)
-                    else:  # Old format (backward compatibility)
-                        condition_parts = []
-                        for signal_idx, signal_config in enumerate(strategy['signals']):
-                            signal_text = f"NOT {signal_config['signal']}" if signal_config['negated'] else signal_config['signal']
-                            if signal_idx > 0:
-                                condition_parts.append(f"{signal_config['operator']} {signal_text}")
-                            else:
-                                condition_parts.append(signal_text)
-                        
-                        condition_text = " ".join(condition_parts)
-                        if 'branches' in strategy:
-                            # New branch structure - build complex condition
-                            condition_parts = []
-                            for i, branch in enumerate(strategy['branches']):
-                                branch_signals = []
-                                for signal_config in branch['signals']:
-                                    signal_text = signal_config['signal']
-                                    if signal_config['negated']:
-                                        signal_text = f"NOT {signal_text}"
-                                    if i > 0:
-                                        branch_signals.append(f"{signal_config['operator']} {signal_text}")
-                                    else:
-                                        branch_signals.append(signal_text)
-                                
-                                branch_condition = " ".join(branch_signals)
-                                # Handle multiple allocations
-                                allocation_texts = []
-                                for alloc in branch.get('allocations', [{'allocation': '', 'weight': 100}]):
-                                    if alloc.get('allocation'):
-                                        allocation_texts.append(f"{alloc['allocation']} ({alloc.get('weight', 0)}%)")
-                                
-                                if allocation_texts:
-                                    allocation_display = " + ".join(allocation_texts)
-                                    if i == 0:
-                                        condition_parts.append(f"<strong>IF</strong> {branch_condition} <strong>THEN</strong> {allocation_display}")
-                                    else:
-                                        condition_parts.append(f"<strong>ELSE IF</strong> {branch_condition} <strong>THEN</strong> {allocation_display}")
-                                
-                                # Add ELSE conditions if they exist
-                                if branch.get('else_type') == "Allocation" and branch.get('else_allocations'):
-                                    else_allocation_texts = []
-                                    for else_alloc in branch.get('else_allocations', []):
-                                        if else_alloc.get('allocation'):
-                                            else_allocation_texts.append(f"{else_alloc['allocation']} ({else_alloc.get('weight', 0)}%)")
-                                    
-                                    if else_allocation_texts:
-                                        else_allocation_display = " + ".join(else_allocation_texts)
-                                        condition_parts.append(f"<strong>ELSE</strong> {else_allocation_display}")
-                                elif branch.get('else_type') == "Additional Signals" and branch.get('else_signals'):
-                                    else_signals = []
-                                    for else_signal_config in branch['else_signals']:
-                                        else_signal_text = else_signal_config['signal']
-                                        if else_signal_config['negated']:
-                                            else_signal_text = f"NOT {else_signal_text}"
-                                        if len(else_signals) > 0:
-                                            else_signals.append(f"{else_signal_config['operator']} {else_signal_text}")
-                                        else:
-                                            else_signals.append(else_signal_text)
-                                    else_condition = " ".join(else_signals)
-                                    condition_parts.append(f"<strong>ELSE IF</strong> {else_condition} <strong>THEN</strong> {branch['else_allocation']}")
-                            
-                            # Add default allocation
-                            if strategy.get('default_allocation'):
-                                condition_parts.append(f"<strong>ELSE</strong> {strategy['default_allocation']}")
-                            
-                            condition_display = " ".join(condition_parts)
-                        else:
-                            # Old structure
-                            condition_display = f"<strong>IF</strong> {condition_text} <strong>THEN</strong> {strategy['output_allocation']} <strong>ELSE</strong> {strategy['else_allocation']}"
-                        
-                        st.markdown(f"""
-                    <div class="signal-card">
-                        <div class="signal-header">
-                            <h3 class="signal-name">{strategy['name']}</h3>
-                            <span class="signal-type">Strategy</span>
-                        </div>
-                        <div class="allocation-container">
-                            <div class="allocation-header">
-                                <span>Condition</span>
-                            </div>
-                            <p>
-                                {condition_display}
-                            </p>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-        
-        # Run backtest button
-        if st.button("🚀 Run Backtest", type="primary", use_container_width=True):
-            if not st.session_state.signals:
-                st.error("Please add at least one signal before running backtest.")
-            elif not st.session_state.strategies:
-                st.error("Please create at least one strategy before running backtest.")
-        else:
-            with st.spinner("Running backtest..."):
-                # Fetch data for all tickers
-                all_tickers = set()
-                for signal in st.session_state.signals:
-                    if signal['type'] == "Custom Indicator":
-                        all_tickers.add(signal['signal_ticker1'])
-                        all_tickers.add(signal['signal_ticker2'])
-                    elif signal['type'] == "Static RSI":
-                        all_tickers.add(signal['signal_ticker'])
-                        all_tickers.add(signal['target_ticker'])
-                    elif signal['type'] == "RSI Comparison":
-                        all_tickers.add(signal['signal_ticker'])
-                        all_tickers.add(signal['comparison_ticker'])
-                        all_tickers.add(signal['target_ticker'])
-                
-                # Add allocation tickers
-                for allocation in st.session_state.output_allocations.values():
-                    for ticker_component in allocation['tickers']:
-                        all_tickers.add(ticker_component['ticker'])
-                
-                all_tickers.add(benchmark_ticker)
-                
-                # Fetch data
-                data = {}
-                for ticker in all_tickers:
-                    data[ticker] = get_stock_data(ticker, start_date, end_date)
-                
-                # Calculate individual signals
-                signal_results = {}
-                for signal in st.session_state.signals:
-                    if signal['type'] == "Custom Indicator":
-                        signal_ticker1 = signal['signal_ticker1']
-                        signal_ticker2 = signal['signal_ticker2']
-                        
-                        # Calculate first indicator
-                        indicator1_values = calculate_indicator(data[signal_ticker1], signal['indicator1'], signal['days1'])
-                        
-                        # Calculate second indicator
-                        if signal['indicator2'] == "Static Value":
-                            # Create a series of static values
-                            indicator2_values = pd.Series(signal['static_value'], index=data[signal_ticker1].index)
-                        else:
-                            # Use second ticker for second indicator (or same ticker if they're the same)
-                            ticker_for_indicator2 = signal_ticker2 if signal_ticker2 != signal_ticker1 else signal_ticker1
-                            indicator2_values = calculate_indicator(data[ticker_for_indicator2], signal['indicator2'], signal['days2'])
-                        
-                        signals = evaluate_signal_condition(indicator1_values, indicator2_values, signal['operator'])
-                        
-                        signal_results[signal['name']] = signals
-                    
-                    elif signal['type'] == "Static RSI":
-                        rsi = calculate_rsi(data[signal['signal_ticker']], signal['rsi_period'])
-                        
-                        if signal['comparison'] == "less_than":
-                            signals = (rsi <= signal['rsi_threshold']).astype(int)
-                        else:
-                            signals = (rsi >= signal['rsi_threshold']).astype(int)
-                        
-                        signal_results[signal['name']] = signals
-                    
-                    elif signal['type'] == "RSI Comparison":
-                        signal_rsi = calculate_rsi(data[signal['signal_ticker']], signal['rsi_period'])
-                        comparison_rsi = calculate_rsi(data[signal['comparison_ticker']], signal['rsi_period'])
-                        
-                        if signal['comparison_operator'] == "less_than":
-                            signals = (signal_rsi < comparison_rsi).astype(int)
-                        else:
-                            signals = (signal_rsi > comparison_rsi).astype(int)
-                        
-                        signal_results[signal['name']] = signals
-                
-                # Calculate strategy allocations
-                strategy_results = {}
-                combined_equity = pd.Series(1.0, index=data[benchmark_ticker].index)
-                
-                for strategy in st.session_state.strategies:
-                    # Handle new branch structure
-                    if 'branches' in strategy:  # New format
-                        # Initialize strategy signals for each branch
-                        branch_signals = []
-                        else_signals = []
-                        nested_else_signals = []
-                        nested_else_then_signals = []
-                        for branch in strategy['branches']:
-                            # Main branch signals
-                            branch_signal = None
-                            
-                            for signal_config in branch['signals']:
-                                signal_values = signal_results[signal_config['signal']]
-                                
-                                # Apply negation if needed
-                                if signal_config['negated']:
-                                    signal_values = (~signal_values.astype(bool)).astype(int)
-                                
-                                # Combine with previous signals in this branch
-                                if branch_signal is None:
-                                    branch_signal = signal_values
-                                else:
-                                    if signal_config['operator'] == "AND":
-                                        branch_signal = (branch_signal & signal_values).astype(int)
-                                    else:  # OR
-                                        branch_signal = (branch_signal | signal_values).astype(int)
-                            
-                            branch_signals.append(branch_signal)
-                            
-                            # ELSE signals (if they exist)
-                            if branch.get('else_type') == "Additional Signals" and branch.get('else_signals'):
-                                else_signal = None
-                                
-                                for else_signal_config in branch['else_signals']:
-                                    else_signal_values = signal_results[else_signal_config['signal']]
-                                    
-                                    # Apply negation if needed
-                                    if else_signal_config['negated']:
-                                        else_signal_values = (~else_signal_values.astype(bool)).astype(int)
-                                    
-                                    # Combine with previous ELSE signals
-                                    if else_signal is None:
-                                        else_signal = else_signal_values
-                                    else:
-                                        if else_signal_config['operator'] == "AND":
-                                            else_signal = (else_signal & else_signal_values).astype(int)
-                                        else:  # OR
-                                            else_signal = (else_signal | else_signal_values).astype(int)
-                                
-                                else_signals.append(else_signal)
-                            else:
-                                else_signals.append(None)
-                            
-                            # Nested ELSE signals (if they exist)
-                            if branch.get('nested_else', {}).get('type') == "Additional Signals" and branch.get('nested_else', {}).get('signals'):
-                                nested_else_signal = None
-                                
-                                for nested_signal_config in branch['nested_else']['signals']:
-                                    nested_signal_values = signal_results[nested_signal_config['signal']]
-                                    
-                                    # Apply negation if needed
-                                    if nested_signal_config['negated']:
-                                        nested_signal_values = (~nested_signal_values.astype(bool)).astype(int)
-                                    
-                                    # Combine with previous nested ELSE signals
-                                    if nested_else_signal is None:
-                                        nested_else_signal = nested_signal_values
-                                    else:
-                                        if nested_signal_config['operator'] == "AND":
-                                            nested_else_signal = (nested_else_signal & nested_signal_values).astype(int)
-                                        else:  # OR
-                                            nested_else_signal = (nested_else_signal | nested_signal_values).astype(int)
-                                
-                                nested_else_signals.append(nested_else_signal)
-                                
-                                # Nested ELSE THEN signals (if they exist)
-                                if branch.get('nested_else', {}).get('then_signals'):
-                                    nested_else_then_signal = None
-                                    
-                                    for then_signal_config in branch['nested_else']['then_signals']:
-                                        then_signal_values = signal_results[then_signal_config['signal']]
-                                        
-                                        # Apply negation if needed
-                                        if then_signal_config['negated']:
-                                            then_signal_values = (~then_signal_values.astype(bool)).astype(int)
-                                        
-                                        # Combine with previous nested ELSE THEN signals
-                                        if nested_else_then_signal is None:
-                                            nested_else_then_signal = then_signal_values
-                                        else:
-                                            if then_signal_config['operator'] == "AND":
-                                                nested_else_then_signal = (nested_else_then_signal & then_signal_values).astype(int)
-                                            else:  # OR
-                                                nested_else_then_signal = (nested_else_then_signal | then_signal_values).astype(int)
-                                    
-                                    nested_else_then_signals.append(nested_else_then_signal)
-                                else:
-                                    nested_else_then_signals.append(None)
-                            else:
-                                nested_else_signals.append(None)
-                                nested_else_then_signals.append(None)
-                        
-                        # Calculate equity curves for each branch and ELSE conditions using caching
-                        branch_equities = []
-                        else_equities = []
-                        nested_else_equities = []
-                        nested_else_then_equities = []
-                        for branch_idx, branch in enumerate(strategy['branches']):
-                            # Use cached computation for main branch
-                            branch_result = compute_logic_block(branch, signal_results, data, benchmark_ticker)
-                            branch_equities.append(branch_result['equity_curve'])
-                            
-                            # ELSE equity (if ELSE signals exist)
-                            if else_signals[branch_idx] is not None:
-                                else_allocation = st.session_state.output_allocations[branch['else_allocation']]
-                                else_equity = calculate_multi_ticker_equity_curve(else_signals[branch_idx], else_allocation, data)
-                                else_equities.append(else_equity)
-                            else:
-                                # If ELSE type is "Allocation", use simple allocation
-                                if branch.get('else_type') == "Allocation":
-                                    else_allocation = st.session_state.output_allocations[branch['else_allocation']]
-                                    else_equity = calculate_multi_ticker_equity_curve(pd.Series(1, index=data[benchmark_ticker].index), else_allocation, data)
-                                    else_equities.append(else_equity)
-                                else:
-                                    else_equities.append(None)
-                            
-                            # Nested ELSE equity (if nested ELSE signals exist)
-                            if nested_else_signals[branch_idx] is not None:
-                                nested_else_allocation = st.session_state.output_allocations[branch['nested_else']['allocation']]
-                                nested_else_equity = calculate_multi_ticker_equity_curve(nested_else_signals[branch_idx], nested_else_allocation, data)
-                                nested_else_equities.append(nested_else_equity)
-                            else:
-                                # If nested ELSE type is "Allocation", use simple allocation
-                                if branch.get('nested_else', {}).get('type') == "Allocation":
-                                    nested_else_allocation = st.session_state.output_allocations[branch['nested_else']['allocation']]
-                                    nested_else_equity = calculate_multi_ticker_equity_curve(pd.Series(1, index=data[benchmark_ticker].index), nested_else_allocation, data)
-                                    nested_else_equities.append(nested_else_equity)
-                                else:
-                                    nested_else_equities.append(None)
-                                
-                                # Nested ELSE THEN equity (if nested ELSE THEN signals exist)
-                                if nested_else_then_signals[branch_idx] is not None:
-                                    nested_else_then_allocation = st.session_state.output_allocations[branch['nested_else']['then_allocation']]
-                                    nested_else_then_equity = calculate_multi_ticker_equity_curve(nested_else_then_signals[branch_idx], nested_else_then_allocation, data)
-                                    nested_else_then_equities.append(nested_else_then_equity)
-                                else:
-                                    nested_else_then_equities.append(None)
-                        
-                        # Calculate default allocation equity curve
-                        default_allocation = st.session_state.output_allocations[strategy['default_allocation']]
-                        default_equity = calculate_multi_ticker_equity_curve(pd.Series(0, index=data[benchmark_ticker].index), default_allocation, data)
-                        
-                        # Combine all branch returns with ELSE logic
-                        combined_returns = pd.Series(0.0, index=data[benchmark_ticker].index)
-                        used_signals = pd.Series(0, index=data[benchmark_ticker].index)
-                        
-                        for branch_idx, branch_signal in enumerate(branch_signals):
-                            branch = strategy['branches'][branch_idx]
-                            
-                            # Only use this branch if no previous branch was true
-                            branch_active = branch_signal & (used_signals == 0)
-                            used_signals = used_signals | branch_active
-                            
-                            # Get returns for this branch with multiple allocations
-                            branch_returns = pd.Series(0, index=data[benchmark_ticker].index)
-                            for alloc in branch.get('allocations', [{'allocation': '', 'weight': 100}]):
-                                if alloc.get('allocation') and alloc['allocation'] in st.session_state.output_allocations:
-                                    allocation_weight = alloc.get('weight', 0) / 100
-                                    allocation_data = st.session_state.output_allocations[alloc['allocation']]
-                                    allocation_returns = calculate_multi_ticker_equity_curve(
-                                        branch_signal, allocation_data, data
-                                    ).pct_change().fillna(0)
-                                    branch_returns = branch_returns + (allocation_returns * allocation_weight)
-                            
-                            combined_returns = combined_returns + (branch_returns * branch_active)
-                            
-                            # Handle ELSE logic
-                            if branch.get('else_type') == "Allocation":
-                                # Multiple ELSE allocations (when main branch is false)
-                                else_active = (~branch_signal.astype(bool)).astype(int) & (used_signals == 0)
-                                used_signals = used_signals | else_active
-                                
-                                else_returns = pd.Series(0, index=data[benchmark_ticker].index)
-                                for else_alloc in branch.get('else_allocations', [{'allocation': '', 'weight': 100}]):
-                                    if else_alloc.get('allocation') and else_alloc['allocation'] in st.session_state.output_allocations:
-                                        else_allocation_weight = else_alloc.get('weight', 0) / 100
-                                        else_allocation_data = st.session_state.output_allocations[else_alloc['allocation']]
-                                        else_allocation_returns = calculate_multi_ticker_equity_curve(
-                                            else_active, else_allocation_data, data
-                                        ).pct_change().fillna(0)
-                                        else_returns = else_returns + (else_allocation_returns * else_allocation_weight)
-                                
-                                combined_returns = combined_returns + (else_returns * else_active)
-                                
-                            elif branch.get('else_type') == "Additional Signals" and else_signals[branch_idx] is not None:
-                                # ELSE signals (when main branch is false but ELSE signals are true)
-                                else_signal = else_signals[branch_idx]
-                                else_active = else_signal & (~branch_signal.astype(bool)).astype(int) & (used_signals == 0)
-                                used_signals = used_signals | else_active
-                                
-                                else_returns = else_equities[branch_idx].pct_change().fillna(0)
-                                combined_returns = combined_returns + (else_returns * else_active)
-                            
-                            # Handle nested ELSE logic
-                            if branch.get('nested_else', {}).get('type') == "Allocation":
-                                # Simple nested ELSE allocation (when main branch and ELSE are false)
-                                nested_else_active = (~branch_signal.astype(bool)).astype(int) & (used_signals == 0)
-                                if else_signals[branch_idx] is not None:
-                                    nested_else_active = nested_else_active & (~else_signals[branch_idx].astype(bool)).astype(int)
-                                used_signals = used_signals | nested_else_active
-                                
-                                nested_else_returns = nested_else_equities[branch_idx].pct_change().fillna(0)
-                                combined_returns = combined_returns + (nested_else_returns * nested_else_active)
-                                
-                            elif branch.get('nested_else', {}).get('type') == "Additional Signals" and nested_else_signals[branch_idx] is not None:
-                                  # Nested ELSE signals (when main branch and ELSE are false but nested ELSE signals are true)
-                                  nested_else_signal = nested_else_signals[branch_idx]
-                                  nested_else_active = nested_else_signal & (~branch_signal.astype(bool)).astype(int) & (used_signals == 0)
-                                  if else_signals[branch_idx] is not None:
-                                      nested_else_active = nested_else_active & (~else_signals[branch_idx].astype(bool)).astype(int)
-                                  used_signals = used_signals | nested_else_active
-                                  
-                                  # Check if nested ELSE has THEN signals
-                                  if nested_else_then_signals[branch_idx] is not None:
-                                      # Nested ELSE THEN signals (when nested ELSE signals are true and THEN signals are true)
-                                      nested_else_then_signal = nested_else_then_signals[branch_idx]
-                                      nested_else_then_active = nested_else_then_signal & nested_else_active
-                                      used_signals = used_signals | nested_else_then_active
-                                      
-                                      nested_else_then_returns = nested_else_then_equities[branch_idx].pct_change().fillna(0)
-                                      combined_returns = combined_returns + (nested_else_then_returns * nested_else_then_active)
-                                  
-                                  # If no THEN signals, use nested ELSE allocation directly
-                                  else:
-                                      nested_else_returns = nested_else_equities[branch_idx].pct_change().fillna(0)
-                                      combined_returns = combined_returns + (nested_else_returns * nested_else_active)
-                        
-                        # Add default allocation returns for periods when no branch was active
-                        default_returns = default_equity.pct_change().fillna(0)
-                        combined_returns = combined_returns + (default_returns * (used_signals == 0))
-                        
-                        # Calculate final equity curve
-                        equity_curve = (1 + combined_returns).cumprod()
-                        
-                        # Calculate metrics
-                        returns = equity_curve.pct_change().dropna()
-                        metrics = calculate_metrics(equity_curve, returns)
-                        
-                        strategy_results[strategy['name']] = {
-                            'equity_curve': equity_curve,
-                            'signals': used_signals,
-                            'metrics': metrics,
-                            'branches': strategy['branches']
-                        }
-                        
-                        # Add to combined portfolio
-                        combined_equity = combined_equity * (1 + (equity_curve - 1))
-                    
-                    else:  # Old format (backward compatibility)
-                        # Get signal values and apply logic
-                        strategy_signals = None
-                        
-                        for i, signal_config in enumerate(strategy['signals']):
-                            signal_values = signal_results[signal_config['signal']]
-                            
-                            # Apply negation if needed
-                            if signal_config['negated']:
-                                signal_values = (~signal_values.astype(bool)).astype(int)
-                            
-                            # Combine with previous signals
-                            if strategy_signals is None:
-                                strategy_signals = signal_values
-                            else:
-                                if signal_config['operator'] == "AND":
-                                    strategy_signals = (strategy_signals & signal_values).astype(int)
-                                else:  # OR
-                                    strategy_signals = (strategy_signals | signal_values).astype(int)
-                        
-                        # Get allocation details for both then and else cases
-                        if 'branches' in strategy:
-                            # New branch structure - use first branch allocation
-                            then_allocation = st.session_state.output_allocations[strategy['branches'][0]['allocation']]
-                        else:
-                            # Old structure
-                            then_allocation = st.session_state.output_allocations[strategy['output_allocation']]
-                            else_allocation = st.session_state.output_allocations[strategy['else_allocation']]
-                        
-                        # Calculate equity curves for both allocations
-                        then_equity = calculate_multi_ticker_equity_curve(strategy_signals, then_allocation, data)
-                        else_equity = calculate_multi_ticker_equity_curve((~strategy_signals.astype(bool)).astype(int), else_allocation, data)
-                        
-                        # Combine the equity curves (when strategy is true, use then allocation; when false, use else allocation)
-                        # We need to combine the returns, not multiply the equity curves
-                        then_returns = then_equity.pct_change().fillna(0)
-                        else_returns = else_equity.pct_change().fillna(0)
-                        
-                        # Combine returns (when strategy is true, use then returns; when false, use else returns)
-                        combined_returns = then_returns + else_returns
-                        equity_curve = (1 + combined_returns).cumprod()
-                        
-                        # Calculate metrics
-                        returns = equity_curve.pct_change().dropna()
-                        metrics = calculate_metrics(equity_curve, returns)
-                        
-                        strategy_results[strategy['name']] = {
-                            'equity_curve': equity_curve,
-                            'signals': strategy_signals,
-                            'metrics': metrics,
-                            'allocation': allocation
-                        }
-                        
-                        # Add to combined portfolio
-                        combined_equity = combined_equity * (1 + (equity_curve - 1))
-                
-                # Calculate benchmark
-                benchmark_equity = data[benchmark_ticker] / data[benchmark_ticker].iloc[0]
-                benchmark_returns = benchmark_equity.pct_change().dropna()
-                benchmark_metrics = calculate_metrics(benchmark_equity, benchmark_returns)
-                
-                # Store results
-                st.session_state.backtest_results = {
-                    'signals': signal_results,
-                    'strategies': strategy_results,
-                    'combined_equity': combined_equity,
-                    'benchmark_equity': benchmark_equity,
-                    'benchmark_metrics': benchmark_metrics,
-                    'data': data
-                }
-                
-                st.success("Backtest completed successfully!")
-
-# Footer
-st.write("---")
-st.markdown("""
-<div style='text-align: center; padding: 20px; color: #666;'>
-    <strong>Strategy Testing Tool</strong><br>
-    Professional signal analysis and portfolio optimization
-</div>
-""", unsafe_allow_html=True)
+        st.info("Click 'Run Backtest' to test your strategy against historical data.") 
