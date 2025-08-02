@@ -1177,10 +1177,10 @@ with tab3:
                 """, unsafe_allow_html=True)
                 
                 # IF section
-                st.markdown('<div class="condition-block">', unsafe_allow_html=True)
+                st.markdown('<div class="condition-block" style="border-left: 3px solid #2196F3; padding-left: 10px; margin-left: 0px;">', unsafe_allow_html=True)
                 st.markdown("**IF:**")
                 
-                # Initialize session state for dropdown visibility
+                # Initialize session state for IF dropdown visibility
                 if f'show_if_dropdown_{branch_idx}' not in st.session_state:
                     st.session_state[f'show_if_dropdown_{branch_idx}'] = False
                 
@@ -1192,8 +1192,7 @@ with tab3:
                 # Show dropdown if flag is set
                 if st.session_state[f'show_if_dropdown_{branch_idx}']:
                     st.markdown("**Add Signal to IF:**")
-                    # Debug: Show signal count
-                    st.write(f"Debug: {len(st.session_state.signals)} signals available")
+                    st.write(f"Debug: {len(st.session_state.signals)} signals available") # Debug info
                     if st.session_state.signals:
                         selected_signal = st.selectbox(
                             "Select Signal:",
@@ -1212,7 +1211,7 @@ with tab3:
                                         'operator': 'AND'
                                     })
                                     st.session_state[f'show_if_dropdown_{branch_idx}'] = False
-                                    st.success(f"✅ Signal '{selected_signal}' added to IF!")
+                                    st.success(f"✅ Signal '{selected_signal}' added to IF!") # Success message
                                     st.rerun()
                                 else:
                                     st.warning("Please select a signal.")
@@ -1226,55 +1225,55 @@ with tab3:
                             st.session_state[f'show_if_dropdown_{branch_idx}'] = False
                             st.rerun()
                 
-                # Display IF signals
+                # Display IF signals in collapsible expander
                 if branch.get('signals'):
-                    st.write(f"**Signals in IF ({len(branch['signals'])}):**")
-                    for signal_idx, signal_config in enumerate(branch['signals']):
-                        # Display each signal in its own row
-                        st.markdown(f"**Signal {signal_idx + 1}:**")
-                        
-                        col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
-                        
-                        with col1:
-                            signal_config['signal'] = st.selectbox(
-                                f"Signal {signal_idx + 1}", 
-                                [""] + [s['name'] for s in st.session_state.signals],
-                                index=0 if not signal_config.get('signal') else 
-                                [s['name'] for s in st.session_state.signals].index(signal_config['signal']) + 1,
-                                key=f"if_branch_{branch_idx}_signal_{signal_idx}"
-                            )
-                        
-                        with col2:
-                            signal_config['negated'] = st.checkbox("NOT", key=f"if_branch_{branch_idx}_negated_{signal_idx}")
-                        
-                        with col3:
-                            if len(branch['signals']) > 1 and signal_idx < len(branch['signals']) - 1:
-                                signal_config['operator'] = st.selectbox(
-                                    "Operator",
-                                    ["AND", "OR"],
-                                    index=0 if signal_config.get('operator', 'AND') == 'AND' else 1,
-                                    key=f"if_branch_{branch_idx}_operator_{signal_idx}"
+                    with st.expander(f"📊 IF Signals ({len(branch['signals'])})", expanded=True):
+                        for signal_idx, signal_config in enumerate(branch['signals']):
+                            # Display each signal in its own row
+                            st.markdown(f"**Signal {signal_idx + 1}:**")
+                            
+                            col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
+                            
+                            with col1:
+                                signal_config['signal'] = st.selectbox(
+                                    f"Signal {signal_idx + 1}", 
+                                    [""] + [s['name'] for s in st.session_state.signals],
+                                    index=0 if not signal_config.get('signal') else 
+                                    [s['name'] for s in st.session_state.signals].index(signal_config['signal']) + 1,
+                                    key=f"if_branch_{branch_idx}_signal_{signal_idx}"
                                 )
-                            else:
-                                st.write("")  # Empty space for alignment
-                        
-                        with col4:
-                            if len(branch['signals']) > 1:
-                                if st.button("🗑️", key=f"remove_if_branch_{branch_idx}_signal_{signal_idx}"):
-                                    branch['signals'].pop(signal_idx)
-                                    st.rerun()
-                            else:
-                                st.write("")  # Empty space for alignment
-                        
-                        # Add some spacing between signals
-                        st.markdown("<br>", unsafe_allow_html=True)
+                            
+                            with col2:
+                                signal_config['negated'] = st.checkbox("NOT", key=f"if_branch_{branch_idx}_negated_{signal_idx}")
+                            
+                            with col3:
+                                if len(branch['signals']) > 1 and signal_idx < len(branch['signals']) - 1:
+                                    signal_config['operator'] = st.selectbox(
+                                        "Operator",
+                                        ["AND", "OR"],
+                                        index=0 if signal_config.get('operator', 'AND') == 'AND' else 1,
+                                        key=f"if_branch_{branch_idx}_operator_{signal_idx}"
+                                    )
+                                else:
+                                    st.write("")  # Empty space for alignment
+                            
+                            with col4:
+                                if len(branch['signals']) > 1:
+                                    if st.button("🗑️", key=f"remove_if_branch_{branch_idx}_signal_{signal_idx}"):
+                                        branch['signals'].pop(signal_idx)
+                                        st.rerun()
+                                else:
+                                    st.write("")  # Empty space for alignment
+                            
+                            # Add some spacing between signals
+                            st.markdown("<br>", unsafe_allow_html=True)
                 else:
                     st.write("**No signals in IF yet**")
                 
                 st.markdown('</div>', unsafe_allow_html=True)
                 
                 # THEN section
-                st.markdown('<div class="then-block">', unsafe_allow_html=True)
+                st.markdown('<div class="then-block" style="border-left: 3px solid #FF9800; padding-left: 10px; margin-left: 0px;">', unsafe_allow_html=True)
                 st.markdown("**THEN:**")
                 
                 # Initialize session state for THEN dropdown visibility
@@ -1322,49 +1321,49 @@ with tab3:
                             st.session_state[f'show_then_dropdown_{branch_idx}'] = False
                             st.rerun()
                 
-                # Display THEN allocations
+                # Display THEN allocations in collapsible expander
                 if branch.get('allocations'):
-                    st.write(f"**Allocations in THEN ({len(branch['allocations'])}):**")
-                    for alloc_idx, allocation_config in enumerate(branch['allocations']):
-                        col1, col2, col3 = st.columns([2, 1, 1])
-                        with col1:
-                            allocation_config['allocation'] = st.selectbox(
-                                f"Allocation {alloc_idx + 1}", 
-                                list(st.session_state.output_allocations.keys()),
-                                key=f"then_branch_{branch_idx}_allocation_{alloc_idx}"
-                            )
-                        with col2:
-                            allocation_config['weight'] = st.number_input(
-                                "Weight %",
-                                min_value=0,
-                                max_value=100,
-                                value=allocation_config.get('weight', 100),
-                                key=f"then_branch_{branch_idx}_weight_{alloc_idx}"
-                            )
-                        with col3:
-                            if len(branch['allocations']) > 1:  # Don't allow removing the last allocation
-                                if st.button("🗑️", key=f"remove_then_branch_{branch_idx}_allocation_{alloc_idx}"):
-                                    branch['allocations'].pop(alloc_idx)
-                                    st.rerun()
+                    with st.expander(f"💰 THEN Allocations ({len(branch['allocations'])})", expanded=True):
+                        for alloc_idx, allocation_config in enumerate(branch['allocations']):
+                            col1, col2, col3 = st.columns([2, 1, 1])
+                            with col1:
+                                allocation_config['allocation'] = st.selectbox(
+                                    f"Allocation {alloc_idx + 1}", 
+                                    list(st.session_state.output_allocations.keys()),
+                                    key=f"then_branch_{branch_idx}_allocation_{alloc_idx}"
+                                )
+                            with col2:
+                                allocation_config['weight'] = st.number_input(
+                                    "Weight %",
+                                    min_value=0,
+                                    max_value=100,
+                                    value=allocation_config.get('weight', 100),
+                                    key=f"then_branch_{branch_idx}_weight_{alloc_idx}"
+                                )
+                            with col3:
+                                if len(branch['allocations']) > 1:  # Don't allow removing the last allocation
+                                    if st.button("🗑️", key=f"remove_then_branch_{branch_idx}_allocation_{alloc_idx}"):
+                                        branch['allocations'].pop(alloc_idx)
+                                        st.rerun()
+                                else:
+                                    st.write("")  # Empty space for alignment
+                        
+                        # Show total weight for this branch
+                        total_branch_weight = sum(alloc.get('weight', 0) for alloc in branch['allocations'])
+                        if total_branch_weight != 100:
+                            if total_branch_weight > 100:
+                                st.error(f"⚠️ Branch total weight: {total_branch_weight}% (exceeds 100%)")
                             else:
-                                st.write("")  # Empty space for alignment
-                    
-                    # Show total weight for this branch
-                    total_branch_weight = sum(alloc.get('weight', 0) for alloc in branch['allocations'])
-                    if total_branch_weight != 100:
-                        if total_branch_weight > 100:
-                            st.error(f"⚠️ Branch total weight: {total_branch_weight}% (exceeds 100%)")
+                                st.warning(f"ℹ️ Branch total weight: {total_branch_weight}% ({(100-total_branch_weight):.1f}% unallocated)")
                         else:
-                            st.warning(f"ℹ️ Branch total weight: {total_branch_weight}% ({(100-total_branch_weight):.1f}% unallocated)")
-                    else:
-                        st.success(f"✅ Branch total weight: {total_branch_weight}%")
+                            st.success(f"✅ Branch total weight: {total_branch_weight}%")
                 else:
                     st.write("**No allocations in THEN yet**")
                 
                 st.markdown('</div>', unsafe_allow_html=True)
                 
                 # ELSE section
-                st.markdown('<div class="else-block">', unsafe_allow_html=True)
+                st.markdown('<div class="else-block" style="border-left: 3px solid #4CAF50; padding-left: 10px; margin-left: 30px;">', unsafe_allow_html=True)
                 st.markdown("**ELSE:**")
                 
                 # Initialize session state for ELSE dropdown visibility
@@ -1434,78 +1433,97 @@ with tab3:
                             st.session_state[f'show_else_dropdown_{branch_idx}'] = False
                             st.rerun()
                 
-                # Display ELSE signals
+                # Display ELSE signals in collapsible expander
                 if branch.get('else_signals'):
-                    st.write(f"**Signals in ELSE ({len(branch['else_signals'])}):**")
-                    for else_signal_idx, else_signal_config in enumerate(branch['else_signals']):
-                        # Display each signal in its own row
-                        st.markdown(f"**ELSE Signal {else_signal_idx + 1}:**")
+                    with st.expander(f"📊 ELSE Signals ({len(branch['else_signals'])})", expanded=True):
+                        for else_signal_idx, else_signal_config in enumerate(branch['else_signals']):
+                            # Display each signal in its own row
+                            st.markdown(f"**ELSE Signal {else_signal_idx + 1}:**")
+                            
+                            col1, col2, col3 = st.columns([3, 1, 1])
+                            with col1:
+                                if else_signal_config.get('signal'):
+                                    st.write(f"• {else_signal_config['signal']}")
+                                else:
+                                    # Show dropdown for empty signal
+                                    else_signal_config['signal'] = st.selectbox(
+                                        "Select Signal:",
+                                        [""] + [s['name'] for s in st.session_state.signals],
+                                        key=f"else_signal_select_{branch_idx}_{else_signal_idx}"
+                                    )
+                            with col2:
+                                else_signal_config['negated'] = st.checkbox(
+                                    "NOT",
+                                    value=else_signal_config.get('negated', False),
+                                    key=f"else_signal_negated_{branch_idx}_{else_signal_idx}"
+                                )
+                            with col3:
+                                if len(branch['else_signals']) > 1:
+                                    if st.button("🗑️", key=f"remove_else_signal_{branch_idx}_{else_signal_idx}"):
+                                        branch['else_signals'].pop(else_signal_idx)
+                                        st.rerun()
+                                else:
+                                    st.write("")
+                            
+                            # Show operator for multiple signals
+                            if len(branch['else_signals']) > 1 and else_signal_idx < len(branch['else_signals']) - 1:
+                                else_signal_config['operator'] = st.selectbox(
+                                    "Operator",
+                                    ["AND", "OR"],
+                                    index=0 if else_signal_config.get('operator', 'AND') == 'AND' else 1,
+                                    key=f"else_signal_operator_{branch_idx}_{else_signal_idx}"
+                                )
+                            
+                            # Add some spacing between signals
+                            st.markdown("<br>", unsafe_allow_html=True)
                         
-                        col1, col2, col3 = st.columns([3, 1, 1])
-                        with col1:
-                            st.write(f"• {else_signal_config['signal']}")
-                        with col2:
-                            else_signal_config['negated'] = st.checkbox(
-                                "NOT",
-                                value=else_signal_config.get('negated', False),
-                                key=f"else_signal_negated_{branch_idx}_{else_signal_idx}"
-                            )
-                        with col3:
-                            if len(branch['else_signals']) > 1:
-                                if st.button("🗑️", key=f"remove_else_signal_{branch_idx}_{else_signal_idx}"):
-                                    branch['else_signals'].pop(else_signal_idx)
-                                    st.rerun()
-                            else:
-                                st.write("")
-                        
-                        # Show operator for multiple signals
-                        if len(branch['else_signals']) > 1 and else_signal_idx < len(branch['else_signals']) - 1:
-                            else_signal_config['operator'] = st.selectbox(
-                                "Operator",
-                                ["AND", "OR"],
-                                index=0 if else_signal_config.get('operator', 'AND') == 'AND' else 1,
-                                key=f"else_signal_operator_{branch_idx}_{else_signal_idx}"
-                            )
-                        
-                        # Add some spacing between signals
-                        st.markdown("<br>", unsafe_allow_html=True)
+                        # Add button to add more signals to ELSE
+                        if st.button("➕ Add Another Signal to ELSE", key=f"add_more_else_signal_{branch_idx}"):
+                            if 'else_signals' not in branch:
+                                branch['else_signals'] = []
+                            branch['else_signals'].append({
+                                'signal': '', 
+                                'negated': False, 
+                                'operator': 'AND'
+                            })
+                            st.rerun()
                 
-                # Display ELSE allocations
+                # Display ELSE allocations in collapsible expander
                 if branch.get('else_allocations'):
-                    st.write(f"**Allocations in ELSE ({len(branch['else_allocations'])}):**")
-                    for else_alloc_idx, else_allocation_config in enumerate(branch['else_allocations']):
-                        col1, col2, col3 = st.columns([2, 1, 1])
-                        with col1:
-                            else_allocation_config['allocation'] = st.selectbox(
-                                f"ELSE Allocation {else_alloc_idx + 1}", 
-                                list(st.session_state.output_allocations.keys()),
-                                key=f"else_branch_{branch_idx}_allocation_{else_alloc_idx}"
-                            )
-                        with col2:
-                            else_allocation_config['weight'] = st.number_input(
-                                "Weight %",
-                                min_value=0,
-                                max_value=100,
-                                value=else_allocation_config.get('weight', 100),
-                                key=f"else_branch_{branch_idx}_weight_{else_alloc_idx}"
-                            )
-                        with col3:
-                            if len(branch['else_allocations']) > 1:  # Don't allow removing the last allocation
-                                if st.button("🗑️", key=f"remove_else_branch_{branch_idx}_allocation_{else_alloc_idx}"):
-                                    branch['else_allocations'].pop(else_alloc_idx)
-                                    st.rerun()
+                    with st.expander(f"💰 ELSE Allocations ({len(branch['else_allocations'])})", expanded=True):
+                        for else_alloc_idx, else_allocation_config in enumerate(branch['else_allocations']):
+                            col1, col2, col3 = st.columns([2, 1, 1])
+                            with col1:
+                                else_allocation_config['allocation'] = st.selectbox(
+                                    f"ELSE Allocation {else_alloc_idx + 1}", 
+                                    list(st.session_state.output_allocations.keys()),
+                                    key=f"else_branch_{branch_idx}_allocation_{else_alloc_idx}"
+                                )
+                            with col2:
+                                else_allocation_config['weight'] = st.number_input(
+                                    "Weight %",
+                                    min_value=0,
+                                    max_value=100,
+                                    value=else_allocation_config.get('weight', 100),
+                                    key=f"else_branch_{branch_idx}_weight_{else_alloc_idx}"
+                                )
+                            with col3:
+                                if len(branch['else_allocations']) > 1:  # Don't allow removing the last allocation
+                                    if st.button("🗑️", key=f"remove_else_branch_{branch_idx}_allocation_{else_alloc_idx}"):
+                                        branch['else_allocations'].pop(else_alloc_idx)
+                                        st.rerun()
+                                else:
+                                    st.write("")  # Empty space for alignment
+                        
+                        # Show total ELSE weight for this branch
+                        total_else_weight = sum(alloc.get('weight', 0) for alloc in branch['else_allocations'])
+                        if total_else_weight != 100:
+                            if total_else_weight > 100:
+                                st.error(f"⚠️ ELSE total weight: {total_else_weight}% (exceeds 100%)")
                             else:
-                                st.write("")  # Empty space for alignment
-                    
-                    # Show total ELSE weight for this branch
-                    total_else_weight = sum(alloc.get('weight', 0) for alloc in branch['else_allocations'])
-                    if total_else_weight != 100:
-                        if total_else_weight > 100:
-                            st.error(f"⚠️ ELSE total weight: {total_else_weight}% (exceeds 100%)")
+                                st.warning(f"ℹ️ ELSE total weight: {total_else_weight}% ({(100-total_else_weight):.1f}% unallocated)")
                         else:
-                            st.warning(f"ℹ️ ELSE total weight: {total_else_weight}% ({(100-total_else_weight):.1f}% unallocated)")
-                    else:
-                        st.success(f"✅ ELSE total weight: {total_else_weight}%")
+                            st.success(f"✅ ELSE total weight: {total_else_weight}%")
                 
                 # Show status if no signals or allocations
                 if not branch.get('else_signals') and not branch.get('else_allocations'):
