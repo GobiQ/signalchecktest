@@ -1076,9 +1076,11 @@ with tab3:
             
             # Display strategy branches
             for branch_idx, branch in enumerate(st.session_state.strategy_branches):
-                st.markdown(f"**Branch {branch_idx + 1}:**")
+                st.markdown("---")
+                st.markdown(f"### Branch {branch_idx + 1}")
                 
                 # Branch condition signals
+                st.markdown("**IF:**")
                 for signal_idx, signal_config in enumerate(branch['signals']):
                     col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
                     
@@ -1120,9 +1122,10 @@ with tab3:
                 )
                 
                 # ELSE functionality
+                st.markdown("**ELSE:**")
                 col1, col2 = st.columns([3, 1])
                 with col1:
-                    st.markdown("**ELSE:**")
+                    pass  # Space for ELSE content
                 with col2:
                     if st.button("🗑️ Remove ELSE", key=f"remove_else_{branch_idx}"):
                         branch['else_type'] = "Allocation"
@@ -1195,9 +1198,10 @@ with tab3:
                     )
                     
                     # Nested ELSE functionality
+                    st.markdown("**Nested ELSE:**")
                     col1, col2 = st.columns([3, 1])
                     with col1:
-                        st.markdown("**Nested ELSE:**")
+                        pass  # Space for nested ELSE content
                     with col2:
                         if st.button("🗑️ Remove Nested ELSE", key=f"remove_nested_else_{branch_idx}"):
                             if 'nested_else' in branch:
@@ -1407,7 +1411,12 @@ with tab3:
                                 condition_parts.append(signal_text)
                         
                         condition_text = " ".join(condition_parts)
-                        st.markdown(f"**IF** {condition_text} **THEN** {strategy['output_allocation']} **ELSE** {strategy['else_allocation']}")
+                        if 'branches' in strategy:
+                            # New branch structure
+                            st.markdown(f"**IF** {condition_text} **THEN** {strategy['branches'][0]['allocation']}")
+                        else:
+                            # Old structure
+                            st.markdown(f"**IF** {condition_text} **THEN** {strategy['output_allocation']} **ELSE** {strategy['else_allocation']}")
                 
                 with col2:
                     if st.button("🗑️", key=f"delete_strategy_{strategy_idx}"):
@@ -1714,8 +1723,21 @@ with tab4:
             # Calculate unique allocations used in strategies
             strategy_allocations = set()
             for strategy in st.session_state.strategies:
-                strategy_allocations.add(strategy['output_allocation'])
-                strategy_allocations.add(strategy['else_allocation'])
+                if 'branches' in strategy:
+                    # New branch structure
+                    for branch in strategy['branches']:
+                        strategy_allocations.add(branch['allocation'])
+                        if branch.get('else_allocation'):
+                            strategy_allocations.add(branch['else_allocation'])
+                        if branch.get('nested_else', {}).get('allocation'):
+                            strategy_allocations.add(branch['nested_else']['allocation'])
+                    if strategy.get('default_allocation'):
+                        strategy_allocations.add(strategy['default_allocation'])
+                else:
+                    # Old structure
+                    strategy_allocations.add(strategy['output_allocation'])
+                    if strategy.get('else_allocation'):
+                        strategy_allocations.add(strategy['else_allocation'])
             
             # Calculate total allocation only for allocations used in strategies
             total_allocation = 0
@@ -1777,9 +1799,52 @@ with tab4:
                                 condition_parts.append(signal_text)
                         
                         condition_text = " ".join(condition_parts)
-                        condition_display = f"<strong>IF</strong> {condition_text} <strong>THEN</strong> {strategy['output_allocation']} <strong>ELSE</strong> {strategy['else_allocation']}"
-                    
-                    st.markdown(f"""
+                        if 'branches' in strategy:
+                            # New branch structure - build complex condition
+                            condition_parts = []
+                            for i, branch in enumerate(strategy['branches']):
+                                branch_signals = []
+                                for signal_config in branch['signals']:
+                                    signal_text = signal_config['signal']
+                                    if signal_config['negated']:
+                                        signal_text = f"NOT {signal_text}"
+                                    if i > 0:
+                                        branch_signals.append(f"{signal_config['operator']} {signal_text}")
+                                    else:
+                                        branch_signals.append(signal_text)
+                                
+                                branch_condition = " ".join(branch_signals)
+                                if i == 0:
+                                    condition_parts.append(f"<strong>IF</strong> {branch_condition} <strong>THEN</strong> {branch['allocation']}")
+                                else:
+                                    condition_parts.append(f"<strong>ELSE IF</strong> {branch_condition} <strong>THEN</strong> {branch['allocation']}")
+                                
+                                # Add ELSE conditions if they exist
+                                if branch.get('else_type') == "Allocation" and branch.get('else_allocation'):
+                                    condition_parts.append(f"<strong>ELSE</strong> {branch['else_allocation']}")
+                                elif branch.get('else_type') == "Additional Signals" and branch.get('else_signals'):
+                                    else_signals = []
+                                    for else_signal_config in branch['else_signals']:
+                                        else_signal_text = else_signal_config['signal']
+                                        if else_signal_config['negated']:
+                                            else_signal_text = f"NOT {else_signal_text}"
+                                        if len(else_signals) > 0:
+                                            else_signals.append(f"{else_signal_config['operator']} {else_signal_text}")
+                                        else:
+                                            else_signals.append(else_signal_text)
+                                    else_condition = " ".join(else_signals)
+                                    condition_parts.append(f"<strong>ELSE IF</strong> {else_condition} <strong>THEN</strong> {branch['else_allocation']}")
+                            
+                            # Add default allocation
+                            if strategy.get('default_allocation'):
+                                condition_parts.append(f"<strong>ELSE</strong> {strategy['default_allocation']}")
+                            
+                            condition_display = " ".join(condition_parts)
+                        else:
+                            # Old structure
+                            condition_display = f"<strong>IF</strong> {condition_text} <strong>THEN</strong> {strategy['output_allocation']} <strong>ELSE</strong> {strategy['else_allocation']}"
+                        
+                        st.markdown(f"""
                     <div class="signal-card">
                         <div class="signal-header">
                             <h3 class="signal-name">{strategy['name']}</h3>
@@ -2094,8 +2159,13 @@ with tab4:
                                     strategy_signals = (strategy_signals | signal_values).astype(int)
                         
                         # Get allocation details for both then and else cases
-                        then_allocation = st.session_state.output_allocations[strategy['output_allocation']]
-                        else_allocation = st.session_state.output_allocations[strategy['else_allocation']]
+                        if 'branches' in strategy:
+                            # New branch structure - use first branch allocation
+                            then_allocation = st.session_state.output_allocations[strategy['branches'][0]['allocation']]
+                        else:
+                            # Old structure
+                            then_allocation = st.session_state.output_allocations[strategy['output_allocation']]
+                            else_allocation = st.session_state.output_allocations[strategy['else_allocation']]
                         
                         # Calculate equity curves for both allocations
                         then_equity = calculate_multi_ticker_equity_curve(strategy_signals, then_allocation, data)
