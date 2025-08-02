@@ -1265,26 +1265,54 @@ with tab3:
                 st.markdown('<div class="then-block">', unsafe_allow_html=True)
                 st.markdown("**THEN:**")
                 
-                # Add allocation button for THEN - sleeker interface
+                # Initialize session state for THEN dropdown visibility
+                if f'show_then_dropdown_{branch_idx}' not in st.session_state:
+                    st.session_state[f'show_then_dropdown_{branch_idx}'] = False
+                
+                # Add allocation button for THEN - dropdown with available allocations
                 if st.button("➕", key=f"add_then_{branch_idx}"):
-                    # Show options in a popup-like interface
-                    st.markdown("**Add to THEN:**")
-                    col_a, col_b, col_c = st.columns(3)
-                    with col_a:
-                        if st.button("💰 Add Allocation", key=f"add_then_allocation_{branch_idx}"):
-                            if 'allocations' not in branch:
-                                branch['allocations'] = []
-                            branch['allocations'].append({'allocation': '', 'weight': 100})
+                    st.session_state[f'show_then_dropdown_{branch_idx}'] = True
+                    st.rerun()
+                
+                # Show dropdown if flag is set
+                if st.session_state[f'show_then_dropdown_{branch_idx}']:
+                    st.markdown("**Add Allocation to THEN:**")
+                    # Debug: Show allocation count
+                    st.write(f"Debug: {len(st.session_state.output_allocations)} allocations available")
+                    if st.session_state.output_allocations:
+                        selected_allocation = st.selectbox(
+                            "Select Allocation:",
+                            [""] + list(st.session_state.output_allocations.keys()),
+                            key=f"then_allocation_select_{branch_idx}"
+                        )
+                        col_a, col_b = st.columns([1, 1])
+                        with col_a:
+                            if st.button("💰 Add Selected Allocation", key=f"add_then_selected_allocation_{branch_idx}"):
+                                if selected_allocation:
+                                    if 'allocations' not in branch:
+                                        branch['allocations'] = []
+                                    branch['allocations'].append({
+                                        'allocation': selected_allocation, 
+                                        'weight': 100
+                                    })
+                                    st.session_state[f'show_then_dropdown_{branch_idx}'] = False
+                                    st.success(f"✅ Allocation '{selected_allocation}' added to THEN!")
+                                    st.rerun()
+                                else:
+                                    st.warning("Please select an allocation.")
+                        with col_b:
+                            if st.button("❌ Cancel", key=f"cancel_then_allocation_{branch_idx}"):
+                                st.session_state[f'show_then_dropdown_{branch_idx}'] = False
+                                st.rerun()
+                    else:
+                        st.warning("No allocations available. Create allocations in the Allocation Blocks tab first.")
+                        if st.button("❌ Cancel", key=f"cancel_then_allocation_{branch_idx}"):
+                            st.session_state[f'show_then_dropdown_{branch_idx}'] = False
                             st.rerun()
-                    with col_b:
-                        if st.button("📊 Add Signal", key=f"add_then_signal_{branch_idx}"):
-                            st.info("Signal functionality in THEN coming soon!")
-                    with col_c:
-                        if st.button("📋 Add Block", key=f"add_then_block_{branch_idx}"):
-                            st.info("Add Block functionality coming soon!")
                 
                 # Display THEN allocations
                 if branch.get('allocations'):
+                    st.write(f"**Allocations in THEN ({len(branch['allocations'])}):**")
                     for alloc_idx, allocation_config in enumerate(branch['allocations']):
                         col1, col2, col3 = st.columns([2, 1, 1])
                         with col1:
@@ -1318,6 +1346,8 @@ with tab3:
                             st.warning(f"ℹ️ Branch total weight: {total_branch_weight}% ({(100-total_branch_weight):.1f}% unallocated)")
                     else:
                         st.success(f"✅ Branch total weight: {total_branch_weight}%")
+                else:
+                    st.write("**No allocations in THEN yet**")
                 
                 st.markdown('</div>', unsafe_allow_html=True)
                 
@@ -1325,26 +1355,54 @@ with tab3:
                 st.markdown('<div class="else-block">', unsafe_allow_html=True)
                 st.markdown("**ELSE:**")
                 
-                # Add allocation button for ELSE - sleeker interface
+                # Initialize session state for ELSE dropdown visibility
+                if f'show_else_dropdown_{branch_idx}' not in st.session_state:
+                    st.session_state[f'show_else_dropdown_{branch_idx}'] = False
+                
+                # Add allocation button for ELSE - dropdown with available allocations
                 if st.button("➕", key=f"add_else_{branch_idx}"):
-                    # Show options in a popup-like interface
-                    st.markdown("**Add to ELSE:**")
-                    col_a, col_b, col_c = st.columns(3)
-                    with col_a:
-                        if st.button("💰 Add Allocation", key=f"add_else_allocation_{branch_idx}"):
-                            if 'else_allocations' not in branch:
-                                branch['else_allocations'] = []
-                            branch['else_allocations'].append({'allocation': '', 'weight': 100})
+                    st.session_state[f'show_else_dropdown_{branch_idx}'] = True
+                    st.rerun()
+                
+                # Show dropdown if flag is set
+                if st.session_state[f'show_else_dropdown_{branch_idx}']:
+                    st.markdown("**Add Allocation to ELSE:**")
+                    # Debug: Show allocation count
+                    st.write(f"Debug: {len(st.session_state.output_allocations)} allocations available")
+                    if st.session_state.output_allocations:
+                        selected_allocation = st.selectbox(
+                            "Select Allocation:",
+                            [""] + list(st.session_state.output_allocations.keys()),
+                            key=f"else_allocation_select_{branch_idx}"
+                        )
+                        col_a, col_b = st.columns([1, 1])
+                        with col_a:
+                            if st.button("💰 Add Selected Allocation", key=f"add_else_selected_allocation_{branch_idx}"):
+                                if selected_allocation:
+                                    if 'else_allocations' not in branch:
+                                        branch['else_allocations'] = []
+                                    branch['else_allocations'].append({
+                                        'allocation': selected_allocation, 
+                                        'weight': 100
+                                    })
+                                    st.session_state[f'show_else_dropdown_{branch_idx}'] = False
+                                    st.success(f"✅ Allocation '{selected_allocation}' added to ELSE!")
+                                    st.rerun()
+                                else:
+                                    st.warning("Please select an allocation.")
+                        with col_b:
+                            if st.button("❌ Cancel", key=f"cancel_else_allocation_{branch_idx}"):
+                                st.session_state[f'show_else_dropdown_{branch_idx}'] = False
+                                st.rerun()
+                    else:
+                        st.warning("No allocations available. Create allocations in the Allocation Blocks tab first.")
+                        if st.button("❌ Cancel", key=f"cancel_else_allocation_{branch_idx}"):
+                            st.session_state[f'show_else_dropdown_{branch_idx}'] = False
                             st.rerun()
-                    with col_b:
-                        if st.button("📊 Add Signal", key=f"add_else_signal_{branch_idx}"):
-                            st.info("Signal functionality in ELSE coming soon!")
-                    with col_c:
-                        if st.button("📋 Add Block", key=f"add_else_block_{branch_idx}"):
-                            st.info("Add Block functionality coming soon!")
                 
                 # Display ELSE allocations
                 if branch.get('else_allocations'):
+                    st.write(f"**Allocations in ELSE ({len(branch['else_allocations'])}):**")
                     for else_alloc_idx, else_allocation_config in enumerate(branch['else_allocations']):
                         col1, col2, col3 = st.columns([2, 1, 1])
                         with col1:
@@ -1378,6 +1436,8 @@ with tab3:
                             st.warning(f"ℹ️ ELSE total weight: {total_else_weight}% ({(100-total_else_weight):.1f}% unallocated)")
                     else:
                         st.success(f"✅ ELSE total weight: {total_else_weight}%")
+                else:
+                    st.write("**No allocations in ELSE yet**")
                 
                 st.markdown('</div>', unsafe_allow_html=True)
                 
