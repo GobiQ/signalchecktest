@@ -1359,46 +1359,98 @@ with tab3:
                 if f'show_else_dropdown_{branch_idx}' not in st.session_state:
                     st.session_state[f'show_else_dropdown_{branch_idx}'] = False
                 
-                # Add allocation button for ELSE - dropdown with available allocations
+                # Add button for ELSE - dropdown with available signals and allocations
                 if st.button("➕", key=f"add_else_{branch_idx}"):
                     st.session_state[f'show_else_dropdown_{branch_idx}'] = True
                     st.rerun()
                 
                 # Show dropdown if flag is set
                 if st.session_state[f'show_else_dropdown_{branch_idx}']:
-                    st.markdown("**Add Allocation to ELSE:**")
-                    # Debug: Show allocation count
-                    st.write(f"Debug: {len(st.session_state.output_allocations)} allocations available")
-                    if st.session_state.output_allocations:
-                        selected_allocation = st.selectbox(
-                            "Select Allocation:",
-                            [""] + list(st.session_state.output_allocations.keys()),
-                            key=f"else_allocation_select_{branch_idx}"
+                    st.markdown("**Add to ELSE:**")
+                    
+                    # Show available signals and allocations count
+                    st.write(f"Debug: {len(st.session_state.signals)} signals, {len(st.session_state.output_allocations)} allocations available")
+                    
+                    # Create options list with both signals and allocations
+                    signal_options = [f"Signal: {s['name']}" for s in st.session_state.signals]
+                    allocation_options = [f"Allocation: {a}" for a in st.session_state.output_allocations.keys()]
+                    all_options = [""] + signal_options + allocation_options
+                    
+                    if all_options:
+                        selected_option = st.selectbox(
+                            "Select Signal or Allocation:",
+                            all_options,
+                            key=f"else_option_select_{branch_idx}"
                         )
                         col_a, col_b = st.columns([1, 1])
                         with col_a:
-                            if st.button("💰 Add Selected Allocation", key=f"add_else_selected_allocation_{branch_idx}"):
-                                if selected_allocation:
-                                    if 'else_allocations' not in branch:
-                                        branch['else_allocations'] = []
-                                    branch['else_allocations'].append({
-                                        'allocation': selected_allocation, 
-                                        'weight': 100
-                                    })
+                            if st.button("📊 Add Selected", key=f"add_else_selected_{branch_idx}"):
+                                if selected_option:
+                                    if selected_option.startswith("Signal: "):
+                                        # Add signal to ELSE
+                                        signal_name = selected_option.replace("Signal: ", "")
+                                        if 'else_signals' not in branch:
+                                            branch['else_signals'] = []
+                                        branch['else_signals'].append({
+                                            'signal': signal_name, 
+                                            'negated': False, 
+                                            'operator': 'AND'
+                                        })
+                                        st.success(f"✅ Signal '{signal_name}' added to ELSE!")
+                                    elif selected_option.startswith("Allocation: "):
+                                        # Add allocation to ELSE
+                                        allocation_name = selected_option.replace("Allocation: ", "")
+                                        if 'else_allocations' not in branch:
+                                            branch['else_allocations'] = []
+                                        branch['else_allocations'].append({
+                                            'allocation': allocation_name, 
+                                            'weight': 100
+                                        })
+                                        st.success(f"✅ Allocation '{allocation_name}' added to ELSE!")
+                                    
                                     st.session_state[f'show_else_dropdown_{branch_idx}'] = False
-                                    st.success(f"✅ Allocation '{selected_allocation}' added to ELSE!")
                                     st.rerun()
                                 else:
-                                    st.warning("Please select an allocation.")
+                                    st.warning("Please select a signal or allocation.")
                         with col_b:
-                            if st.button("❌ Cancel", key=f"cancel_else_allocation_{branch_idx}"):
+                            if st.button("❌ Cancel", key=f"cancel_else_{branch_idx}"):
                                 st.session_state[f'show_else_dropdown_{branch_idx}'] = False
                                 st.rerun()
                     else:
-                        st.warning("No allocations available. Create allocations in the Allocation Blocks tab first.")
-                        if st.button("❌ Cancel", key=f"cancel_else_allocation_{branch_idx}"):
+                        st.warning("No signals or allocations available. Create them in the Signal Blocks and Allocation Blocks tabs first.")
+                        if st.button("❌ Cancel", key=f"cancel_else_{branch_idx}"):
                             st.session_state[f'show_else_dropdown_{branch_idx}'] = False
                             st.rerun()
+                
+                # Display ELSE signals
+                if branch.get('else_signals'):
+                    st.write(f"**Signals in ELSE ({len(branch['else_signals'])}):**")
+                    for else_signal_idx, else_signal_config in enumerate(branch['else_signals']):
+                        col1, col2, col3 = st.columns([2, 1, 1])
+                        with col1:
+                            st.write(f"• {else_signal_config['signal']}")
+                        with col2:
+                            else_signal_config['negated'] = st.checkbox(
+                                "NOT",
+                                value=else_signal_config.get('negated', False),
+                                key=f"else_signal_negated_{branch_idx}_{else_signal_idx}"
+                            )
+                        with col3:
+                            if len(branch['else_signals']) > 1:
+                                if st.button("🗑️", key=f"remove_else_signal_{branch_idx}_{else_signal_idx}"):
+                                    branch['else_signals'].pop(else_signal_idx)
+                                    st.rerun()
+                            else:
+                                st.write("")
+                        
+                        # Show operator for multiple signals
+                        if len(branch['else_signals']) > 1 and else_signal_idx < len(branch['else_signals']) - 1:
+                            else_signal_config['operator'] = st.selectbox(
+                                "Operator",
+                                ["AND", "OR"],
+                                index=0 if else_signal_config.get('operator', 'AND') == 'AND' else 1,
+                                key=f"else_signal_operator_{branch_idx}_{else_signal_idx}"
+                            )
                 
                 # Display ELSE allocations
                 if branch.get('else_allocations'):
@@ -1436,8 +1488,10 @@ with tab3:
                             st.warning(f"ℹ️ ELSE total weight: {total_else_weight}% ({(100-total_else_weight):.1f}% unallocated)")
                     else:
                         st.success(f"✅ ELSE total weight: {total_else_weight}%")
-                else:
-                    st.write("**No allocations in ELSE yet**")
+                
+                # Show status if no signals or allocations
+                if not branch.get('else_signals') and not branch.get('else_allocations'):
+                    st.write("**No signals or allocations in ELSE yet**")
                 
                 st.markdown('</div>', unsafe_allow_html=True)
                 
