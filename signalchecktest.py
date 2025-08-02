@@ -1160,65 +1160,16 @@ with tab3:
     st.subheader("🎯 Build Your Strategy")
     
     # Add new strategy component
-    col1, col2 = st.columns([1, 9])
-    with col1:
-        component_type = st.selectbox(
-            "Add component:",
-            ["", "Ticker", "Weighted", "Filtered", "If/Else", "Switch", "Enter/Exit", "Mixed", "Load Reference Block"],
-            key="component_type",
-            label_visibility="collapsed"
-        )
-    with col2:
-        if st.button("➕", key="add_component"):
-            if component_type == "Ticker":
-                new_branch = {
-                    'signals': [],
-                    'allocations': [{'allocation': '', 'weight': 100}]
-                }
-                st.session_state.strategy_branches.append(new_branch)
-                st.rerun()
-            elif component_type == "Weighted":
-                new_branch = {
-                    'allocations': [{'allocation': '', 'weight': 100}]
-                }
-                st.session_state.strategy_branches.append(new_branch)
-                st.rerun()
-            elif component_type == "Filtered":
-                new_branch = {
-                    'signals': [],
-                    'allocations': [{'allocation': '', 'weight': 100}]
-                }
-                st.session_state.strategy_branches.append(new_branch)
-                st.rerun()
-            elif component_type == "If/Else":
-                new_branch = {
-                    'type': 'if_else',
-                    'signals': [],
-                    'allocations': [],
-                    'else_allocations': [],
-                    'collapsed': False
-                }
-                st.session_state.strategy_branches.append(new_branch)
-                st.rerun()
-            elif component_type == "Load Reference Block":
-                # Show reference block selector
-                reference_blocks = get_all_reference_blocks()
-                if reference_blocks:
-                    selected_block = st.selectbox("Select Reference Block:", reference_blocks)
-                    if st.button("📋 Load Selected Block"):
-                        loaded_block = load_reference_block(selected_block)
-                        if loaded_block:
-                            st.session_state.strategy_branches.append(loaded_block)
-                            st.success(f"✅ Reference block '{selected_block}' loaded!")
-                            st.rerun()
-                else:
-                    st.warning("No reference blocks available.")
-            elif st.session_state.copied_block:
-                st.session_state.strategy_branches.append(copy.deepcopy(st.session_state.copied_block))
-                st.success("Block pasted!")
-                st.rerun()
-            else:
-                st.warning("⚠️ No block in clipboard")
+    if st.button("➕", key="add_component"):
+        new_branch = {
+            'type': 'if_else',
+            'signals': [],
+            'allocations': [],
+            'else_allocations': [],
+            'collapsed': False
+        }
+        st.session_state.strategy_branches.append(new_branch)
+        st.rerun()
     
     # Display strategy branches
     if st.session_state.strategy_branches:
@@ -1238,7 +1189,7 @@ with tab3:
                     </div>
                 """, unsafe_allow_html=True)
                 
-                # Add three-dot menu
+                # Block operations menu inside the If/Else box
                 col_menu, col_spacer = st.columns([1, 9])
                 with col_menu:
                     block_menu_action = st.selectbox(
