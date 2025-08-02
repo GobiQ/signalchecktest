@@ -1259,6 +1259,7 @@ with tab3:
                                         'operator': 'AND'
                                     })
                                     st.session_state[f'show_if_dropdown_{branch_idx}'] = False
+                                    st.success(f"✅ Signal '{selected_signal}' added to IF!")
                                     st.rerun()
                                 else:
                                     st.warning("Please select a signal.")
@@ -1274,6 +1275,7 @@ with tab3:
                 
                 # Display IF signals
                 if branch.get('signals'):
+                    st.write(f"**Signals in IF ({len(branch['signals'])}):**")
                     for signal_idx, signal_config in enumerate(branch['signals']):
                         col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
                         
@@ -1301,6 +1303,8 @@ with tab3:
                             if st.button("🗑️", key=f"remove_if_branch_{branch_idx}_signal_{signal_idx}"):
                                 branch['signals'].pop(signal_idx)
                                 st.rerun()
+                else:
+                    st.write("**No signals in IF yet**")
                 
                 st.markdown('</div>', unsafe_allow_html=True)
                 
