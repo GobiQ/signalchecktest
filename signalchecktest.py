@@ -1988,7 +1988,6 @@ with tab3:
                 
                 # Branch condition signals
                 st.markdown('<div class="condition-block">', unsafe_allow_html=True)
-                st.markdown("**IF:**")
                 for signal_idx, signal_config in enumerate(branch['signals']):
                     col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
                     
@@ -2025,7 +2024,6 @@ with tab3:
                 
                 # Branch allocations with multiple allocations support
                 st.markdown('<div class="then-block">', unsafe_allow_html=True)
-                st.markdown("**THEN:**")
                 
                 # Initialize allocations list if not exists
                 if 'allocations' not in branch:
@@ -2075,7 +2073,6 @@ with tab3:
                 
                 # ELSE functionality
                 st.markdown('<div class="else-block">', unsafe_allow_html=True)
-                st.markdown("**ELSE:**")
                 col1, col2 = st.columns([3, 1])
                 with col1:
                     pass  # Space for ELSE content
@@ -2150,7 +2147,6 @@ with tab3:
                     # Display existing ELSE signals
                     for else_signal_idx, else_signal_config in enumerate(branch.get('else_signals', [])):
                         st.markdown('<div class="condition-block">', unsafe_allow_html=True)
-                        st.markdown(f"**IF:**")
                         col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
                         
                         with col1:
@@ -2235,7 +2231,6 @@ with tab3:
                             # Display existing nested ELSE signals
                             for nested_signal_idx, nested_signal_config in enumerate(else_config['nested_else'].get('signals', [])):
                                 st.markdown('<div class="condition-block">', unsafe_allow_html=True)
-                                st.markdown(f"**IF:**")
                                 col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
                                 
                                 with col1:
@@ -2298,7 +2293,6 @@ with tab3:
                                 # Display existing nested ELSE THEN signals
                                 for then_signal_idx, then_signal_config in enumerate(else_config['nested_else'].get('then_signals', [])):
                                     st.markdown('<div class="condition-block">', unsafe_allow_html=True)
-                                    st.markdown(f"**IF:**")
                                     col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
                                     
                                     with col1:
