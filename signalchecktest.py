@@ -1229,9 +1229,17 @@ with tab3:
                 st.markdown('<div class="condition-block">', unsafe_allow_html=True)
                 st.markdown("**IF:**")
                 
+                # Initialize session state for dropdown visibility
+                if f'show_if_dropdown_{branch_idx}' not in st.session_state:
+                    st.session_state[f'show_if_dropdown_{branch_idx}'] = False
+                
                 # Add signal button for IF - dropdown with available signals
                 if st.button("➕", key=f"add_if_{branch_idx}"):
-                    # Show dropdown with available signals
+                    st.session_state[f'show_if_dropdown_{branch_idx}'] = True
+                    st.rerun()
+                
+                # Show dropdown if flag is set
+                if st.session_state[f'show_if_dropdown_{branch_idx}']:
                     st.markdown("**Add Signal to IF:**")
                     if st.session_state.signals:
                         selected_signal = st.selectbox(
@@ -1239,20 +1247,30 @@ with tab3:
                             [""] + [s['name'] for s in st.session_state.signals],
                             key=f"if_signal_select_{branch_idx}"
                         )
-                        if st.button("📊 Add Selected Signal", key=f"add_if_selected_signal_{branch_idx}"):
-                            if selected_signal:
-                                if 'signals' not in branch:
-                                    branch['signals'] = []
-                                branch['signals'].append({
-                                    'signal': selected_signal, 
-                                    'negated': False, 
-                                    'operator': 'AND'
-                                })
+                        col_a, col_b = st.columns([1, 1])
+                        with col_a:
+                            if st.button("📊 Add Selected Signal", key=f"add_if_selected_signal_{branch_idx}"):
+                                if selected_signal:
+                                    if 'signals' not in branch:
+                                        branch['signals'] = []
+                                    branch['signals'].append({
+                                        'signal': selected_signal, 
+                                        'negated': False, 
+                                        'operator': 'AND'
+                                    })
+                                    st.session_state[f'show_if_dropdown_{branch_idx}'] = False
+                                    st.rerun()
+                                else:
+                                    st.warning("Please select a signal.")
+                        with col_b:
+                            if st.button("❌ Cancel", key=f"cancel_if_signal_{branch_idx}"):
+                                st.session_state[f'show_if_dropdown_{branch_idx}'] = False
                                 st.rerun()
-                            else:
-                                st.warning("Please select a signal.")
                     else:
                         st.warning("No signals available. Create signals in the Signal Blocks tab first.")
+                        if st.button("❌ Cancel", key=f"cancel_if_signal_{branch_idx}"):
+                            st.session_state[f'show_if_dropdown_{branch_idx}'] = False
+                            st.rerun()
                 
                 # Display IF signals
                 if branch.get('signals'):
