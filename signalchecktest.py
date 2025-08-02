@@ -206,12 +206,12 @@ st.markdown("""
     /* Main styling */
     .main {
         padding: 2rem;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: #475569;
         min-height: 100vh;
     }
     
     .stApp {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: #475569;
     }
     
     /* Header styling */
@@ -1943,9 +1943,7 @@ with tab3:
                 st.markdown("---")
                 
                 # Branch container with improved styling
-                # Calculate total branch weight
                 total_branch_weight = sum(alloc.get('weight', 0) for alloc in branch.get('allocations', [{'weight': 100}]))
-                
                 st.markdown(f"""
                 <div class="branch-container">
                     <div class="branch-header">
@@ -1954,122 +1952,132 @@ with tab3:
                     </div>
                 """, unsafe_allow_html=True)
                 
-                # Copy/Paste controls for this branch
-                st.markdown("### 🔄 Block Operations")
-                col_copy, col_paste, col_save, col_clear = st.columns([1, 1, 1, 1])
-                
-                with col_copy:
-                    if st.button("📋 Copy Branch", key=f"copy_branch_{branch_idx}", help="Copy this branch to clipboard"):
-                        copy_logic_block(branch, "branch")
-                        st.success("✅ Branch copied to clipboard!")
-                        st.rerun()
-                
-                with col_paste:
-                    if st.button("📋 Paste Block", key=f"paste_branch_{branch_idx}", help="Paste from clipboard"):
-                        if paste_logic_block(branch, 'signals'):
-                            st.success("✅ Block pasted!")
+                # Branch block controls
+                col1, col2, col3 = st.columns([2, 1, 1])
+                with col1:
+                    block_action = st.selectbox(
+                        "Block Actions:",
+                        ["", "Copy Block", "Paste Block", "Delete Block"],
+                        key=f"block_action_{branch_idx}"
+                    )
+                with col2:
+                    if st.button("🔄", key=f"execute_block_action_{branch_idx}"):
+                        if block_action == "Copy Block":
+                            copy_logic_block(branch, "branch")
+                            st.success("✅ Branch copied to clipboard!")
                             st.rerun()
-                        else:
-                            st.warning("⚠️ No block in clipboard")
+                        elif block_action == "Paste Block":
+                            if paste_logic_block(branch, 'signals'):
+                                st.success("✅ Block pasted!")
+                                st.rerun()
+                            else:
+                                st.warning("⚠️ No block in clipboard")
+                        elif block_action == "Delete Block":
+                            st.session_state.strategy_branches.pop(branch_idx)
+                            st.success("✅ Branch deleted!")
+                            st.rerun()
                 
-                with col_save:
-                    if st.button("💾 Save Block", key=f"save_branch_{branch_idx}", help="Save to block library"):
-                        block_name = f"Branch_{branch_idx + 1}_{datetime.now().strftime('%H%M')}"
-                        create_logic_block("branch", branch, block_name)
-                        st.success(f"✅ Saved as '{block_name}'")
-                        st.rerun()
+                # Main add button for the branch
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    add_option = st.selectbox(
+                        "Add to branch:",
+                        ["", "Allocation", "Signal", "Paste Block"],
+                        key=f"add_option_{branch_idx}"
+                    )
+                with col2:
+                    if st.button("➕", key=f"add_to_branch_{branch_idx}"):
+                        if add_option == "Allocation":
+                            if 'allocations' not in branch:
+                                branch['allocations'] = [{'allocation': '', 'weight': 100}]
+                            branch['allocations'].append({'allocation': '', 'weight': 0})
+                            st.rerun()
+                        elif add_option == "Signal":
+                            if 'signals' not in branch:
+                                branch['signals'] = []
+                            branch['signals'].append({'signal': '', 'negated': False, 'operator': 'AND'})
+                            st.rerun()
+                        elif add_option == "Paste Block":
+                            if paste_logic_block(branch, 'signals'):
+                                st.success("✅ Block pasted!")
+                                st.rerun()
+                            else:
+                                st.warning("⚠️ No block in clipboard")
                 
-                with col_clear:
-                    if st.button("🗑️ Clear Branch", key=f"clear_branch_{branch_idx}", help="Clear all signals"):
-                        branch['signals'] = []
-                        branch['allocations'] = [{'allocation': '', 'weight': 100}]
-                        st.success("✅ Branch cleared!")
-                        st.rerun()
-                
-                # Branch condition signals
-                st.markdown('<div class="condition-block">', unsafe_allow_html=True)
-                for signal_idx, signal_config in enumerate(branch['signals']):
-                    col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
-                    
-                    with col1:
-                        signal_config['signal'] = st.selectbox(
-                            f"Signal {signal_idx + 1}", 
-                            [""] + [s['name'] for s in st.session_state.signals], 
-                            key=f"branch_{branch_idx}_signal_{signal_idx}"
-                        )
-                    
-                    with col2:
-                        signal_config['negated'] = st.checkbox("NOT", key=f"branch_{branch_idx}_negated_{signal_idx}")
-                    
-                    with col3:
-                        if signal_idx > 0:  # Don't show operator for first signal
-                            signal_config['operator'] = st.selectbox(
-                                "Logic", 
-                                ["AND", "OR"], 
-                                key=f"branch_{branch_idx}_operator_{signal_idx}"
+                # Display existing signals
+                if branch.get('signals'):
+                    st.markdown('<div class="condition-block">', unsafe_allow_html=True)
+                    for signal_idx, signal_config in enumerate(branch['signals']):
+                        col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
+                        
+                        with col1:
+                            signal_config['signal'] = st.selectbox(
+                                f"Signal {signal_idx + 1}", 
+                                [""] + [s['name'] for s in st.session_state.signals], 
+                                key=f"branch_{branch_idx}_signal_{signal_idx}"
                             )
-                        else:
-                            st.write("")  # Empty space for alignment
+                        
+                        with col2:
+                            signal_config['negated'] = st.checkbox("NOT", key=f"branch_{branch_idx}_negated_{signal_idx}")
+                        
+                        with col3:
+                            if signal_idx > 0:  # Don't show operator for first signal
+                                signal_config['operator'] = st.selectbox(
+                                    "Logic", 
+                                    ["AND", "OR"], 
+                                    key=f"branch_{branch_idx}_operator_{signal_idx}"
+                                )
+                            else:
+                                st.write("")  # Empty space for alignment
+                        
+                        with col4:
+                            if st.button("🗑️", key=f"remove_branch_{branch_idx}_signal_{signal_idx}"):
+                                branch['signals'].pop(signal_idx)
+                                st.rerun()
                     
-                    with col4:
-                        if st.button("🗑️", key=f"remove_branch_{branch_idx}_signal_{signal_idx}"):
-                            branch['signals'].pop(signal_idx)
-                            st.rerun()
-                
-                # Add signal button for this branch
-                if st.button("➕ Add Signal", key=f"add_branch_{branch_idx}_signal"):
-                    branch['signals'].append({'signal': '', 'negated': False, 'operator': 'AND'})
-                    st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
-                
-                # Branch allocations with multiple allocations support
-                st.markdown('<div class="then-block">', unsafe_allow_html=True)
-                
-                # Initialize allocations list if not exists
-                if 'allocations' not in branch:
-                    branch['allocations'] = [{'allocation': '', 'weight': 100}]
+                    st.markdown('</div>', unsafe_allow_html=True)
                 
                 # Display existing allocations
-                for alloc_idx, allocation_config in enumerate(branch['allocations']):
-                    col1, col2, col3 = st.columns([2, 1, 1])
-                    with col1:
-                        allocation_config['allocation'] = st.selectbox(
-                            f"Allocation {alloc_idx + 1}", 
-                            list(st.session_state.output_allocations.keys()),
-                            key=f"branch_{branch_idx}_allocation_{alloc_idx}"
-                        )
-                    with col2:
-                        allocation_config['weight'] = st.number_input(
-                            "Weight %",
-                            min_value=0,
-                            max_value=100,
-                            value=allocation_config.get('weight', 100),
-                            key=f"branch_{branch_idx}_weight_{alloc_idx}"
-                        )
-                    with col3:
-                        if len(branch['allocations']) > 1:  # Don't allow removing the last allocation
-                            if st.button("🗑️", key=f"remove_branch_{branch_idx}_allocation_{alloc_idx}"):
-                                branch['allocations'].pop(alloc_idx)
-                                st.rerun()
+                if branch.get('allocations'):
+                    st.markdown('<div class="then-block">', unsafe_allow_html=True)
+                    
+                    for alloc_idx, allocation_config in enumerate(branch['allocations']):
+                        col1, col2, col3 = st.columns([2, 1, 1])
+                        with col1:
+                            allocation_config['allocation'] = st.selectbox(
+                                f"Allocation {alloc_idx + 1}", 
+                                list(st.session_state.output_allocations.keys()),
+                                key=f"branch_{branch_idx}_allocation_{alloc_idx}"
+                            )
+                        with col2:
+                            allocation_config['weight'] = st.number_input(
+                                "Weight %",
+                                min_value=0,
+                                max_value=100,
+                                value=allocation_config.get('weight', 100),
+                                key=f"branch_{branch_idx}_weight_{alloc_idx}"
+                            )
+                        with col3:
+                            if len(branch['allocations']) > 1:  # Don't allow removing the last allocation
+                                if st.button("🗑️", key=f"remove_branch_{branch_idx}_allocation_{alloc_idx}"):
+                                    branch['allocations'].pop(alloc_idx)
+                                    st.rerun()
+                            else:
+                                st.write("")  # Empty space for alignment
+                    
+                    # Show total weight for this branch
+                    total_branch_weight = sum(alloc.get('weight', 0) for alloc in branch['allocations'])
+                    if total_branch_weight != 100:
+                        if total_branch_weight > 100:
+                            st.error(f"⚠️ Branch total weight: {total_branch_weight}% (exceeds 100%)")
                         else:
-                            st.write("")  # Empty space for alignment
-                
-                # Add allocation button
-                if st.button("➕ Add Allocation", key=f"add_branch_{branch_idx}_allocation"):
-                    branch['allocations'].append({'allocation': '', 'weight': 0})
-                    st.rerun()
-                
-                # Show total weight for this branch
-                total_branch_weight = sum(alloc.get('weight', 0) for alloc in branch['allocations'])
-                if total_branch_weight != 100:
-                    if total_branch_weight > 100:
-                        st.error(f"⚠️ Branch total weight: {total_branch_weight}% (exceeds 100%)")
+                            st.warning(f"ℹ️ Branch total weight: {total_branch_weight}% ({(100-total_branch_weight):.1f}% unallocated)")
                     else:
-                        st.warning(f"ℹ️ Branch total weight: {total_branch_weight}% ({(100-total_branch_weight):.1f}% unallocated)")
-                else:
-                    st.success(f"✅ Branch total weight: {total_branch_weight}%")
+                        st.success(f"✅ Branch total weight: {total_branch_weight}%")
+                    
+                    st.markdown('</div>', unsafe_allow_html=True)
                 
-                st.markdown('</div>', unsafe_allow_html=True)
+
                 
                 # ELSE functionality
                 st.markdown('<div class="else-block">', unsafe_allow_html=True)
