@@ -911,9 +911,9 @@ with tab1:
                             indicator2_text = f"{signal['indicator2']}({signal['days2']})" if signal['days2'] else signal['indicator2']
                         st.caption(f"{signal['signal_ticker1']} {indicator1_text} {signal['operator']} {signal['signal_ticker2']} {indicator2_text}")
                     elif signal['type'] == "Static RSI":
-                        st.caption(f"{signal['signal_ticker']} RSI {signal['rsi_period']}-day {signal['comparison']} {signal['rsi_threshold']} → {signal['target_ticker']}")
+                        st.caption(f"{signal['signal_ticker']} RSI {signal['rsi_period']}-day {signal['comparison']} {signal['rsi_threshold']}")
                     else:
-                        st.caption(f"{signal['signal_ticker']} vs {signal['comparison_ticker']} RSI {signal['comparison_operator']} → {signal['target_ticker']}")
+                        st.caption(f"{signal['signal_ticker']} vs {signal['comparison_ticker']} RSI {signal['comparison_operator']}")
                 with col2:
                     if st.button("🗑️", key=f"delete_signal_{signal_idx}"):
                         st.session_state.signals.pop(signal_idx)
@@ -1102,13 +1102,10 @@ with tab3:
                         else:
                             st.write("")  # Empty space for alignment
                     
-                    with col4:
-                        if signal_idx > 0:  # Don't show remove button for first signal
+                        with col4:
                             if st.button("🗑️", key=f"remove_branch_{branch_idx}_signal_{signal_idx}"):
                                 branch['signals'].pop(signal_idx)
                                 st.rerun()
-                        else:
-                            st.write("")  # Empty space for alignment
                 
                 # Add signal button for this branch
                 if st.button("➕ Add Signal", key=f"add_branch_{branch_idx}_signal"):
@@ -1123,7 +1120,18 @@ with tab3:
                 )
                 
                 # ELSE functionality
-                st.markdown("**ELSE:**")
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.markdown("**ELSE:**")
+                with col2:
+                    if st.button("🗑️ Remove ELSE", key=f"remove_else_{branch_idx}"):
+                        branch['else_type'] = "Allocation"
+                        branch['else_allocation'] = ""
+                        if 'else_signals' in branch:
+                            del branch['else_signals']
+                        if 'nested_else' in branch:
+                            del branch['nested_else']
+                        st.rerun()
                 
                 # ELSE type selection
                 branch['else_type'] = st.selectbox(
@@ -1168,12 +1176,9 @@ with tab3:
                                 st.write("")  # Empty space for alignment
                         
                         with col4:
-                            if else_signal_idx > 0:  # Don't show remove button for first signal
-                                if st.button("🗑️", key=f"remove_branch_{branch_idx}_else_signal_{else_signal_idx}"):
-                                    branch['else_signals'].pop(else_signal_idx)
-                                    st.rerun()
-                            else:
-                                st.write("")  # Empty space for alignment
+                            if st.button("🗑️", key=f"remove_branch_{branch_idx}_else_signal_{else_signal_idx}"):
+                                branch['else_signals'].pop(else_signal_idx)
+                                st.rerun()
                     
                     # Add ELSE signal button
                     if st.button("➕ Add ELSE Signal", key=f"add_branch_{branch_idx}_else_signal"):
@@ -1190,7 +1195,14 @@ with tab3:
                     )
                     
                     # Nested ELSE functionality
-                    st.markdown("**Nested ELSE:**")
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        st.markdown("**Nested ELSE:**")
+                    with col2:
+                        if st.button("🗑️ Remove Nested ELSE", key=f"remove_nested_else_{branch_idx}"):
+                            if 'nested_else' in branch:
+                                del branch['nested_else']
+                            st.rerun()
                     
                     # Initialize nested ELSE if not exists
                     if 'nested_else' not in branch:
@@ -1239,12 +1251,9 @@ with tab3:
                                     st.write("")  # Empty space for alignment
                             
                             with col4:
-                                if nested_signal_idx > 0:  # Don't show remove button for first signal
-                                    if st.button("🗑️", key=f"remove_branch_{branch_idx}_nested_else_signal_{nested_signal_idx}"):
-                                        branch['nested_else']['signals'].pop(nested_signal_idx)
-                                        st.rerun()
-                                else:
-                                    st.write("")  # Empty space for alignment
+                                if st.button("🗑️", key=f"remove_branch_{branch_idx}_nested_else_signal_{nested_signal_idx}"):
+                                    branch['nested_else']['signals'].pop(nested_signal_idx)
+                                    st.rerun()
                         
                         # Add nested ELSE signal button
                         if st.button("➕ Add Nested ELSE Signal", key=f"add_branch_{branch_idx}_nested_else_signal"):
@@ -1412,6 +1421,17 @@ with tab4:
     # Only show results if backtest has been run
     if st.session_state.backtest_results:
         st.header("📈 Backtest Results")
+        
+        # Clear results button
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            if st.button("🗑️ Clear Results", key="clear_backtest_results"):
+                del st.session_state.backtest_results
+                st.rerun()
+        with col2:
+            if st.button("🔄 Re-run Backtest", key="rerun_backtest"):
+                del st.session_state.backtest_results
+                st.rerun()
         
         # Portfolio overview
         col1, col2 = st.columns(2)
