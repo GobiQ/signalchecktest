@@ -200,7 +200,7 @@ st.markdown("""
 <style>
     /* Global styling */
     * {
-        color: #333 !important;
+        color: #2c3e50 !important;
     }
     
     /* Main styling */
@@ -225,33 +225,49 @@ st.markdown("""
         text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
     }
     
+    /* Modern Card Styling */
+    .stExpander {
+        background: rgba(255, 255, 255, 0.95) !important;
+        border-radius: 16px !important;
+        border: 1px solid rgba(255, 255, 255, 0.2) !important;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.1) !important;
+        backdrop-filter: blur(10px) !important;
+    }
+    
+    .stExpander > div {
+        background: transparent !important;
+    }
+    
     /* Strategy Builder Styling */
     .strategy-builder {
-        background: white;
+        background: rgba(255, 255, 255, 0.95);
         border-radius: 16px;
         padding: 2rem;
         margin: 1rem 0;
         box-shadow: 0 8px 32px rgba(0,0,0,0.1);
         border: 1px solid rgba(255,255,255,0.2);
+        backdrop-filter: blur(10px);
     }
     
     .branch-container {
-        background: #f8f9fa;
-        border: 2px solid #e9ecef;
+        background: rgba(248, 249, 250, 0.9);
+        border: 2px solid rgba(233, 236, 239, 0.8);
         border-radius: 12px;
         padding: 1.5rem;
         margin: 1rem 0;
         position: relative;
         transition: all 0.3s ease;
+        backdrop-filter: blur(5px);
     }
     
     .branch-container:hover {
-        border-color: #007bff;
-        box-shadow: 0 4px 12px rgba(0,123,255,0.15);
+        border-color: #6366f1;
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
+        transform: translateY(-2px);
     }
     
     .branch-header {
-        background: linear-gradient(135deg, #007bff, #0056b3);
+        background: linear-gradient(135deg, #6366f1, #4f46e5);
         color: white !important;
         padding: 0.75rem 1rem;
         border-radius: 8px;
@@ -260,15 +276,17 @@ st.markdown("""
         display: flex;
         justify-content: space-between;
         align-items: center;
+        box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
     }
     
     .condition-block {
-        background: #e3f2fd;
-        border: 1px solid #bbdefb;
+        background: rgba(219, 234, 254, 0.8);
+        border: 1px solid rgba(147, 197, 253, 0.6);
         border-radius: 8px;
         padding: 1rem;
         margin: 0.5rem 0;
         position: relative;
+        backdrop-filter: blur(5px);
     }
     
     .condition-block::before {
@@ -276,23 +294,25 @@ st.markdown("""
         position: absolute;
         top: -8px;
         left: 12px;
-        background: #1976d2;
+        background: #3b82f6;
         color: white !important;
         padding: 2px 8px;
         border-radius: 4px;
         font-size: 0.7rem;
         font-weight: 600;
+        box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
     }
     
     .else-block {
-        background: #fff3e0;
-        border: 1px solid #ffcc80;
+        background: rgba(254, 243, 199, 0.8);
+        border: 1px solid rgba(251, 191, 36, 0.6);
         border-radius: 8px;
         padding: 1rem;
         margin: 0.5rem 0;
         position: relative;
         margin-left: 20px;
-        border-left: 3px solid #ff9800;
+        border-left: 3px solid #f59e0b;
+        backdrop-filter: blur(5px);
     }
     
     .else-block::before {
@@ -300,23 +320,25 @@ st.markdown("""
         position: absolute;
         top: -8px;
         left: 12px;
-        background: #ff9800;
+        background: #f59e0b;
         color: white !important;
         padding: 2px 8px;
         border-radius: 4px;
         font-size: 0.7rem;
         font-weight: 600;
+        box-shadow: 0 2px 4px rgba(245, 158, 11, 0.3);
     }
     
     .nested-else-block {
-        background: #f3e5f5;
-        border: 1px solid #ce93d8;
+        background: rgba(243, 232, 255, 0.8);
+        border: 1px solid rgba(196, 181, 253, 0.6);
         border-radius: 8px;
         padding: 1rem;
         margin: 0.5rem 0;
         position: relative;
         margin-left: 40px;
-        border-left: 3px solid #9c27b0;
+        border-left: 3px solid #8b5cf6;
+        backdrop-filter: blur(5px);
     }
     
     .nested-else-block::before {
@@ -324,23 +346,25 @@ st.markdown("""
         position: absolute;
         top: -8px;
         left: 12px;
-        background: #9c27b0;
+        background: #8b5cf6;
         color: white !important;
         padding: 2px 8px;
         border-radius: 4px;
         font-size: 0.7rem;
         font-weight: 600;
+        box-shadow: 0 2px 4px rgba(139, 92, 246, 0.3);
     }
     
     .then-block {
-        background: #e8f5e8;
-        border: 1px solid #a5d6a7;
+        background: rgba(220, 252, 231, 0.8);
+        border: 1px solid rgba(134, 239, 172, 0.6);
         border-radius: 8px;
         padding: 1rem;
         margin: 0.5rem 0;
         position: relative;
         margin-left: 20px;
-        border-left: 3px solid #4caf50;
+        border-left: 3px solid #10b981;
+        backdrop-filter: blur(5px);
     }
     
     .then-block::before {
@@ -348,22 +372,82 @@ st.markdown("""
         position: absolute;
         top: -8px;
         left: 12px;
-        background: #4caf50;
+        background: #10b981;
         color: white !important;
         padding: 2px 8px;
         border-radius: 4px;
         font-size: 0.7rem;
         font-weight: 600;
+        box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);
     }
     
     .allocation-display {
-        background: #f1f8e9;
-        border: 1px solid #8bc34a;
+        background: rgba(240, 253, 244, 0.9);
+        border: 1px solid rgba(134, 239, 172, 0.6);
         border-radius: 6px;
         padding: 0.75rem;
         margin: 0.5rem 0;
         font-weight: 500;
-        color: #2e7d32 !important;
+        color: #059669 !important;
+    }
+    
+    /* Modern Input Styling */
+    .stTextInput > div > div > input {
+        background: rgba(255, 255, 255, 0.9) !important;
+        border: 1px solid rgba(209, 213, 219, 0.8) !important;
+        border-radius: 8px !important;
+        color: #2c3e50 !important;
+    }
+    
+    .stSelectbox > div > div > div {
+        background: rgba(255, 255, 255, 0.9) !important;
+        border: 1px solid rgba(209, 213, 219, 0.8) !important;
+        border-radius: 8px !important;
+        color: #2c3e50 !important;
+    }
+    
+    .stNumberInput > div > div > input {
+        background: rgba(255, 255, 255, 0.9) !important;
+        border: 1px solid rgba(209, 213, 219, 0.8) !important;
+        border-radius: 8px !important;
+        color: #2c3e50 !important;
+    }
+    
+    /* Modern Button Styling */
+    .stButton > button {
+        background: linear-gradient(135deg, #6366f1, #4f46e5) !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 8px !important;
+        padding: 0.5rem 1rem !important;
+        font-weight: 600 !important;
+        transition: all 0.3s ease !important;
+        box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3) !important;
+    }
+    
+    .stButton > button:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4) !important;
+    }
+    
+    /* Metric Cards */
+    .stMetric {
+        background: rgba(255, 255, 255, 0.9) !important;
+        border-radius: 12px !important;
+        padding: 1rem !important;
+        border: 1px solid rgba(209, 213, 219, 0.8) !important;
+        backdrop-filter: blur(5px) !important;
+    }
+    
+    /* Progress Bars */
+    .stProgress > div > div > div {
+        background: rgba(99, 102, 241, 0.2) !important;
+        border-radius: 8px !important;
+    }
+    
+    .stProgress > div > div > div > div {
+        background: linear-gradient(135deg, #6366f1, #4f46e5) !important;
+        border-radius: 8px !important;
     }
     
     /* Signal card styling */
