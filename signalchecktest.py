@@ -992,6 +992,61 @@ with tab2:
 with tab3:
     st.header("🎯 Strategy Builder")
     
+    # Ensure pre-built signals are available
+    if not st.session_state.signals:
+        # Re-add pre-built signals if they're missing
+        prebuilt_signals = [
+            {
+                'name': 'If 10d RSI QQQ > 80',
+                'type': 'Custom Indicator',
+                'signal_ticker1': 'QQQ',
+                'signal_ticker2': 'QQQ',
+                'indicator1': 'RSI',
+                'indicator2': 'Static Value',
+                'operator': '>',
+                'days1': 10,
+                'days2': None,
+                'static_value': 80.0
+            },
+            {
+                'name': 'If 10d RSI QQQ < 30',
+                'type': 'Custom Indicator',
+                'signal_ticker1': 'QQQ',
+                'signal_ticker2': 'QQQ',
+                'indicator1': 'RSI',
+                'indicator2': 'Static Value',
+                'operator': '<',
+                'days1': 10,
+                'days2': None,
+                'static_value': 30.0
+            },
+            {
+                'name': 'If Current Price SPY > 200d SMA SPY',
+                'type': 'Custom Indicator',
+                'signal_ticker1': 'SPY',
+                'signal_ticker2': 'SPY',
+                'indicator1': 'Current Price',
+                'indicator2': 'SMA',
+                'operator': '>',
+                'days1': None,
+                'days2': 200,
+                'static_value': None
+            },
+            {
+                'name': 'If Current Price SPY > 20d SMA SPY',
+                'type': 'Custom Indicator',
+                'signal_ticker1': 'SPY',
+                'signal_ticker2': 'SPY',
+                'indicator1': 'Current Price',
+                'indicator2': 'SMA',
+                'operator': '>',
+                'days1': None,
+                'days2': 20,
+                'static_value': None
+            }
+        ]
+        st.session_state.signals = prebuilt_signals
+    
     # Reference Blocks Management
     with st.expander("📚 Reference Blocks Manager", expanded=False):
         col1, col2 = st.columns(2)
@@ -1137,6 +1192,8 @@ with tab3:
                 # Show dropdown if flag is set
                 if st.session_state[f'show_if_dropdown_{branch_idx}']:
                     st.markdown("**Add Signal to IF:**")
+                    # Debug: Show signal count
+                    st.write(f"Debug: {len(st.session_state.signals)} signals available")
                     if st.session_state.signals:
                         selected_signal = st.selectbox(
                             "Select Signal:",
