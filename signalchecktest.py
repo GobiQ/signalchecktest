@@ -1072,7 +1072,7 @@ with tab3:
             
             # Initialize strategy branches if not exists
             if 'strategy_branches' not in st.session_state:
-                st.session_state.strategy_branches = [{'signals': [], 'allocation': '', 'else_type': 'allocation', 'else_allocation': '', 'else_signals': []}]
+                st.session_state.strategy_branches = [{'signals': [], 'allocation': '', 'else_type': 'allocation', 'else_allocation': '', 'else_signals': [], 'nested_else': {'type': 'allocation', 'allocation': '', 'signals': []}}]
             
             # Display strategy branches
             for branch_idx, branch in enumerate(st.session_state.strategy_branches):
@@ -1140,7 +1140,7 @@ with tab3:
                         key=f"branch_{branch_idx}_else_allocation"
                     )
                 else:
-                    # Additional signals
+                    # Additional signals with nested ELSE support
                     st.markdown("**Additional Signals:**")
                     
                     # Display existing ELSE signals
@@ -1188,6 +1188,77 @@ with tab3:
                         list(st.session_state.output_allocations.keys()),
                         key=f"branch_{branch_idx}_else_signals_allocation"
                     )
+                    
+                    # Nested ELSE functionality
+                    st.markdown("**Nested ELSE:**")
+                    
+                    # Initialize nested ELSE if not exists
+                    if 'nested_else' not in branch:
+                        branch['nested_else'] = {'type': 'allocation', 'allocation': '', 'signals': []}
+                    
+                    # Nested ELSE type selection
+                    branch['nested_else']['type'] = st.selectbox(
+                        "Nested ELSE Type",
+                        ["Allocation", "Additional Signals"],
+                        key=f"branch_{branch_idx}_nested_else_type"
+                    )
+                    
+                    if branch['nested_else']['type'] == "Allocation":
+                        # Simple nested ELSE allocation
+                        branch['nested_else']['allocation'] = st.selectbox(
+                            "Nested ELSE Allocate To",
+                            list(st.session_state.output_allocations.keys()),
+                            key=f"branch_{branch_idx}_nested_else_allocation"
+                        )
+                    else:
+                        # Nested ELSE signals
+                        st.markdown("**Nested ELSE Signals:**")
+                        
+                        # Display existing nested ELSE signals
+                        for nested_signal_idx, nested_signal_config in enumerate(branch['nested_else'].get('signals', [])):
+                            col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
+                            
+                            with col1:
+                                nested_signal_config['signal'] = st.selectbox(
+                                    f"Nested ELSE Signal {nested_signal_idx + 1}", 
+                                    [""] + [s['name'] for s in st.session_state.signals], 
+                                    key=f"branch_{branch_idx}_nested_else_signal_{nested_signal_idx}"
+                                )
+                            
+                            with col2:
+                                nested_signal_config['negated'] = st.checkbox("NOT", key=f"branch_{branch_idx}_nested_else_negated_{nested_signal_idx}")
+                            
+                            with col3:
+                                if nested_signal_idx > 0:  # Don't show operator for first signal
+                                    nested_signal_config['operator'] = st.selectbox(
+                                        "Logic", 
+                                        ["AND", "OR"], 
+                                        key=f"branch_{branch_idx}_nested_else_operator_{nested_signal_idx}"
+                                    )
+                                else:
+                                    st.write("")  # Empty space for alignment
+                            
+                            with col4:
+                                if nested_signal_idx > 0:  # Don't show remove button for first signal
+                                    if st.button("🗑️", key=f"remove_branch_{branch_idx}_nested_else_signal_{nested_signal_idx}"):
+                                        branch['nested_else']['signals'].pop(nested_signal_idx)
+                                        st.rerun()
+                                else:
+                                    st.write("")  # Empty space for alignment
+                        
+                        # Add nested ELSE signal button
+                        if st.button("➕ Add Nested ELSE Signal", key=f"add_branch_{branch_idx}_nested_else_signal"):
+                            if 'signals' not in branch['nested_else']:
+                                branch['nested_else']['signals'] = []
+                            branch['nested_else']['signals'].append({'signal': '', 'negated': False, 'operator': 'AND'})
+                            st.rerun()
+                        
+                        # Nested ELSE allocation (for when nested ELSE signals are true)
+                        branch['nested_else']['allocation'] = st.selectbox(
+                            "Nested ELSE Signals True → Allocate To",
+                            list(st.session_state.output_allocations.keys()),
+                            key=f"branch_{branch_idx}_nested_else_signals_allocation"
+                        )
                 
                 # Remove branch button (except for first branch)
                 if branch_idx > 0:
@@ -1199,7 +1270,7 @@ with tab3:
             
             # Add new branch button
             if st.button("➕ Add Branch", key="add_branch"):
-                st.session_state.strategy_branches.append({'signals': [], 'allocation': '', 'else_type': 'allocation', 'else_allocation': '', 'else_signals': []})
+                st.session_state.strategy_branches.append({'signals': [], 'allocation': '', 'else_type': 'allocation', 'else_allocation': '', 'else_signals': [], 'nested_else': {'type': 'allocation', 'allocation': '', 'signals': []}})
                 st.rerun()
             
             # Default allocation (if no branches match)
@@ -1227,6 +1298,18 @@ with tab3:
                             valid_else_signals = [s for s in branch.get('else_signals', []) if s['signal']]
                             if valid_else_signals:
                                 branch_data['else_signals'] = valid_else_signals.copy()
+                        
+                        # Add nested ELSE data
+                        branch_data['nested_else'] = {
+                            'type': branch['nested_else']['type'],
+                            'allocation': branch['nested_else']['allocation']
+                        }
+                        
+                        # Add nested ELSE signals if they exist
+                        if branch['nested_else']['type'] == "Additional Signals":
+                            valid_nested_else_signals = [s for s in branch['nested_else'].get('signals', []) if s['signal']]
+                            if valid_nested_else_signals:
+                                branch_data['nested_else']['signals'] = valid_nested_else_signals.copy()
                         
                         valid_branches.append(branch_data)
                 
@@ -1285,6 +1368,21 @@ with tab3:
                                 
                                 else_condition_text = " ".join(else_condition_parts)
                                 condition_texts.append(f"**ELSE IF** {else_condition_text} **THEN** {branch['else_allocation']}")
+                            
+                            # Add nested ELSE logic
+                            if branch.get('nested_else', {}).get('type') == "Allocation":
+                                condition_texts.append(f"**ELSE** {branch['nested_else']['allocation']}")
+                            elif branch.get('nested_else', {}).get('type') == "Additional Signals" and branch.get('nested_else', {}).get('signals'):
+                                nested_else_condition_parts = []
+                                for nested_signal_idx, nested_signal_config in enumerate(branch['nested_else']['signals']):
+                                    nested_signal_text = f"NOT {nested_signal_config['signal']}" if nested_signal_config['negated'] else nested_signal_config['signal']
+                                    if nested_signal_idx > 0:
+                                        nested_else_condition_parts.append(f"{nested_signal_config['operator']} {nested_signal_text}")
+                                    else:
+                                        nested_else_condition_parts.append(nested_signal_text)
+                                
+                                nested_else_condition_text = " ".join(nested_else_condition_parts)
+                                condition_texts.append(f"**ELSE IF** {nested_else_condition_text} **THEN** {branch['nested_else']['allocation']}")
                         
                         # Add default allocation
                         condition_texts.append(f"**ELSE** {strategy['default_allocation']}")
@@ -1766,6 +1864,7 @@ with tab4:
                         # Initialize strategy signals for each branch
                         branch_signals = []
                         else_signals = []
+                        nested_else_signals = []
                         for branch in strategy['branches']:
                             # Main branch signals
                             branch_signal = None
@@ -1811,10 +1910,35 @@ with tab4:
                                 else_signals.append(else_signal)
                             else:
                                 else_signals.append(None)
+                            
+                            # Nested ELSE signals (if they exist)
+                            if branch.get('nested_else', {}).get('type') == "Additional Signals" and branch.get('nested_else', {}).get('signals'):
+                                nested_else_signal = None
+                                
+                                for nested_signal_config in branch['nested_else']['signals']:
+                                    nested_signal_values = signal_results[nested_signal_config['signal']]
+                                    
+                                    # Apply negation if needed
+                                    if nested_signal_config['negated']:
+                                        nested_signal_values = (~nested_signal_values.astype(bool)).astype(int)
+                                    
+                                    # Combine with previous nested ELSE signals
+                                    if nested_else_signal is None:
+                                        nested_else_signal = nested_signal_values
+                                    else:
+                                        if nested_signal_config['operator'] == "AND":
+                                            nested_else_signal = (nested_else_signal & nested_signal_values).astype(int)
+                                        else:  # OR
+                                            nested_else_signal = (nested_else_signal | nested_signal_values).astype(int)
+                                
+                                nested_else_signals.append(nested_else_signal)
+                            else:
+                                nested_else_signals.append(None)
                         
                         # Calculate equity curves for each branch and ELSE conditions
                         branch_equities = []
                         else_equities = []
+                        nested_else_equities = []
                         for branch_idx, branch in enumerate(strategy['branches']):
                             # Main branch equity
                             allocation = st.session_state.output_allocations[branch['allocation']]
@@ -1834,6 +1958,20 @@ with tab4:
                                     else_equities.append(else_equity)
                                 else:
                                     else_equities.append(None)
+                            
+                            # Nested ELSE equity (if nested ELSE signals exist)
+                            if nested_else_signals[branch_idx] is not None:
+                                nested_else_allocation = st.session_state.output_allocations[branch['nested_else']['allocation']]
+                                nested_else_equity = calculate_multi_ticker_equity_curve(nested_else_signals[branch_idx], nested_else_allocation, data)
+                                nested_else_equities.append(nested_else_equity)
+                            else:
+                                # If nested ELSE type is "Allocation", use simple allocation
+                                if branch.get('nested_else', {}).get('type') == "Allocation":
+                                    nested_else_allocation = st.session_state.output_allocations[branch['nested_else']['allocation']]
+                                    nested_else_equity = calculate_multi_ticker_equity_curve(pd.Series(1, index=data[benchmark_ticker].index), nested_else_allocation, data)
+                                    nested_else_equities.append(nested_else_equity)
+                                else:
+                                    nested_else_equities.append(None)
                         
                         # Calculate default allocation equity curve
                         default_allocation = st.session_state.output_allocations[strategy['default_allocation']]
@@ -1871,6 +2009,28 @@ with tab4:
                                 
                                 else_returns = else_equities[branch_idx].pct_change().fillna(0)
                                 combined_returns = combined_returns + (else_returns * else_active)
+                            
+                            # Handle nested ELSE logic
+                            if branch.get('nested_else', {}).get('type') == "Allocation":
+                                # Simple nested ELSE allocation (when main branch and ELSE are false)
+                                nested_else_active = (~branch_signal.astype(bool)).astype(int) & (used_signals == 0)
+                                if else_signals[branch_idx] is not None:
+                                    nested_else_active = nested_else_active & (~else_signals[branch_idx].astype(bool)).astype(int)
+                                used_signals = used_signals | nested_else_active
+                                
+                                nested_else_returns = nested_else_equities[branch_idx].pct_change().fillna(0)
+                                combined_returns = combined_returns + (nested_else_returns * nested_else_active)
+                                
+                            elif branch.get('nested_else', {}).get('type') == "Additional Signals" and nested_else_signals[branch_idx] is not None:
+                                # Nested ELSE signals (when main branch and ELSE are false but nested ELSE signals are true)
+                                nested_else_signal = nested_else_signals[branch_idx]
+                                nested_else_active = nested_else_signal & (~branch_signal.astype(bool)).astype(int) & (used_signals == 0)
+                                if else_signals[branch_idx] is not None:
+                                    nested_else_active = nested_else_active & (~else_signals[branch_idx].astype(bool)).astype(int)
+                                used_signals = used_signals | nested_else_active
+                                
+                                nested_else_returns = nested_else_equities[branch_idx].pct_change().fillna(0)
+                                combined_returns = combined_returns + (nested_else_returns * nested_else_active)
                         
                         # Add default allocation returns for periods when no branch was active
                         default_returns = default_equity.pct_change().fillna(0)
