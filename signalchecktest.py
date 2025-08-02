@@ -1278,27 +1278,26 @@ with tab3:
                 st.markdown('<div class="condition-block">', unsafe_allow_html=True)
                 st.markdown("**IF:**")
                 
-                # Add signal button for IF
-                col1, col2 = st.columns([1, 9])
-                with col1:
-                    if_add_option = st.selectbox(
-                        "",
-                        ["", "Add Signal", "Add Allocation", "Add Block"],
-                        key=f"if_add_{branch_idx}",
-                        label_visibility="collapsed"
-                    )
-                with col2:
-                    if st.button("➕", key=f"add_if_{branch_idx}"):
-                        if if_add_option == "Add Signal":
+                # Add signal button for IF - sleeker interface
+                if st.button("➕", key=f"add_if_{branch_idx}"):
+                    # Show options in a popup-like interface
+                    st.markdown("**Add to IF:**")
+                    col_a, col_b, col_c = st.columns(3)
+                    with col_a:
+                        if st.button("📊 Add Signal", key=f"add_if_signal_{branch_idx}"):
                             if 'signals' not in branch:
                                 branch['signals'] = []
                             branch['signals'].append({'signal': '', 'negated': False, 'operator': 'AND'})
                             st.rerun()
-                        elif if_add_option == "Add Allocation":
+                    with col_b:
+                        if st.button("💰 Add Allocation", key=f"add_if_allocation_{branch_idx}"):
                             if 'allocations' not in branch:
                                 branch['allocations'] = []
                             branch['allocations'].append({'allocation': '', 'weight': 100})
                             st.rerun()
+                    with col_c:
+                        if st.button("📋 Add Block", key=f"add_if_block_{branch_idx}"):
+                            st.info("Add Block functionality coming soon!")
                 
                 # Display IF signals
                 if branch.get('signals'):
@@ -1336,22 +1335,23 @@ with tab3:
                 st.markdown('<div class="then-block">', unsafe_allow_html=True)
                 st.markdown("**THEN:**")
                 
-                # Add allocation button for THEN
-                col1, col2 = st.columns([1, 9])
-                with col1:
-                    then_add_option = st.selectbox(
-                        "",
-                        ["", "Add Signal", "Add Allocation", "Add Block"],
-                        key=f"then_add_{branch_idx}",
-                        label_visibility="collapsed"
-                    )
-                with col2:
-                    if st.button("➕", key=f"add_then_{branch_idx}"):
-                        if then_add_option == "Add Allocation":
+                # Add allocation button for THEN - sleeker interface
+                if st.button("➕", key=f"add_then_{branch_idx}"):
+                    # Show options in a popup-like interface
+                    st.markdown("**Add to THEN:**")
+                    col_a, col_b, col_c = st.columns(3)
+                    with col_a:
+                        if st.button("💰 Add Allocation", key=f"add_then_allocation_{branch_idx}"):
                             if 'allocations' not in branch:
                                 branch['allocations'] = []
                             branch['allocations'].append({'allocation': '', 'weight': 100})
                             st.rerun()
+                    with col_b:
+                        if st.button("📊 Add Signal", key=f"add_then_signal_{branch_idx}"):
+                            st.info("Signal functionality in THEN coming soon!")
+                    with col_c:
+                        if st.button("📋 Add Block", key=f"add_then_block_{branch_idx}"):
+                            st.info("Add Block functionality coming soon!")
                 
                 # Display THEN allocations
                 if branch.get('allocations'):
@@ -1395,22 +1395,23 @@ with tab3:
                 st.markdown('<div class="else-block">', unsafe_allow_html=True)
                 st.markdown("**ELSE:**")
                 
-                # Add allocation button for ELSE
-                col1, col2 = st.columns([1, 9])
-                with col1:
-                    else_add_option = st.selectbox(
-                        "",
-                        ["", "Add Signal", "Add Allocation", "Add Block"],
-                        key=f"else_add_{branch_idx}",
-                        label_visibility="collapsed"
-                    )
-                with col2:
-                    if st.button("➕", key=f"add_else_{branch_idx}"):
-                        if else_add_option == "Add Allocation":
+                # Add allocation button for ELSE - sleeker interface
+                if st.button("➕", key=f"add_else_{branch_idx}"):
+                    # Show options in a popup-like interface
+                    st.markdown("**Add to ELSE:**")
+                    col_a, col_b, col_c = st.columns(3)
+                    with col_a:
+                        if st.button("💰 Add Allocation", key=f"add_else_allocation_{branch_idx}"):
                             if 'else_allocations' not in branch:
                                 branch['else_allocations'] = []
                             branch['else_allocations'].append({'allocation': '', 'weight': 100})
                             st.rerun()
+                    with col_b:
+                        if st.button("📊 Add Signal", key=f"add_else_signal_{branch_idx}"):
+                            st.info("Signal functionality in ELSE coming soon!")
+                    with col_c:
+                        if st.button("📋 Add Block", key=f"add_else_block_{branch_idx}"):
+                            st.info("Add Block functionality coming soon!")
                 
                 # Display ELSE allocations
                 if branch.get('else_allocations'):
@@ -1449,6 +1450,11 @@ with tab3:
                         st.success(f"✅ ELSE total weight: {total_else_weight}%")
                 
                 st.markdown('</div>', unsafe_allow_html=True)
+                
+                # Delete entire If/Else block
+                if st.button("🗑️ Delete If/Else Block", key=f"delete_if_else_{branch_idx}"):
+                    st.session_state.strategy_branches.pop(branch_idx)
+                    st.rerun()
                 
                 st.markdown("</div>", unsafe_allow_html=True)
             
@@ -1495,12 +1501,26 @@ with tab3:
                             else:
                                 st.error("Please provide a name.")
                 
-                # Simple add button for the branch
+                # Simple add button for the branch - sleeker interface
                 if st.button("➕", key=f"add_to_branch_{branch_idx}"):
-                    if 'signals' not in branch:
-                        branch['signals'] = []
-                    branch['signals'].append({'signal': '', 'negated': False, 'operator': 'AND'})
-                    st.rerun()
+                    # Show options in a popup-like interface
+                    st.markdown("**Add to Branch:**")
+                    col_a, col_b, col_c = st.columns(3)
+                    with col_a:
+                        if st.button("📊 Add Signal", key=f"add_branch_signal_{branch_idx}"):
+                            if 'signals' not in branch:
+                                branch['signals'] = []
+                            branch['signals'].append({'signal': '', 'negated': False, 'operator': 'AND'})
+                            st.rerun()
+                    with col_b:
+                        if st.button("💰 Add Allocation", key=f"add_branch_allocation_{branch_idx}"):
+                            if 'allocations' not in branch:
+                                branch['allocations'] = []
+                            branch['allocations'].append({'allocation': '', 'weight': 100})
+                            st.rerun()
+                    with col_c:
+                        if st.button("📋 Add Block", key=f"add_branch_block_{branch_idx}"):
+                            st.info("Add Block functionality coming soon!")
                 
                 # Display existing signals
                 if branch.get('signals'):
@@ -1575,13 +1595,10 @@ with tab3:
                     
                     st.markdown('</div>', unsafe_allow_html=True)
                 
-                # Remove branch button (except for first branch)
-                if branch_idx > 0:
-                    if st.button("🗑️ Remove Branch", key=f"remove_branch_{branch_idx}"):
-                        st.session_state.strategy_branches.pop(branch_idx)
-                        st.rerun()
-                
-                st.markdown("</div>", unsafe_allow_html=True)
+                # Delete entire branch
+                if st.button("🗑️ Delete Branch", key=f"delete_branch_{branch_idx}"):
+                    st.session_state.strategy_branches.pop(branch_idx)
+                    st.rerun()
     
     st.markdown('</div>', unsafe_allow_html=True)
 
