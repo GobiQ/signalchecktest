@@ -1230,12 +1230,17 @@ with tab3:
                 if branch.get('signals'):
                     st.write(f"**Signals in IF ({len(branch['signals'])}):**")
                     for signal_idx, signal_config in enumerate(branch['signals']):
+                        # Display each signal in its own row
+                        st.markdown(f"**Signal {signal_idx + 1}:**")
+                        
                         col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
                         
                         with col1:
                             signal_config['signal'] = st.selectbox(
                                 f"Signal {signal_idx + 1}", 
-                                [""] + [s['name'] for s in st.session_state.signals], 
+                                [""] + [s['name'] for s in st.session_state.signals],
+                                index=0 if not signal_config.get('signal') else 
+                                [s['name'] for s in st.session_state.signals].index(signal_config['signal']) + 1,
                                 key=f"if_branch_{branch_idx}_signal_{signal_idx}"
                             )
                         
@@ -1243,19 +1248,26 @@ with tab3:
                             signal_config['negated'] = st.checkbox("NOT", key=f"if_branch_{branch_idx}_negated_{signal_idx}")
                         
                         with col3:
-                            if signal_idx > 0:  # Don't show operator for first signal
+                            if len(branch['signals']) > 1 and signal_idx < len(branch['signals']) - 1:
                                 signal_config['operator'] = st.selectbox(
-                                    "Logic", 
-                                    ["AND", "OR"], 
+                                    "Operator",
+                                    ["AND", "OR"],
+                                    index=0 if signal_config.get('operator', 'AND') == 'AND' else 1,
                                     key=f"if_branch_{branch_idx}_operator_{signal_idx}"
                                 )
                             else:
                                 st.write("")  # Empty space for alignment
                         
                         with col4:
-                            if st.button("🗑️", key=f"remove_if_branch_{branch_idx}_signal_{signal_idx}"):
-                                branch['signals'].pop(signal_idx)
-                                st.rerun()
+                            if len(branch['signals']) > 1:
+                                if st.button("🗑️", key=f"remove_if_branch_{branch_idx}_signal_{signal_idx}"):
+                                    branch['signals'].pop(signal_idx)
+                                    st.rerun()
+                            else:
+                                st.write("")  # Empty space for alignment
+                        
+                        # Add some spacing between signals
+                        st.markdown("<br>", unsafe_allow_html=True)
                 else:
                     st.write("**No signals in IF yet**")
                 
@@ -1426,7 +1438,10 @@ with tab3:
                 if branch.get('else_signals'):
                     st.write(f"**Signals in ELSE ({len(branch['else_signals'])}):**")
                     for else_signal_idx, else_signal_config in enumerate(branch['else_signals']):
-                        col1, col2, col3 = st.columns([2, 1, 1])
+                        # Display each signal in its own row
+                        st.markdown(f"**ELSE Signal {else_signal_idx + 1}:**")
+                        
+                        col1, col2, col3 = st.columns([3, 1, 1])
                         with col1:
                             st.write(f"• {else_signal_config['signal']}")
                         with col2:
@@ -1451,6 +1466,9 @@ with tab3:
                                 index=0 if else_signal_config.get('operator', 'AND') == 'AND' else 1,
                                 key=f"else_signal_operator_{branch_idx}_{else_signal_idx}"
                             )
+                        
+                        # Add some spacing between signals
+                        st.markdown("<br>", unsafe_allow_html=True)
                 
                 # Display ELSE allocations
                 if branch.get('else_allocations'):
