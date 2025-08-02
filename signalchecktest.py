@@ -1121,6 +1121,96 @@ tab1, tab2, tab3, tab4 = st.tabs(["📊 Reference Signal Blocks", "💰 Allocati
 with tab1:
     st.header("📊 Reference Signal Blocks")
     
+    # Pre-built reference signal blocks
+    st.subheader("🚀 Quick Start: Pre-built Signals")
+    st.markdown("Click any signal below to add it instantly:")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("📊 QQQ RSI > 80 (Overbought)", key="prebuilt_qqq_rsi_overbought"):
+            if 'signals' not in st.session_state:
+                st.session_state.signals = []
+            
+            signal = {
+                'name': 'QQQ RSI Overbought',
+                'type': 'Custom Indicator',
+                'signal_ticker1': 'QQQ',
+                'indicator1': 'Static RSI',
+                'operator': 'greater_than',
+                'days1': 10,
+                'signal_ticker2': 'QQQ',
+                'indicator2': 'Static Value',
+                'days2': None,
+                'static_value': 80.0
+            }
+            st.session_state.signals.append(signal)
+            st.success("✅ QQQ RSI Overbought signal added!")
+            st.rerun()
+        
+        if st.button("📊 QQQ RSI < 30 (Oversold)", key="prebuilt_qqq_rsi_oversold"):
+            if 'signals' not in st.session_state:
+                st.session_state.signals = []
+            
+            signal = {
+                'name': 'QQQ RSI Oversold',
+                'type': 'Custom Indicator',
+                'signal_ticker1': 'QQQ',
+                'indicator1': 'Static RSI',
+                'operator': 'less_than',
+                'days1': 10,
+                'signal_ticker2': 'QQQ',
+                'indicator2': 'Static Value',
+                'days2': None,
+                'static_value': 30.0
+            }
+            st.session_state.signals.append(signal)
+            st.success("✅ QQQ RSI Oversold signal added!")
+            st.rerun()
+    
+    with col2:
+        if st.button("📊 SPY > 200d SMA", key="prebuilt_spy_200sma"):
+            if 'signals' not in st.session_state:
+                st.session_state.signals = []
+            
+            signal = {
+                'name': 'SPY Above 200d SMA',
+                'type': 'Custom Indicator',
+                'signal_ticker1': 'SPY',
+                'indicator1': 'Current Price',
+                'operator': '>',
+                'days1': None,
+                'signal_ticker2': 'SPY',
+                'indicator2': 'SMA',
+                'days2': 200,
+                'static_value': None
+            }
+            st.session_state.signals.append(signal)
+            st.success("✅ SPY Above 200d SMA signal added!")
+            st.rerun()
+        
+        if st.button("📊 SPY > 20d SMA", key="prebuilt_spy_20sma"):
+            if 'signals' not in st.session_state:
+                st.session_state.signals = []
+            
+            signal = {
+                'name': 'SPY Above 20d SMA',
+                'type': 'Custom Indicator',
+                'signal_ticker1': 'SPY',
+                'indicator1': 'Current Price',
+                'operator': '>',
+                'days1': None,
+                'signal_ticker2': 'SPY',
+                'indicator2': 'SMA',
+                'days2': 20,
+                'static_value': None
+            }
+            st.session_state.signals.append(signal)
+            st.success("✅ SPY Above 20d SMA signal added!")
+            st.rerun()
+    
+    st.markdown("---")
+    
     # Signal creation
     with st.expander("➕ Create Reference Signal", expanded=False):
         signal_name = st.text_input("Signal Name", placeholder="e.g., QQQ RSI Oversold")
