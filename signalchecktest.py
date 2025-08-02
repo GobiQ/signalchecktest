@@ -186,9 +186,115 @@ st.markdown("""
 # Initialize session state
 if 'signals' not in st.session_state:
     st.session_state.signals = []
+    # Add pre-built signals automatically
+    prebuilt_signals = [
+        {
+            'name': 'If 10d RSI QQQ > 80',
+            'type': 'Custom Indicator',
+            'signal_ticker1': 'QQQ',
+            'signal_ticker2': 'QQQ',
+            'indicator1': 'RSI',
+            'indicator2': 'Static Value',
+            'operator': '>',
+            'days1': 10,
+            'days2': None,
+            'static_value': 80.0
+        },
+        {
+            'name': 'If 10d RSI QQQ < 30',
+            'type': 'Custom Indicator',
+            'signal_ticker1': 'QQQ',
+            'signal_ticker2': 'QQQ',
+            'indicator1': 'RSI',
+            'indicator2': 'Static Value',
+            'operator': '<',
+            'days1': 10,
+            'days2': None,
+            'static_value': 30.0
+        },
+        {
+            'name': 'If Current Price SPY > 200d SMA SPY',
+            'type': 'Custom Indicator',
+            'signal_ticker1': 'SPY',
+            'signal_ticker2': 'SPY',
+            'indicator1': 'Current Price',
+            'indicator2': 'SMA',
+            'operator': '>',
+            'days1': None,
+            'days2': 200,
+            'static_value': None
+        },
+        {
+            'name': 'If Current Price SPY > 20d SMA SPY',
+            'type': 'Custom Indicator',
+            'signal_ticker1': 'SPY',
+            'signal_ticker2': 'SPY',
+            'indicator1': 'Current Price',
+            'indicator2': 'SMA',
+            'operator': '>',
+            'days1': None,
+            'days2': 20,
+            'static_value': None
+        }
+    ]
+    st.session_state.signals = prebuilt_signals
 
 if 'output_allocations' not in st.session_state:
     st.session_state.output_allocations = {}
+    # Add pre-built allocations automatically
+    prebuilt_allocations = {
+        'TQQQ': {
+            'name': 'TQQQ',
+            'tickers': [{'ticker': 'TQQQ', 'weight': 100}]
+        },
+        'QLD': {
+            'name': 'QLD',
+            'tickers': [{'ticker': 'QLD', 'weight': 100}]
+        },
+        'QQQ': {
+            'name': 'QQQ',
+            'tickers': [{'ticker': 'QQQ', 'weight': 100}]
+        },
+        'SPY': {
+            'name': 'SPY',
+            'tickers': [{'ticker': 'SPY', 'weight': 100}]
+        },
+        'XLP': {
+            'name': 'XLP',
+            'tickers': [{'ticker': 'XLP', 'weight': 100}]
+        },
+        'XLU': {
+            'name': 'XLU',
+            'tickers': [{'ticker': 'XLU', 'weight': 100}]
+        },
+        'BIL': {
+            'name': 'BIL',
+            'tickers': [{'ticker': 'BIL', 'weight': 100}]
+        },
+        'UVXY': {
+            'name': 'UVXY',
+            'tickers': [{'ticker': 'UVXY', 'weight': 100}]
+        },
+        'VIXY': {
+            'name': 'VIXY',
+            'tickers': [{'ticker': 'VIXY', 'weight': 100}]
+        },
+        'BIL VIXY Defensive': {
+            'name': 'BIL VIXY Defensive',
+            'tickers': [
+                {'ticker': 'BIL', 'weight': 50},
+                {'ticker': 'VIXY', 'weight': 50}
+            ]
+        },
+        'XLP XLU Defensive': {
+            'name': 'XLP XLU Defensive',
+            'tickers': [
+                {'ticker': 'XLP', 'weight': 50},
+                {'ticker': 'XLU', 'weight': 50}
+            ]
+        }
+    }
+    st.session_state.output_allocations = prebuilt_allocations
 
 if 'strategy_branches' not in st.session_state:
     st.session_state.strategy_branches = []
@@ -539,90 +645,19 @@ with tab1:
     st.header("📊 Signal Blocks")
     
     # Pre-built signal blocks
-    st.subheader("🚀 Quick Start: Pre-built Signals")
-    col1, col2 = st.columns(2)
+    st.subheader("🚀 Pre-built Signals")
+    st.write("The following signals are automatically available:")
     
-    with col1:
-        if st.button("📈 If 10d RSI QQQ > 80", key="prebuilt_rsi_qqq_high"):
-            if 'signals' not in st.session_state:
-                st.session_state.signals = []
-            
-            signal = {
-                'name': 'If 10d RSI QQQ > 80',
-                'type': 'Custom Indicator',
-                'signal_ticker1': 'QQQ',
-                'signal_ticker2': 'QQQ',
-                'indicator1': 'RSI',
-                'indicator2': 'Static Value',
-                'operator': '>',
-                'days1': 10,
-                'days2': None,
-                'static_value': 80.0
-            }
-            st.session_state.signals.append(signal)
-            st.success("✅ RSI QQQ > 80 signal added!")
-            st.rerun()
-        
-        if st.button("📉 If 10d RSI QQQ < 30", key="prebuilt_rsi_qqq_low"):
-            if 'signals' not in st.session_state:
-                st.session_state.signals = []
-            
-            signal = {
-                'name': 'If 10d RSI QQQ < 30',
-                'type': 'Custom Indicator',
-                'signal_ticker1': 'QQQ',
-                'signal_ticker2': 'QQQ',
-                'indicator1': 'RSI',
-                'indicator2': 'Static Value',
-                'operator': '<',
-                'days1': 10,
-                'days2': None,
-                'static_value': 30.0
-            }
-            st.session_state.signals.append(signal)
-            st.success("✅ RSI QQQ < 30 signal added!")
-            st.rerun()
+    # Display pre-built signals as a clean list
+    prebuilt_signal_names = [
+        "If 10d RSI QQQ > 80",
+        "If 10d RSI QQQ < 30", 
+        "If Current Price SPY > 200d SMA SPY",
+        "If Current Price SPY > 20d SMA SPY"
+    ]
     
-    with col2:
-        if st.button("📈 If Current Price SPY > 200d SMA SPY", key="prebuilt_spy_sma_200"):
-            if 'signals' not in st.session_state:
-                st.session_state.signals = []
-            
-            signal = {
-                'name': 'If Current Price SPY > 200d SMA SPY',
-                'type': 'Custom Indicator',
-                'signal_ticker1': 'SPY',
-                'signal_ticker2': 'SPY',
-                'indicator1': 'Current Price',
-                'indicator2': 'SMA',
-                'operator': '>',
-                'days1': None,
-                'days2': 200,
-                'static_value': None
-            }
-            st.session_state.signals.append(signal)
-            st.success("✅ SPY > 200d SMA signal added!")
-            st.rerun()
-        
-        if st.button("📈 If Current Price SPY > 20d SMA SPY", key="prebuilt_spy_sma_20"):
-            if 'signals' not in st.session_state:
-                st.session_state.signals = []
-            
-            signal = {
-                'name': 'If Current Price SPY > 20d SMA SPY',
-                'type': 'Custom Indicator',
-                'signal_ticker1': 'SPY',
-                'signal_ticker2': 'SPY',
-                'indicator1': 'Current Price',
-                'indicator2': 'SMA',
-                'operator': '>',
-                'days1': None,
-                'days2': 20,
-                'static_value': None
-            }
-            st.session_state.signals.append(signal)
-            st.success("✅ SPY > 20d SMA signal added!")
-            st.rerun()
+    for signal_name in prebuilt_signal_names:
+        st.write(f"• **{signal_name}**")
     
     st.markdown("---")
     
@@ -822,158 +857,19 @@ with tab2:
     st.header("💰 Allocation Blocks")
     
     # Pre-built allocation blocks
-    st.subheader("🚀 Quick Start: Pre-built Allocations")
+    st.subheader("🚀 Pre-built Allocations")
+    st.write("The following allocations are automatically available:")
     
-    # Single ticker allocations
-    st.markdown("**📈 Single Ticker Allocations:**")
-    col1, col2, col3 = st.columns(3)
+    # Display pre-built allocations as clean lists
+    st.write("**Single Ticker Allocations:**")
+    single_ticker_allocations = ["TQQQ (3x QQQ)", "QLD (2x QQQ)", "QQQ (Nasdaq)", "SPY (S&P 500)", "XLP (Consumer Staples)", "XLU (Utilities)", "BIL (T-Bills)", "UVXY (Volatility)", "VIXY (VIX)"]
+    for allocation in single_ticker_allocations:
+        st.write(f"• **{allocation}**")
     
-    with col1:
-        if st.button("📈 TQQQ (3x QQQ)", key="prebuilt_tqqq"):
-            if 'output_allocations' not in st.session_state:
-                st.session_state.output_allocations = {}
-            
-            allocation = {
-                'name': 'TQQQ',
-                'tickers': [{'ticker': 'TQQQ', 'weight': 100}]
-            }
-            st.session_state.output_allocations['TQQQ'] = allocation
-            st.success("✅ TQQQ allocation added!")
-            st.rerun()
-        
-        if st.button("📈 QLD (2x QQQ)", key="prebuilt_qld"):
-            if 'output_allocations' not in st.session_state:
-                st.session_state.output_allocations = {}
-            
-            allocation = {
-                'name': 'QLD',
-                'tickers': [{'ticker': 'QLD', 'weight': 100}]
-            }
-            st.session_state.output_allocations['QLD'] = allocation
-            st.success("✅ QLD allocation added!")
-            st.rerun()
-        
-        if st.button("📈 QQQ (Nasdaq)", key="prebuilt_qqq"):
-            if 'output_allocations' not in st.session_state:
-                st.session_state.output_allocations = {}
-            
-            allocation = {
-                'name': 'QQQ',
-                'tickers': [{'ticker': 'QQQ', 'weight': 100}]
-            }
-            st.session_state.output_allocations['QQQ'] = allocation
-            st.success("✅ QQQ allocation added!")
-            st.rerun()
-    
-    with col2:
-        if st.button("📈 SPY (S&P 500)", key="prebuilt_spy"):
-            if 'output_allocations' not in st.session_state:
-                st.session_state.output_allocations = {}
-            
-            allocation = {
-                'name': 'SPY',
-                'tickers': [{'ticker': 'SPY', 'weight': 100}]
-            }
-            st.session_state.output_allocations['SPY'] = allocation
-            st.success("✅ SPY allocation added!")
-            st.rerun()
-        
-        if st.button("📈 XLP (Consumer Staples)", key="prebuilt_xlp"):
-            if 'output_allocations' not in st.session_state:
-                st.session_state.output_allocations = {}
-            
-            allocation = {
-                'name': 'XLP',
-                'tickers': [{'ticker': 'XLP', 'weight': 100}]
-            }
-            st.session_state.output_allocations['XLP'] = allocation
-            st.success("✅ XLP allocation added!")
-            st.rerun()
-        
-        if st.button("📈 XLU (Utilities)", key="prebuilt_xlu"):
-            if 'output_allocations' not in st.session_state:
-                st.session_state.output_allocations = {}
-            
-            allocation = {
-                'name': 'XLU',
-                'tickers': [{'ticker': 'XLU', 'weight': 100}]
-            }
-            st.session_state.output_allocations['XLU'] = allocation
-            st.success("✅ XLU allocation added!")
-            st.rerun()
-    
-    with col3:
-        if st.button("📊 BIL (T-Bills)", key="prebuilt_bil"):
-            if 'output_allocations' not in st.session_state:
-                st.session_state.output_allocations = {}
-            
-            allocation = {
-                'name': 'BIL',
-                'tickers': [{'ticker': 'BIL', 'weight': 100}]
-            }
-            st.session_state.output_allocations['BIL'] = allocation
-            st.success("✅ BIL allocation added!")
-            st.rerun()
-        
-        if st.button("📊 UVXY (Volatility)", key="prebuilt_uvxy"):
-            if 'output_allocations' not in st.session_state:
-                st.session_state.output_allocations = {}
-            
-            allocation = {
-                'name': 'UVXY',
-                'tickers': [{'ticker': 'UVXY', 'weight': 100}]
-            }
-            st.session_state.output_allocations['UVXY'] = allocation
-            st.success("✅ UVXY allocation added!")
-            st.rerun()
-        
-        if st.button("📊 VIXY (VIX)", key="prebuilt_vixy"):
-            if 'output_allocations' not in st.session_state:
-                st.session_state.output_allocations = {}
-            
-            allocation = {
-                'name': 'VIXY',
-                'tickers': [{'ticker': 'VIXY', 'weight': 100}]
-            }
-            st.session_state.output_allocations['VIXY'] = allocation
-            st.success("✅ VIXY allocation added!")
-            st.rerun()
-    
-    # Multi-ticker allocations
-    st.subheader("🔄 Multi-Ticker Allocations")
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if st.button("🛡️ 50/50 BIL VIXY (Defensive)", key="prebuilt_bil_vixy"):
-            if 'output_allocations' not in st.session_state:
-                st.session_state.output_allocations = {}
-            
-            allocation = {
-                'name': 'BIL VIXY Defensive',
-                'tickers': [
-                    {'ticker': 'BIL', 'weight': 50},
-                    {'ticker': 'VIXY', 'weight': 50}
-                ]
-            }
-            st.session_state.output_allocations['BIL VIXY Defensive'] = allocation
-            st.success("✅ BIL VIXY Defensive allocation added!")
-            st.rerun()
-    
-    with col2:
-        if st.button("🛡️ 50/50 XLP XLU (Defensive)", key="prebuilt_xlp_xlu"):
-            if 'output_allocations' not in st.session_state:
-                st.session_state.output_allocations = {}
-            
-            allocation = {
-                'name': 'XLP XLU Defensive',
-                'tickers': [
-                    {'ticker': 'XLP', 'weight': 50},
-                    {'ticker': 'XLU', 'weight': 50}
-                ]
-            }
-            st.session_state.output_allocations['XLP XLU Defensive'] = allocation
-            st.success("✅ XLP XLU Defensive allocation added!")
-            st.rerun()
+    st.write("**Multi-Ticker Allocations:**")
+    multi_ticker_allocations = ["BIL VIXY Defensive (50/50)", "XLP XLU Defensive (50/50)"]
+    for allocation in multi_ticker_allocations:
+        st.write(f"• **{allocation}**")
     
     st.markdown("---")
     
