@@ -1133,12 +1133,22 @@ with tab3:
             # Handle If/Else structure differently
             if branch.get('type') == 'if_else':
                 # If/Else collapsible block
-                st.markdown("""
-                <div class="if-else-block">
-                    <div class="if-else-header">
-                        <span>🔗 If/Else</span>
-                    </div>
-                """, unsafe_allow_html=True)
+                if branch.get('is_else_if'):
+                    # ELSE IF block styling
+                    st.markdown("""
+                    <div class="if-else-block" style="border-left: 4px solid #FF5722; background-color: #FFF3E0;">
+                        <div class="if-else-header">
+                            <span>🔗 ELSE IF</span>
+                        </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    # Regular IF/ELSE block styling
+                    st.markdown("""
+                    <div class="if-else-block">
+                        <div class="if-else-header">
+                            <span>🔗 If/Else</span>
+                        </div>
+                    """, unsafe_allow_html=True)
                 
                 # Block operations menu inside the If/Else box
                 col_menu, col_spacer = st.columns([1, 9])
@@ -1178,7 +1188,10 @@ with tab3:
                 
                 # IF section
                 st.markdown('<div class="condition-block" style="border-left: 3px solid #2196F3; padding-left: 10px; margin-left: 0px;">', unsafe_allow_html=True)
-                st.markdown("**IF:**")
+                if branch.get('is_else_if'):
+                    st.markdown("**ELSE IF:**")
+                else:
+                    st.markdown("**IF:**")
                 
                 # Initialize session state for IF dropdown visibility
                 if f'show_if_dropdown_{branch_idx}' not in st.session_state:
@@ -1382,14 +1395,14 @@ with tab3:
                     # Show available signals and allocations count
                     st.write(f"Debug: {len(st.session_state.signals)} signals, {len(st.session_state.output_allocations)} allocations available")
                     
-                    # Create options list with signals, allocations, and nested if/else
+                    # Create options list with signals, allocations, nested if/else, and else if
                     signal_options = [f"Signal: {s['name']}" for s in st.session_state.signals]
                     allocation_options = [f"Allocation: {a}" for a in st.session_state.output_allocations.keys()]
-                    all_options = [""] + signal_options + allocation_options + ["Nested If/Else Block"]
+                    all_options = [""] + signal_options + allocation_options + ["Nested If/Else Block", "ELSE IF (Next Condition)"]
                     
                     if all_options:
                         selected_option = st.selectbox(
-                            "Select Signal, Allocation, or Nested Block:",
+                            "Select Signal, Allocation, Nested Block, or ELSE IF:",
                             all_options,
                             key=f"else_option_select_{branch_idx}"
                         )
@@ -1431,11 +1444,25 @@ with tab3:
                                             'else_nested_blocks': []
                                         })
                                         st.success(f"✅ Nested If/Else block added to ELSE!")
+                                    elif selected_option == "ELSE IF (Next Condition)":
+                                        # Create a new IF/THEN/ELSE block that acts as an ELSE IF
+                                        new_branch = {
+                                            'type': 'if_else',
+                                            'signals': [],
+                                            'allocations': [],
+                                            'else_allocations': [],
+                                            'else_signals': [],
+                                            'else_nested_blocks': [],
+                                            'collapsed': False,
+                                            'is_else_if': True  # Mark as ELSE IF
+                                        }
+                                        st.session_state.strategy_branches.insert(branch_idx + 1, new_branch)
+                                        st.success(f"✅ ELSE IF block added!")
                                     
                                     st.session_state[f'show_else_dropdown_{branch_idx}'] = False
                                     st.rerun()
                                 else:
-                                    st.warning("Please select a signal, allocation, or nested block.")
+                                    st.warning("Please select a signal, allocation, nested block, or ELSE IF.")
                         with col_b:
                             if st.button("❌ Cancel", key=f"cancel_else_{branch_idx}"):
                                 st.session_state[f'show_else_dropdown_{branch_idx}'] = False
@@ -1677,6 +1704,22 @@ with tab3:
                 # Delete entire If/Else block
                 if st.button("🗑️ Delete If/Else Block", key=f"delete_if_else_{branch_idx}"):
                     st.session_state.strategy_branches.pop(branch_idx)
+                    st.rerun()
+                
+                st.markdown("</div>", unsafe_allow_html=True)
+                
+                # Add button to create additional IF/THEN/ELSE blocks at the same level
+                if st.button("➕ Add Another IF/THEN/ELSE Block", key=f"add_another_if_else_{branch_idx}"):
+                    new_branch = {
+                        'type': 'if_else',
+                        'signals': [],
+                        'allocations': [],
+                        'else_allocations': [],
+                        'else_signals': [],
+                        'else_nested_blocks': [],
+                        'collapsed': False
+                    }
+                    st.session_state.strategy_branches.insert(branch_idx + 1, new_branch)
                     st.rerun()
                 
                 st.markdown("</div>", unsafe_allow_html=True)
