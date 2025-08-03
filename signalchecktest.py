@@ -1359,23 +1359,29 @@ with tab3:
                     with col1:
                         if 'else_allocation_weight' not in branch:
                             branch['else_allocation_weight'] = 50
-                        branch['else_allocation_weight'] = st.number_input(
+                        new_allocation_weight = st.number_input(
                             "Allocation Weight %",
                             min_value=0,
                             max_value=100,
                             value=branch.get('else_allocation_weight', 50),
                             key=f"else_allocation_weight_{branch_idx}"
                         )
+                        # Only update if value actually changed to avoid unnecessary reruns
+                        if new_allocation_weight != branch.get('else_allocation_weight', 50):
+                            branch['else_allocation_weight'] = new_allocation_weight
                     with col2:
                         if 'else_chain_weight' not in branch:
                             branch['else_chain_weight'] = 50
-                        branch['else_chain_weight'] = st.number_input(
+                        new_chain_weight = st.number_input(
                             "Chain Weight %",
                             min_value=0,
                             max_value=100,
                             value=branch.get('else_chain_weight', 50),
                             key=f"else_chain_weight_{branch_idx}"
                         )
+                        # Only update if value actually changed to avoid unnecessary reruns
+                        if new_chain_weight != branch.get('else_chain_weight', 50):
+                            branch['else_chain_weight'] = new_chain_weight
                     
                     # Validate total weight
                     total_else_weight = branch.get('else_allocation_weight', 0) + branch.get('else_chain_weight', 0)
@@ -1405,7 +1411,7 @@ with tab3:
                                     'weight': 100
                                 })
                                 st.success(f"✅ Allocation '{selected_else_allocation}' added to ELSE!")
-                                st.rerun()
+                                # Remove rerun to prevent state conflicts
                     else:
                         st.warning("No allocations available. Create allocations in the Allocation Blocks tab first.")
                     
@@ -1426,7 +1432,7 @@ with tab3:
                             }]
                         })
                         st.success(f"✅ IF/THEN/ELSE chain added to ELSE!")
-                        st.rerun()
+                        # Remove rerun to prevent state conflicts
                     
 
                     
@@ -1442,18 +1448,21 @@ with tab3:
                                         key=f"else_branch_{branch_idx}_allocation_{else_alloc_idx}"
                                     )
                                 with col2:
-                                    else_allocation_config['weight'] = st.number_input(
+                                    new_weight = st.number_input(
                                         "Weight %",
                                         min_value=0,
                                         max_value=100,
                                         value=else_allocation_config.get('weight', 100),
                                         key=f"else_branch_{branch_idx}_weight_{else_alloc_idx}"
                                     )
+                                    # Only update if value actually changed to avoid unnecessary state changes
+                                    if new_weight != else_allocation_config.get('weight', 100):
+                                        else_allocation_config['weight'] = new_weight
                                 with col3:
                                     if len(branch['else_allocations']) > 1:  # Don't allow removing the last allocation
                                         if st.button("🗑️", key=f"remove_else_{branch_idx}_{else_alloc_idx}_{id(else_allocation_config)}_delete"):
                                             branch['else_allocations'].pop(else_alloc_idx)
-                                            st.rerun()
+                                            # Remove rerun to prevent state conflicts
                                     else:
                                         st.write("")  # Empty space for alignment
                             
@@ -1478,7 +1487,7 @@ with tab3:
                                     'allocation': '', 
                                     'weight': 100
                                 })
-                                st.rerun()
+                                # Remove rerun to prevent state conflicts
                     
                     # Display nested IF/ELSE blocks in ELSE
                     if branch.get('else_nested_blocks'):
@@ -2077,7 +2086,10 @@ with tab4:
                                 else_allocation_weight = branch.get('else_allocation_weight', 50) / 100.0
                                 else_chain_weight = branch.get('else_chain_weight', 50) / 100.0
                                 
-                                # Process ELSE allocations
+                                # Create ELSE signals (inverse of IF signals)
+                                else_signals = ~if_result
+                                
+                                # Process ELSE allocations with proper weight isolation
                                 if else_allocations and else_allocation_weight > 0:
                                     for alloc_config in else_allocations:
                                         allocation_name = alloc_config.get('allocation', '')
@@ -2085,12 +2097,12 @@ with tab4:
                                             allocation = st.session_state.output_allocations[allocation_name]
                                             weight = (alloc_config.get('weight', 100) / 100.0) * else_allocation_weight
                                             
-                                            # Calculate equity curve for this allocation
+                                            # Calculate equity curve for this allocation using ELSE signals
                                             alloc_equity = calculate_multi_ticker_equity_curve(
-                                                ~if_result, allocation, data
+                                                else_signals, allocation, data
                                             )
                                 
-                                # Process ELSE chains (nested IF/THEN/ELSE chains)
+                                # Process ELSE chains (nested IF/THEN/ELSE chains) with proper isolation
                                 if branch.get('else_nested_chains') and else_chain_weight > 0:
                                     for chain in branch['else_nested_chains']:
                                         if chain['type'] == 'nested_if_else_chain':
@@ -2100,7 +2112,7 @@ with tab4:
                                                 pass
                                 
                                 # Add ELSE signals to strategy (only when IF condition is not met)
-                                strategy_signals = strategy_signals | ~if_result
+                                strategy_signals = strategy_signals | else_signals
                         else:
                             # Regular branch logic
                             branch_signals = pd.Series(True, index=strategy_signals.index)
