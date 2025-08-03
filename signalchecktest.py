@@ -1321,7 +1321,8 @@ with tab3:
                                     )
                                 with col3:
                                     if len(branch['allocations']) > 1:  # Don't allow removing the last allocation
-                                        if st.button("🗑️", key=f"remove_then_allocation_{branch_idx}_{alloc_idx}_delete"):
+                                        allocation_name = allocation_config.get('allocation', '')
+                                        if st.button("🗑️", key=f"remove_then_{branch_idx}_{alloc_idx}_{hash(allocation_name)}_delete"):
                                             branch['allocations'].pop(alloc_idx)
                                             st.rerun()
                                     else:
@@ -1451,7 +1452,8 @@ with tab3:
                                     )
                                 with col3:
                                     if len(branch['else_allocations']) > 1:  # Don't allow removing the last allocation
-                                        if st.button("🗑️", key=f"remove_else_allocation_{branch_idx}_{else_alloc_idx}_delete"):
+                                        else_allocation_name = else_allocation_config.get('allocation', '')
+                                        if st.button("🗑️", key=f"remove_else_{branch_idx}_{else_alloc_idx}_{hash(else_allocation_name)}_delete"):
                                             branch['else_allocations'].pop(else_alloc_idx)
                                             st.rerun()
                                     else:
@@ -1583,7 +1585,8 @@ with tab3:
                                                 )
                                             with col3:
                                                 if len(nested_block['allocations']) > 1:
-                                                    if st.button("🗑️", key=f"remove_nested_then_{branch_idx}_{nested_idx}_{alloc_idx}_delete"):
+                                                    nested_allocation_name = allocation_config.get('allocation', '')
+                                                    if st.button("🗑️", key=f"remove_nested_{branch_idx}_{nested_idx}_{alloc_idx}_{hash(nested_allocation_name)}_delete"):
                                                         nested_block['allocations'].pop(alloc_idx)
                                                         st.rerun()
                                                 else:
@@ -1734,7 +1737,8 @@ with tab3:
                                                     )
                                                 with col3:
                                                     if len(chain_block['allocations']) > 1:
-                                                        if st.button("🗑️", key=f"remove_chain_then_{branch_idx}_{chain_idx}_{block_idx}_{alloc_idx}_delete"):
+                                                        chain_allocation_name = allocation_config.get('allocation', '')
+                                                        if st.button("🗑️", key=f"remove_chain_{branch_idx}_{chain_idx}_{block_idx}_{alloc_idx}_{hash(chain_allocation_name)}_delete"):
                                                             chain_block['allocations'].pop(alloc_idx)
                                                             st.rerun()
                                                     else:
@@ -1907,7 +1911,8 @@ with tab3:
                             )
                         with col3:
                             if len(branch['allocations']) > 1:  # Don't allow removing the last allocation
-                                if st.button("🗑️", key=f"remove_regular_allocation_{branch_idx}_{alloc_idx}_delete"):
+                                allocation_name = allocation_config.get('allocation', '')
+                                if st.button("🗑️", key=f"remove_regular_{branch_idx}_{alloc_idx}_{hash(allocation_name)}_delete"):
                                     branch['allocations'].pop(alloc_idx)
                                     st.rerun()
                             else:
