@@ -2054,8 +2054,11 @@ with tab4:
                                         if_result = if_result | signal_result
                             
                             # Apply allocations based on IF result
-                            if if_result.any():
-                                # Use IF allocations
+                            # Check if IF condition is met (any True values in the series)
+                            if_condition_met = if_result.any()
+                            
+                            if if_condition_met:
+                                # Use IF allocations when IF condition is met
                                 for alloc_config in if_allocations:
                                     allocation_name = alloc_config.get('allocation', '')
                                     if allocation_name in st.session_state.output_allocations:
@@ -2066,11 +2069,11 @@ with tab4:
                                         alloc_equity = calculate_multi_ticker_equity_curve(
                                             if_result, allocation, data
                                         )
-                                        
-                                        # Add to strategy signals (simplified - in practice you'd need more complex logic)
-                                        strategy_signals = strategy_signals | if_result
+                                
+                                # Add IF signals to strategy
+                                strategy_signals = strategy_signals | if_result
                             else:
-                                # Use ELSE allocations and chains with weight distribution
+                                # Use ELSE allocations and chains only when IF condition is NOT met
                                 else_allocation_weight = branch.get('else_allocation_weight', 50) / 100.0
                                 else_chain_weight = branch.get('else_chain_weight', 50) / 100.0
                                 
@@ -2096,7 +2099,7 @@ with tab4:
                                                 # This is a placeholder for the nested chain processing
                                                 pass
                                 
-                                # Add to strategy signals
+                                # Add ELSE signals to strategy (only when IF condition is not met)
                                 strategy_signals = strategy_signals | ~if_result
                         else:
                             # Regular branch logic
