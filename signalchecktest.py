@@ -1110,8 +1110,114 @@ with tab3:
     # Strategy creation interface
     st.subheader("🎯 Build Your Strategy")
     
+    # Strategy management section
+    st.markdown("### 📋 Strategy Management")
+    
+    # Strategy name and save/run controls
+    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+    
+    with col1:
+        if 'strategy_name' not in st.session_state:
+            st.session_state.strategy_name = "My Strategy"
+        st.session_state.strategy_name = st.text_input(
+            "Strategy Name:",
+            value=st.session_state.strategy_name,
+            key="strategy_name_input"
+        )
+    
+    with col2:
+        if st.button("💾 Save Strategy", type="secondary"):
+            if st.session_state.strategy_name.strip():
+                # Save the entire strategy
+                strategy_data = {
+                    'name': st.session_state.strategy_name,
+                    'branches': st.session_state.strategy_branches,
+                    'signals': st.session_state.signals,
+                    'allocations': st.session_state.output_allocations,
+                    'created_at': datetime.now().isoformat()
+                }
+                
+                # Save to session state for now (could be extended to file/database)
+                if 'saved_strategies' not in st.session_state:
+                    st.session_state.saved_strategies = {}
+                
+                st.session_state.saved_strategies[st.session_state.strategy_name] = strategy_data
+                st.success(f"✅ Strategy '{st.session_state.strategy_name}' saved!")
+            else:
+                st.error("Please provide a strategy name.")
+    
+    with col3:
+        if st.button("📂 Load Strategy", type="secondary"):
+            if 'saved_strategies' in st.session_state and st.session_state.saved_strategies:
+                strategy_names = list(st.session_state.saved_strategies.keys())
+                selected_strategy = st.selectbox(
+                    "Select Strategy to Load:",
+                    [""] + strategy_names,
+                    key="load_strategy_select"
+                )
+                if selected_strategy:
+                    strategy_data = st.session_state.saved_strategies[selected_strategy]
+                    st.session_state.strategy_branches = strategy_data['branches']
+                    st.session_state.signals = strategy_data['signals']
+                    st.session_state.output_allocations = strategy_data['allocations']
+                    st.session_state.strategy_name = strategy_data['name']
+                    st.success(f"✅ Strategy '{selected_strategy}' loaded!")
+                    st.rerun()
+            else:
+                st.warning("No saved strategies available.")
+    
+    with col4:
+        if st.button("🗑️ Clear Strategy", type="secondary"):
+            st.session_state.strategy_branches = []
+            st.session_state.strategy_name = "My Strategy"
+            st.success("Strategy cleared!")
+            st.rerun()
+    
+    # Show saved strategies info
+    if 'saved_strategies' in st.session_state and st.session_state.saved_strategies:
+        st.info(f"📁 Saved Strategies: {len(st.session_state.saved_strategies)} strategies available")
+    
+    st.markdown("---")
+    
+    # Prominent Run Backtest section
+    st.markdown("### 🚀 Execute Strategy")
+    
+    # Backtest configuration
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        start_date = st.date_input("Start Date", value=datetime.now() - timedelta(days=365))
+        st.session_state.backtest_start_date = start_date
+    with col2:
+        end_date = st.date_input("End Date", value=datetime.now())
+        st.session_state.backtest_end_date = end_date
+    with col3:
+        benchmark_ticker = st.text_input("Benchmark Ticker", value="SPY")
+        st.session_state.backtest_benchmark = benchmark_ticker
+    
+    # Strategy validation and run button
+    if st.session_state.strategy_branches:
+        if st.session_state.output_allocations:
+            # Strategy is ready to run
+            st.success("✅ Strategy is ready to run!")
+            
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.info(f"📊 Strategy: '{st.session_state.strategy_name}' | Branches: {len(st.session_state.strategy_branches)} | Allocations: {len(st.session_state.output_allocations)}")
+            with col2:
+                if st.button("🚀 Run Backtest", type="primary", use_container_width=True):
+                    # The backtest logic will be triggered here
+                    st.session_state.run_backtest = True
+                    st.rerun()
+        else:
+            st.warning("⚠️ Please create at least one allocation block first.")
+    else:
+        st.warning("⚠️ Please create at least one strategy branch first.")
+    
+    st.markdown("---")
+    
     # Add new strategy component
-    if st.button("➕", key="add_component"):
+    if st.button("➕ Add Strategy Component", key="add_component"):
         new_branch = {
             'type': 'if_else',
             'signals': [],
@@ -1358,33 +1464,33 @@ with tab3:
                     col1, col2 = st.columns(2)
                     with col1:
                         if 'else_allocation_weight' not in branch:
-                            branch['else_allocation_weight'] = 50
+                            branch['else_allocation_weight'] = 0
                         new_allocation_weight = st.number_input(
                             "Allocation Weight %",
                             min_value=0,
                             max_value=100,
-                            value=branch.get('else_allocation_weight', 50),
+                            value=branch.get('else_allocation_weight', 0),
                             key=f"else_allocation_weight_{branch_idx}"
                         )
                         # Only update if value actually changed to avoid unnecessary reruns
-                        if new_allocation_weight != branch.get('else_allocation_weight', 50):
+                        if new_allocation_weight != branch.get('else_allocation_weight', 0):
                             branch['else_allocation_weight'] = new_allocation_weight
                     with col2:
                         if 'else_chain_weight' not in branch:
-                            branch['else_chain_weight'] = 50
+                            branch['else_chain_weight'] = 100
                         new_chain_weight = st.number_input(
                             "Chain Weight %",
                             min_value=0,
                             max_value=100,
-                            value=branch.get('else_chain_weight', 50),
+                            value=branch.get('else_chain_weight', 100),
                             key=f"else_chain_weight_{branch_idx}"
                         )
                         # Only update if value actually changed to avoid unnecessary reruns
-                        if new_chain_weight != branch.get('else_chain_weight', 50):
+                        if new_chain_weight != branch.get('else_chain_weight', 100):
                             branch['else_chain_weight'] = new_chain_weight
                     
                     # Validate total weight
-                    total_else_weight = branch.get('else_allocation_weight', 0) + branch.get('else_chain_weight', 0)
+                    total_else_weight = branch.get('else_allocation_weight', 0) + branch.get('else_chain_weight', 100)
                     if total_else_weight != 100:
                         if total_else_weight > 100:
                             st.error(f"⚠️ ELSE total weight: {total_else_weight}% (exceeds 100%)")
@@ -1477,8 +1583,8 @@ with tab3:
                                 st.success(f"✅ ELSE allocation weight: {total_else_allocation_weight}%")
                             
                             # Show weight distribution info
-                            allocation_weight = branch.get('else_allocation_weight', 50)
-                            chain_weight = branch.get('else_chain_weight', 50)
+                            allocation_weight = branch.get('else_allocation_weight', 0)
+                            chain_weight = branch.get('else_chain_weight', 100)
                             st.info(f"📊 ELSE Distribution: {allocation_weight}% allocations, {chain_weight}% chains")
                             
                             # Add button to add more allocations to ELSE
@@ -1834,33 +1940,33 @@ with tab3:
                                 col1, col2 = st.columns(2)
                                 with col1:
                                     if 'chain_else_allocation_weight' not in chain:
-                                        chain['chain_else_allocation_weight'] = 50
+                                        chain['chain_else_allocation_weight'] = 0
                                     new_chain_else_allocation_weight = st.number_input(
                                         "Allocation Weight %",
                                         min_value=0,
                                         max_value=100,
-                                        value=chain.get('chain_else_allocation_weight', 50),
+                                        value=chain.get('chain_else_allocation_weight', 0),
                                         key=f"chain_else_allocation_weight_{branch_idx}_{chain_idx}"
                                     )
                                     # Only update if value actually changed to avoid unnecessary reruns
-                                    if new_chain_else_allocation_weight != chain.get('chain_else_allocation_weight', 50):
+                                    if new_chain_else_allocation_weight != chain.get('chain_else_allocation_weight', 0):
                                         chain['chain_else_allocation_weight'] = new_chain_else_allocation_weight
                                 with col2:
                                     if 'chain_else_chain_weight' not in chain:
-                                        chain['chain_else_chain_weight'] = 50
+                                        chain['chain_else_chain_weight'] = 100
                                     new_chain_else_chain_weight = st.number_input(
                                         "Chain Weight %",
                                         min_value=0,
                                         max_value=100,
-                                        value=chain.get('chain_else_chain_weight', 50),
+                                        value=chain.get('chain_else_chain_weight', 100),
                                         key=f"chain_else_chain_weight_{branch_idx}_{chain_idx}"
                                     )
                                     # Only update if value actually changed to avoid unnecessary reruns
-                                    if new_chain_else_chain_weight != chain.get('chain_else_chain_weight', 50):
+                                    if new_chain_else_chain_weight != chain.get('chain_else_chain_weight', 100):
                                         chain['chain_else_chain_weight'] = new_chain_else_chain_weight
                                 
                                 # Validate total weight
-                                total_chain_else_weight = chain.get('chain_else_allocation_weight', 0) + chain.get('chain_else_chain_weight', 0)
+                                total_chain_else_weight = chain.get('chain_else_allocation_weight', 0) + chain.get('chain_else_chain_weight', 100)
                                 if total_chain_else_weight != 100:
                                     if total_chain_else_weight > 100:
                                         st.error(f"⚠️ Chain ELSE total weight: {total_chain_else_weight}% (exceeds 100%)")
@@ -1932,8 +2038,8 @@ with tab3:
                                             st.success(f"✅ Chain ELSE allocation weight: {total_chain_else_allocation_weight}%")
                                         
                                         # Show weight distribution info
-                                        allocation_weight = chain.get('chain_else_allocation_weight', 50)
-                                        chain_weight = chain.get('chain_else_chain_weight', 50)
+                                        allocation_weight = chain.get('chain_else_allocation_weight', 0)
+                                        chain_weight = chain.get('chain_else_chain_weight', 100)
                                         st.info(f"📊 Chain ELSE Distribution: {allocation_weight}% allocations, {chain_weight}% chains")
                                         
                                         # Add button to add more allocations to chain ELSE
@@ -1962,6 +2068,210 @@ with tab3:
                                     })
                                     st.success(f"✅ Nested chain added to chain ELSE!")
                                     # Remove rerun to prevent state conflicts
+                                
+                                # Display nested chains within chain ELSE
+                                if chain.get('chain_else_nested_chains'):
+                                    with st.expander(f"🔗 Chain ELSE Nested Chains ({len(chain['chain_else_nested_chains'])})", expanded=True):
+                                        for nested_chain_idx, nested_chain in enumerate(chain['chain_else_nested_chains']):
+                                            st.markdown(f"""
+                                            <div class="nested-nested-chain-block" style="border-left: 3px solid #9C27B0; padding-left: 10px; margin-left: 20px;">
+                                                <div class="nested-nested-chain-header">
+                                                    <span>🔗 Nested Chain {nested_chain_idx + 1} in Chain ELSE</span>
+                                                </div>
+                                            """, unsafe_allow_html=True)
+                                            
+                                            # Display each block in the nested chain
+                                            for nested_block_idx, nested_chain_block in enumerate(nested_chain['chain_blocks']):
+                                                # Nested chain block styling
+                                                if nested_chain_block.get('is_else_if'):
+                                                    st.markdown(f"""
+                                                    <div class="nested-nested-else-if-block" style="border-left: 4px solid #FF5722; background-color: #FFF3E0; margin-left: 10px;">
+                                                        <div class="nested-nested-else-if-header">
+                                                            <span>🔗 Nested Chain ELSE IF Block {nested_block_idx + 1}</span>
+                                                        </div>
+                                                    """, unsafe_allow_html=True)
+                                                else:
+                                                    st.markdown(f"""
+                                                    <div class="nested-nested-if-block" style="border-left: 4px solid #2196F3; background-color: #E3F2FD; margin-left: 10px;">
+                                                        <div class="nested-nested-if-header">
+                                                            <span>🔗 Nested Chain IF Block {nested_block_idx + 1}</span>
+                                                        </div>
+                                                    """, unsafe_allow_html=True)
+                                                
+                                                # Nested Chain IF section
+                                                st.markdown('<div class="nested-chain-condition-block" style="border-left: 3px solid #2196F3; padding-left: 10px; margin-left: 0px;">', unsafe_allow_html=True)
+                                                if nested_chain_block.get('is_else_if'):
+                                                    st.markdown("**NESTED CHAIN ELSE IF:**")
+                                                else:
+                                                    st.markdown("**NESTED CHAIN IF:**")
+                                                
+                                                # Direct signal selection for nested chain
+                                                if st.session_state.signals:
+                                                    selected_nested_chain_signal = st.selectbox(
+                                                        "Select Signal:",
+                                                        [""] + [s['name'] for s in st.session_state.signals],
+                                                        key=f"nested_chain_signal_select_{branch_idx}_{chain_idx}_{nested_chain_idx}_{nested_block_idx}"
+                                                    )
+                                                    if selected_nested_chain_signal:
+                                                        if 'signals' not in nested_chain_block:
+                                                            nested_chain_block['signals'] = []
+                                                        # Check if signal already exists
+                                                        if not any(s.get('signal') == selected_nested_chain_signal for s in nested_chain_block.get('signals', [])):
+                                                            nested_chain_block['signals'].append({
+                                                                'signal': selected_nested_chain_signal, 
+                                                                'negated': False, 
+                                                                'operator': 'AND'
+                                                            })
+                                                            st.success(f"✅ Signal '{selected_nested_chain_signal}' added to nested chain!")
+                                                else:
+                                                    st.warning("No signals available. Create signals in the Signal Blocks tab first.")
+                                                
+                                                # Display nested chain IF signals
+                                                if nested_chain_block.get('signals'):
+                                                    with st.expander(f"📊 Nested Chain IF Signals ({len(nested_chain_block['signals'])})", expanded=True):
+                                                        for signal_idx, signal_config in enumerate(nested_chain_block['signals']):
+                                                            st.markdown(f"**Nested Chain Signal {signal_idx + 1}:**")
+                                                            
+                                                            col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
+                                                            with col1:
+                                                                signal_config['signal'] = st.selectbox(
+                                                                    f"Nested Chain Signal {signal_idx + 1}", 
+                                                                    [""] + [s['name'] for s in st.session_state.signals],
+                                                                    index=0 if not signal_config.get('signal') else 
+                                                                    [s['name'] for s in st.session_state.signals].index(signal_config['signal']) + 1,
+                                                                    key=f"nested_chain_if_signal_{branch_idx}_{chain_idx}_{nested_chain_idx}_{nested_block_idx}_{signal_idx}"
+                                                                )
+                                                            with col2:
+                                                                signal_config['negated'] = st.checkbox("NOT", key=f"nested_chain_if_negated_{branch_idx}_{chain_idx}_{nested_chain_idx}_{nested_block_idx}_{signal_idx}")
+                                                            with col3:
+                                                                if len(nested_chain_block['signals']) > 1 and signal_idx < len(nested_chain_block['signals']) - 1:
+                                                                    signal_config['operator'] = st.selectbox(
+                                                                        "Operator",
+                                                                        ["AND", "OR"],
+                                                                        index=0 if signal_config.get('operator', 'AND') == 'AND' else 1,
+                                                                        key=f"nested_chain_if_operator_{branch_idx}_{chain_idx}_{nested_chain_idx}_{nested_block_idx}_{signal_idx}"
+                                                                    )
+                                                                else:
+                                                                    st.write("")
+                                                            with col4:
+                                                                if len(nested_chain_block['signals']) > 1:
+                                                                    if st.button("🗑️", key=f"remove_nested_chain_if_signal_{branch_idx}_{chain_idx}_{nested_chain_idx}_{nested_block_idx}_{signal_idx}"):
+                                                                        nested_chain_block['signals'].pop(signal_idx)
+                                                                else:
+                                                                    st.write("")
+                                                            
+                                                            st.markdown("<br>", unsafe_allow_html=True)
+                                                        
+                                                        # Add button to add more signals
+                                                        if st.button("➕ Add Another Signal", key=f"add_more_nested_chain_signal_{branch_idx}_{chain_idx}_{nested_chain_idx}_{nested_block_idx}"):
+                                                            nested_chain_block['signals'].append({
+                                                                'signal': '', 
+                                                                'negated': False, 
+                                                                'operator': 'AND'
+                                                            })
+                                                else:
+                                                    st.write("**No signals in nested chain IF yet**")
+                                                
+                                                st.markdown('</div>', unsafe_allow_html=True)
+                                                
+                                                # Nested Chain THEN section
+                                                st.markdown('<div class="nested-chain-then-block" style="border-left: 3px solid #FF9800; padding-left: 10px; margin-left: 0px;">', unsafe_allow_html=True)
+                                                st.markdown("**NESTED CHAIN THEN:**")
+                                                
+                                                # Direct allocation selection for nested chain
+                                                if st.session_state.output_allocations:
+                                                    selected_nested_chain_allocation = st.selectbox(
+                                                        "Select Allocation:",
+                                                        [""] + list(st.session_state.output_allocations.keys()),
+                                                        key=f"nested_chain_allocation_select_{branch_idx}_{chain_idx}_{nested_chain_idx}_{nested_block_idx}_{id(nested_chain_block)}"
+                                                    )
+                                                    if selected_nested_chain_allocation:
+                                                        if 'allocations' not in nested_chain_block:
+                                                            nested_chain_block['allocations'] = []
+                                                        # Check if allocation already exists
+                                                        if not any(a.get('allocation') == selected_nested_chain_allocation for a in nested_chain_block.get('allocations', [])):
+                                                            nested_chain_block['allocations'].append({
+                                                                'allocation': selected_nested_chain_allocation, 
+                                                                'weight': 100
+                                                            })
+                                                            st.success(f"✅ Allocation '{selected_nested_chain_allocation}' added to nested chain!")
+                                                else:
+                                                    st.warning("No allocations available. Create allocations in the Allocation Blocks tab first.")
+                                                
+                                                # Display nested chain THEN allocations
+                                                if nested_chain_block.get('allocations'):
+                                                    with st.expander(f"💰 Nested Chain THEN Allocations ({len(nested_chain_block['allocations'])})", expanded=True):
+                                                        for alloc_idx, allocation_config in enumerate(nested_chain_block['allocations']):
+                                                            col1, col2, col3 = st.columns([2, 1, 1])
+                                                            with col1:
+                                                                allocation_config['allocation'] = st.selectbox(
+                                                                    f"Nested Chain Allocation {alloc_idx + 1}", 
+                                                                    list(st.session_state.output_allocations.keys()),
+                                                                    key=f"nested_chain_then_allocation_{branch_idx}_{chain_idx}_{nested_chain_idx}_{nested_block_idx}_{alloc_idx}"
+                                                                )
+                                                            with col2:
+                                                                new_weight = st.number_input(
+                                                                    "Weight %",
+                                                                    min_value=0,
+                                                                    max_value=100,
+                                                                    value=allocation_config.get('weight', 100),
+                                                                    key=f"nested_chain_then_weight_{branch_idx}_{chain_idx}_{nested_chain_idx}_{nested_block_idx}_{alloc_idx}"
+                                                                )
+                                                                # Only update if value actually changed to avoid unnecessary state changes
+                                                                if new_weight != allocation_config.get('weight', 100):
+                                                                    allocation_config['weight'] = new_weight
+                                                            with col3:
+                                                                if len(nested_chain_block['allocations']) > 1:
+                                                                    if st.button("🗑️", key=f"remove_nested_chain_{branch_idx}_{chain_idx}_{nested_chain_idx}_{nested_block_idx}_{alloc_idx}_{id(allocation_config)}_delete"):
+                                                                        nested_chain_block['allocations'].pop(alloc_idx)
+                                                                else:
+                                                                    st.write("")
+                                                        
+                                                        # Show total weight for nested chain branch
+                                                        total_nested_chain_weight = sum(alloc.get('weight', 0) for alloc in nested_chain_block['allocations'])
+                                                        if total_nested_chain_weight != 100:
+                                                            if total_nested_chain_weight > 100:
+                                                                st.error(f"⚠️ Nested chain total weight: {total_nested_chain_weight}% (exceeds 100%)")
+                                                            else:
+                                                                st.warning(f"ℹ️ Nested chain total weight: {total_nested_chain_weight}% ({(100-total_nested_chain_weight):.1f}% unallocated)")
+                                                        else:
+                                                            st.success(f"✅ Nested chain total weight: {total_nested_chain_weight}%")
+                                                        
+                                                        # Add button to add more allocations
+                                                        if st.button("➕ Add Another Allocation", key=f"add_more_nested_chain_allocation_{branch_idx}_{chain_idx}_{nested_chain_idx}_{nested_block_idx}"):
+                                                            nested_chain_block['allocations'].append({
+                                                                'allocation': '', 
+                                                                'weight': 100
+                                                            })
+                                                else:
+                                                    st.write("**No allocations in nested chain THEN yet**")
+                                                
+                                                st.markdown('</div>', unsafe_allow_html=True)
+                                                
+                                                # Add button to add next block in nested chain
+                                                if st.button("➕ Add Next Block in Nested Chain", key=f"add_next_nested_chain_block_{branch_idx}_{chain_idx}_{nested_chain_idx}_{nested_block_idx}"):
+                                                    nested_chain['chain_blocks'].append({
+                                                        'type': 'chain_if_else',
+                                                        'signals': [],
+                                                        'allocations': [],
+                                                        'else_allocations': [],
+                                                        'else_signals': [],
+                                                        'else_nested_blocks': [],
+                                                        'is_else_if': True
+                                                    })
+                                                
+                                                # Delete nested chain block
+                                                if len(nested_chain['chain_blocks']) > 1:
+                                                    if st.button("🗑️ Delete Nested Chain Block", key=f"delete_nested_chain_block_{branch_idx}_{chain_idx}_{nested_chain_idx}_{nested_block_idx}"):
+                                                        nested_chain['chain_blocks'].pop(nested_block_idx)
+                                                
+                                                st.markdown("</div>", unsafe_allow_html=True)
+                                            
+                                            # Delete nested chain
+                                            if st.button("🗑️ Delete Nested Chain", key=f"delete_nested_chain_{branch_idx}_{chain_idx}_{nested_chain_idx}"):
+                                                chain['chain_else_nested_chains'].pop(nested_chain_idx)
+                                            
+                                            st.markdown("</div>", unsafe_allow_html=True)
                                 
                                 st.markdown('</div>', unsafe_allow_html=True)
                                 
@@ -2124,20 +2434,12 @@ with tab3:
 
 # Tab 4: Backtest
 with tab4:
-    st.header("📈 Backtest")
+    st.header("📈 Backtest Results")
     
-    # Backtest configuration
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        start_date = st.date_input("Start Date", value=datetime.now() - timedelta(days=365))
-    with col2:
-        end_date = st.date_input("End Date", value=datetime.now())
-    with col3:
-        benchmark_ticker = st.text_input("Benchmark Ticker", value="SPY")
-    
-    # Run backtest button
-    if st.button("🚀 Run Backtest", type="primary"):
+    # Check if backtest was triggered from strategy builder
+    if st.session_state.get('run_backtest', False):
+        st.session_state.run_backtest = False  # Reset the trigger
+        
         if not st.session_state.strategy_branches:
             st.error("Please create at least one strategy branch first.")
         elif not st.session_state.output_allocations:
@@ -2145,6 +2447,11 @@ with tab4:
         else:
             with st.spinner("Running backtest..."):
                 try:
+                    # Get backtest parameters from session state or use defaults
+                    start_date = st.session_state.get('backtest_start_date', datetime.now() - timedelta(days=365))
+                    end_date = st.session_state.get('backtest_end_date', datetime.now())
+                    benchmark_ticker = st.session_state.get('backtest_benchmark', 'SPY')
+                    
                     # Collect all tickers needed
                     all_tickers = set()
                     
@@ -2264,8 +2571,8 @@ with tab4:
                                 strategy_signals = strategy_signals | if_result
                             else:
                                 # Use ELSE allocations and chains only when IF condition is NOT met
-                                else_allocation_weight = branch.get('else_allocation_weight', 50) / 100.0
-                                else_chain_weight = branch.get('else_chain_weight', 50) / 100.0
+                                else_allocation_weight = branch.get('else_allocation_weight', 0) / 100.0
+                                else_chain_weight = branch.get('else_chain_weight', 100) / 100.0
                                 
                                 # Create ELSE signals (inverse of IF signals)
                                 else_signals = ~if_result
@@ -2335,6 +2642,9 @@ with tab4:
                         # Display results
                         st.subheader("📊 Backtest Results")
                         
+                        # Strategy info
+                        st.info(f"📋 Strategy: '{st.session_state.strategy_name}' | Period: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')} | Benchmark: {benchmark_ticker}")
+                        
                         # Performance metrics
                         col1, col2, col3, col4 = st.columns(4)
                         
@@ -2399,4 +2709,4 @@ with tab4:
                     st.error(f"Error during backtest: {str(e)}")
                     st.exception(e)
     else:
-        st.info("Click 'Run Backtest' to test your strategy against historical data.") 
+        st.info("💡 Go to the Strategy Builder tab to build and run your strategy!") 
