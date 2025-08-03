@@ -1353,6 +1353,40 @@ with tab3:
                     st.markdown('<div class="else-block" style="border-left: 3px solid #4CAF50; padding-left: 10px; margin-left: 30px;">', unsafe_allow_html=True)
                     st.markdown("**ELSE:**")
                     
+                    # Weight distribution between allocations and chains
+                    st.markdown("**ELSE Weight Distribution:**")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if 'else_allocation_weight' not in branch:
+                            branch['else_allocation_weight'] = 50
+                        branch['else_allocation_weight'] = st.number_input(
+                            "Allocation Weight %",
+                            min_value=0,
+                            max_value=100,
+                            value=branch.get('else_allocation_weight', 50),
+                            key=f"else_allocation_weight_{branch_idx}"
+                        )
+                    with col2:
+                        if 'else_chain_weight' not in branch:
+                            branch['else_chain_weight'] = 50
+                        branch['else_chain_weight'] = st.number_input(
+                            "Chain Weight %",
+                            min_value=0,
+                            max_value=100,
+                            value=branch.get('else_chain_weight', 50),
+                            key=f"else_chain_weight_{branch_idx}"
+                        )
+                    
+                    # Validate total weight
+                    total_else_weight = branch.get('else_allocation_weight', 0) + branch.get('else_chain_weight', 0)
+                    if total_else_weight != 100:
+                        if total_else_weight > 100:
+                            st.error(f"⚠️ ELSE total weight: {total_else_weight}% (exceeds 100%)")
+                        else:
+                            st.warning(f"ℹ️ ELSE total weight: {total_else_weight}% ({(100-total_else_weight):.1f}% unallocated)")
+                    else:
+                        st.success(f"✅ ELSE total weight: {total_else_weight}%")
+                    
                     # Always visible allocation dropdown for ELSE
                     st.markdown("**Add Allocation to ELSE:**")
                     if st.session_state.output_allocations:
@@ -1423,15 +1457,20 @@ with tab3:
                                     else:
                                         st.write("")  # Empty space for alignment
                             
-                            # Show total ELSE weight for this branch
-                            total_else_weight = sum(alloc.get('weight', 0) for alloc in branch['else_allocations'])
-                            if total_else_weight != 100:
-                                if total_else_weight > 100:
-                                    st.error(f"⚠️ ELSE total weight: {total_else_weight}% (exceeds 100%)")
+                            # Show total ELSE allocation weight for this branch
+                            total_else_allocation_weight = sum(alloc.get('weight', 0) for alloc in branch['else_allocations'])
+                            if total_else_allocation_weight != 100:
+                                if total_else_allocation_weight > 100:
+                                    st.error(f"⚠️ ELSE allocation weight: {total_else_allocation_weight}% (exceeds 100%)")
                                 else:
-                                    st.warning(f"ℹ️ ELSE total weight: {total_else_weight}% ({(100-total_else_weight):.1f}% unallocated)")
+                                    st.warning(f"ℹ️ ELSE allocation weight: {total_else_allocation_weight}% ({(100-total_else_allocation_weight):.1f}% unallocated)")
                             else:
-                                st.success(f"✅ ELSE total weight: {total_else_weight}%")
+                                st.success(f"✅ ELSE allocation weight: {total_else_allocation_weight}%")
+                            
+                            # Show weight distribution info
+                            allocation_weight = branch.get('else_allocation_weight', 50)
+                            chain_weight = branch.get('else_chain_weight', 50)
+                            st.info(f"📊 ELSE Distribution: {allocation_weight}% allocations, {chain_weight}% chains")
                             
                             # Add button to add more allocations to ELSE
                             if st.button("➕ Add Another Allocation to ELSE", key=f"add_more_else_allocation_{branch_idx}"):
@@ -2031,20 +2070,34 @@ with tab4:
                                         # Add to strategy signals (simplified - in practice you'd need more complex logic)
                                         strategy_signals = strategy_signals | if_result
                             else:
-                                # Use ELSE allocations
-                                for alloc_config in else_allocations:
-                                    allocation_name = alloc_config.get('allocation', '')
-                                    if allocation_name in st.session_state.output_allocations:
-                                        allocation = st.session_state.output_allocations[allocation_name]
-                                        weight = alloc_config.get('weight', 100) / 100.0
-                                        
-                                        # Calculate equity curve for this allocation
-                                        alloc_equity = calculate_multi_ticker_equity_curve(
-                                            ~if_result, allocation, data
-                                        )
-                                        
-                                        # Add to strategy signals
-                                        strategy_signals = strategy_signals | ~if_result
+                                # Use ELSE allocations and chains with weight distribution
+                                else_allocation_weight = branch.get('else_allocation_weight', 50) / 100.0
+                                else_chain_weight = branch.get('else_chain_weight', 50) / 100.0
+                                
+                                # Process ELSE allocations
+                                if else_allocations and else_allocation_weight > 0:
+                                    for alloc_config in else_allocations:
+                                        allocation_name = alloc_config.get('allocation', '')
+                                        if allocation_name in st.session_state.output_allocations:
+                                            allocation = st.session_state.output_allocations[allocation_name]
+                                            weight = (alloc_config.get('weight', 100) / 100.0) * else_allocation_weight
+                                            
+                                            # Calculate equity curve for this allocation
+                                            alloc_equity = calculate_multi_ticker_equity_curve(
+                                                ~if_result, allocation, data
+                                            )
+                                
+                                # Process ELSE chains (nested IF/THEN/ELSE chains)
+                                if branch.get('else_nested_chains') and else_chain_weight > 0:
+                                    for chain in branch['else_nested_chains']:
+                                        if chain['type'] == 'nested_if_else_chain':
+                                            for chain_block in chain.get('chain_blocks', []):
+                                                # Process each chain block (simplified - would need more complex logic)
+                                                # This is a placeholder for the nested chain processing
+                                                pass
+                                
+                                # Add to strategy signals
+                                strategy_signals = strategy_signals | ~if_result
                         else:
                             # Regular branch logic
                             branch_signals = pd.Series(True, index=strategy_signals.index)
