@@ -1321,7 +1321,7 @@ with tab3:
                                     )
                                 with col3:
                                     if len(branch['allocations']) > 1:  # Don't allow removing the last allocation
-                                        if st.button("🗑️", key=f"remove_then_branch_{branch_idx}_allocation_{alloc_idx}"):
+                                        if st.button("🗑️", key=f"remove_then_branch_{branch_idx}_allocation_{alloc_idx}_delete"):
                                             branch['allocations'].pop(alloc_idx)
                                             st.rerun()
                                     else:
@@ -1352,29 +1352,6 @@ with tab3:
                     # ELSE section
                     st.markdown('<div class="else-block" style="border-left: 3px solid #4CAF50; padding-left: 10px; margin-left: 30px;">', unsafe_allow_html=True)
                     st.markdown("**ELSE:**")
-                    
-                    # Always visible signal dropdown for ELSE
-                    st.markdown("**Add Signal to ELSE:**")
-                    if st.session_state.signals:
-                        selected_else_signal = st.selectbox(
-                            "Select Signal:",
-                            [""] + [s['name'] for s in st.session_state.signals],
-                            key=f"else_signal_select_{branch_idx}"
-                        )
-                        if selected_else_signal:
-                            if 'else_signals' not in branch:
-                                branch['else_signals'] = []
-                            # Check if signal already exists
-                            if not any(s.get('signal') == selected_else_signal for s in branch.get('else_signals', [])):
-                                branch['else_signals'].append({
-                                    'signal': selected_else_signal, 
-                                    'negated': False, 
-                                    'operator': 'AND'
-                                })
-                                st.success(f"✅ Signal '{selected_else_signal}' added to ELSE!")
-                                st.rerun()
-                    else:
-                        st.warning("No signals available. Create signals in the Signal Blocks tab first.")
                     
                     # Always visible allocation dropdown for ELSE
                     st.markdown("**Add Allocation to ELSE:**")
@@ -1417,58 +1394,7 @@ with tab3:
                         st.success(f"✅ IF/THEN/ELSE chain added to ELSE!")
                         st.rerun()
                     
-                    # Display ELSE signals in collapsible expander
-                    if branch.get('else_signals'):
-                        with st.expander(f"📊 ELSE Signals ({len(branch['else_signals'])})", expanded=True):
-                            for else_signal_idx, else_signal_config in enumerate(branch['else_signals']):
-                                # Display each signal in its own row
-                                st.markdown(f"**ELSE Signal {else_signal_idx + 1}:**")
-                                
-                                col1, col2, col3 = st.columns([3, 1, 1])
-                                with col1:
-                                    if else_signal_config.get('signal'):
-                                        st.write(f"• {else_signal_config['signal']}")
-                                    else:
-                                        # Show dropdown for empty signal
-                                        else_signal_config['signal'] = st.selectbox(
-                                            "Select Signal:",
-                                            [""] + [s['name'] for s in st.session_state.signals],
-                                            key=f"else_signal_select_{branch_idx}_{else_signal_idx}"
-                                        )
-                                with col2:
-                                    else_signal_config['negated'] = st.checkbox(
-                                        "NOT",
-                                        value=else_signal_config.get('negated', False),
-                                        key=f"else_signal_negated_{branch_idx}_{else_signal_idx}"
-                                    )
-                                with col3:
-                                    if len(branch['else_signals']) > 1:
-                                        if st.button("🗑️", key=f"remove_else_signal_{branch_idx}_{else_signal_idx}"):
-                                            branch['else_signals'].pop(else_signal_idx)
-                                            st.rerun()
-                                    else:
-                                        st.write("")
-                                
-                                # Show operator for multiple signals
-                                if len(branch['else_signals']) > 1 and else_signal_idx < len(branch['else_signals']) - 1:
-                                    else_signal_config['operator'] = st.selectbox(
-                                        "Operator",
-                                        ["AND", "OR"],
-                                        index=0 if else_signal_config.get('operator', 'AND') == 'AND' else 1,
-                                        key=f"else_signal_operator_{branch_idx}_{else_signal_idx}"
-                                    )
-                                
-                                # Add some spacing between signals
-                                st.markdown("<br>", unsafe_allow_html=True)
-                            
-                            # Add button to add more signals to ELSE
-                            if st.button("➕ Add Another Signal to ELSE", key=f"add_more_else_signal_{branch_idx}"):
-                                branch['else_signals'].append({
-                                    'signal': '', 
-                                    'negated': False, 
-                                    'operator': 'AND'
-                                })
-                                st.rerun()
+
                     
                     # Display ELSE allocations in collapsible expander
                     if branch.get('else_allocations'):
@@ -1491,7 +1417,7 @@ with tab3:
                                     )
                                 with col3:
                                     if len(branch['else_allocations']) > 1:  # Don't allow removing the last allocation
-                                        if st.button("🗑️", key=f"remove_else_branch_{branch_idx}_allocation_{else_alloc_idx}"):
+                                        if st.button("🗑️", key=f"remove_else_branch_{branch_idx}_allocation_{else_alloc_idx}_delete"):
                                             branch['else_allocations'].pop(else_alloc_idx)
                                             st.rerun()
                                     else:
@@ -1817,9 +1743,9 @@ with tab3:
                                 
                                 st.markdown("</div>", unsafe_allow_html=True)
                     
-                    # Show status if no signals, allocations, nested blocks, or chains
-                    if not branch.get('else_signals') and not branch.get('else_allocations') and not branch.get('else_nested_blocks') and not branch.get('else_nested_chains'):
-                        st.write("**No signals, allocations, nested blocks, or chains in ELSE yet**")
+                    # Show status if no allocations, nested blocks, or chains
+                    if not branch.get('else_allocations') and not branch.get('else_nested_blocks') and not branch.get('else_nested_chains'):
+                        st.write("**No allocations, nested blocks, or chains in ELSE yet**")
                     
                     st.markdown('</div>', unsafe_allow_html=True)
             
