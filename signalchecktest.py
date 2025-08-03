@@ -1186,584 +1186,366 @@ with tab3:
                     </div>
                 """, unsafe_allow_html=True)
                 
-                # IF section
-                st.markdown('<div class="condition-block" style="border-left: 3px solid #2196F3; padding-left: 10px; margin-left: 0px;">', unsafe_allow_html=True)
-                if branch.get('is_else_if'):
-                    st.markdown("**ELSE IF:**")
-                else:
-                    st.markdown("**IF:**")
-                
-                # Initialize session state for IF dropdown visibility
-                if f'show_if_dropdown_{branch_idx}' not in st.session_state:
-                    st.session_state[f'show_if_dropdown_{branch_idx}'] = False
-                
-                # Add signal button for IF - dropdown with available signals
-                if st.button("➕", key=f"add_if_{branch_idx}"):
-                    st.session_state[f'show_if_dropdown_{branch_idx}'] = True
-                    st.rerun()
-                
-                # Show dropdown if flag is set
-                if st.session_state[f'show_if_dropdown_{branch_idx}']:
-                    st.markdown("**Add Signal to IF:**")
-                    st.write(f"Debug: {len(st.session_state.signals)} signals available") # Debug info
+                # Make the entire IF/THEN/ELSE block collapsible
+                with st.expander(f"🔗 IF/THEN/ELSE Block {branch_idx + 1}", expanded=True):
+                    # IF section
+                    st.markdown('<div class="condition-block" style="border-left: 3px solid #2196F3; padding-left: 10px; margin-left: 0px;">', unsafe_allow_html=True)
+                    if branch.get('is_else_if'):
+                        st.markdown("**ELSE IF:**")
+                    else:
+                        st.markdown("**IF:**")
+                    
+                    # Always visible signal dropdown
+                    st.markdown("**Add Signal:**")
                     if st.session_state.signals:
                         selected_signal = st.selectbox(
                             "Select Signal:",
                             [""] + [s['name'] for s in st.session_state.signals],
                             key=f"if_signal_select_{branch_idx}"
                         )
-                        col_a, col_b = st.columns([1, 1])
-                        with col_a:
-                            if st.button("📊 Add Selected Signal", key=f"add_if_selected_signal_{branch_idx}"):
-                                if selected_signal:
-                                    if 'signals' not in branch:
-                                        branch['signals'] = []
-                                    branch['signals'].append({
-                                        'signal': selected_signal, 
-                                        'negated': False, 
-                                        'operator': 'AND'
-                                    })
-                                    st.session_state[f'show_if_dropdown_{branch_idx}'] = False
-                                    st.success(f"✅ Signal '{selected_signal}' added to IF!") # Success message
-                                    st.rerun()
-                                else:
-                                    st.warning("Please select a signal.")
-                        with col_b:
-                            if st.button("❌ Cancel", key=f"cancel_if_signal_{branch_idx}"):
-                                st.session_state[f'show_if_dropdown_{branch_idx}'] = False
+                        if selected_signal:
+                            if 'signals' not in branch:
+                                branch['signals'] = []
+                            # Check if signal already exists
+                            if not any(s.get('signal') == selected_signal for s in branch.get('signals', [])):
+                                branch['signals'].append({
+                                    'signal': selected_signal, 
+                                    'negated': False, 
+                                    'operator': 'AND'
+                                })
+                                st.success(f"✅ Signal '{selected_signal}' added!")
                                 st.rerun()
                     else:
                         st.warning("No signals available. Create signals in the Signal Blocks tab first.")
-                        if st.button("❌ Cancel", key=f"cancel_if_signal_{branch_idx}"):
-                            st.session_state[f'show_if_dropdown_{branch_idx}'] = False
-                            st.rerun()
-                
-                # Display IF signals in collapsible expander
-                if branch.get('signals'):
-                    with st.expander(f"📊 IF Signals ({len(branch['signals'])})", expanded=True):
-                        for signal_idx, signal_config in enumerate(branch['signals']):
-                            # Display each signal in its own row
-                            st.markdown(f"**Signal {signal_idx + 1}:**")
-                            
-                            col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
-                            
-                            with col1:
-                                signal_config['signal'] = st.selectbox(
-                                    f"Signal {signal_idx + 1}", 
-                                    [""] + [s['name'] for s in st.session_state.signals],
-                                    index=0 if not signal_config.get('signal') else 
-                                    [s['name'] for s in st.session_state.signals].index(signal_config['signal']) + 1,
-                                    key=f"if_branch_{branch_idx}_signal_{signal_idx}"
-                                )
-                            
-                            with col2:
-                                signal_config['negated'] = st.checkbox("NOT", key=f"if_branch_{branch_idx}_negated_{signal_idx}")
-                            
-                            with col3:
-                                if len(branch['signals']) > 1 and signal_idx < len(branch['signals']) - 1:
-                                    signal_config['operator'] = st.selectbox(
-                                        "Operator",
-                                        ["AND", "OR"],
-                                        index=0 if signal_config.get('operator', 'AND') == 'AND' else 1,
-                                        key=f"if_branch_{branch_idx}_operator_{signal_idx}"
+                    
+                    # Display IF signals in collapsible expander
+                    if branch.get('signals'):
+                        with st.expander(f"📊 IF Signals ({len(branch['signals'])})", expanded=True):
+                            for signal_idx, signal_config in enumerate(branch['signals']):
+                                # Display each signal in its own row
+                                st.markdown(f"**Signal {signal_idx + 1}:**")
+                                
+                                col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
+                                
+                                with col1:
+                                    signal_config['signal'] = st.selectbox(
+                                        f"Signal {signal_idx + 1}", 
+                                        [""] + [s['name'] for s in st.session_state.signals],
+                                        index=0 if not signal_config.get('signal') else 
+                                        [s['name'] for s in st.session_state.signals].index(signal_config['signal']) + 1,
+                                        key=f"if_branch_{branch_idx}_signal_{signal_idx}"
                                     )
-                                else:
-                                    st.write("")  # Empty space for alignment
+                                
+                                with col2:
+                                    signal_config['negated'] = st.checkbox("NOT", key=f"if_branch_{branch_idx}_negated_{signal_idx}")
+                                
+                                with col3:
+                                    if len(branch['signals']) > 1 and signal_idx < len(branch['signals']) - 1:
+                                        signal_config['operator'] = st.selectbox(
+                                            "Operator",
+                                            ["AND", "OR"],
+                                            index=0 if signal_config.get('operator', 'AND') == 'AND' else 1,
+                                            key=f"if_branch_{branch_idx}_operator_{signal_idx}"
+                                        )
+                                    else:
+                                        st.write("")  # Empty space for alignment
+                                
+                                with col4:
+                                    if len(branch['signals']) > 1:
+                                        if st.button("🗑️", key=f"remove_if_branch_{branch_idx}_signal_{signal_idx}"):
+                                            branch['signals'].pop(signal_idx)
+                                            st.rerun()
+                                    else:
+                                        st.write("")  # Empty space for alignment
+                                
+                                # Add some spacing between signals
+                                st.markdown("<br>", unsafe_allow_html=True)
                             
-                            with col4:
-                                if len(branch['signals']) > 1:
-                                    if st.button("🗑️", key=f"remove_if_branch_{branch_idx}_signal_{signal_idx}"):
-                                        branch['signals'].pop(signal_idx)
-                                        st.rerun()
-                                else:
-                                    st.write("")  # Empty space for alignment
-                            
-                            # Add some spacing between signals
-                            st.markdown("<br>", unsafe_allow_html=True)
-                else:
-                    st.write("**No signals in IF yet**")
-                
-                st.markdown('</div>', unsafe_allow_html=True)
-                
-                # THEN section
-                st.markdown('<div class="then-block" style="border-left: 3px solid #FF9800; padding-left: 10px; margin-left: 0px;">', unsafe_allow_html=True)
-                st.markdown("**THEN:**")
-                
-                # Initialize session state for THEN dropdown visibility
-                if f'show_then_dropdown_{branch_idx}' not in st.session_state:
-                    st.session_state[f'show_then_dropdown_{branch_idx}'] = False
-                
-                # Add allocation button for THEN - dropdown with available allocations
-                if st.button("➕", key=f"add_then_{branch_idx}"):
-                    st.session_state[f'show_then_dropdown_{branch_idx}'] = True
-                    st.rerun()
-                
-                # Show dropdown if flag is set
-                if st.session_state[f'show_then_dropdown_{branch_idx}']:
-                    st.markdown("**Add Allocation to THEN:**")
-                    # Debug: Show allocation count
-                    st.write(f"Debug: {len(st.session_state.output_allocations)} allocations available")
+                            # Add button to add more signals
+                            if st.button("➕ Add Another Signal", key=f"add_more_if_signal_{branch_idx}"):
+                                branch['signals'].append({
+                                    'signal': '', 
+                                    'negated': False, 
+                                    'operator': 'AND'
+                                })
+                                st.rerun()
+                    else:
+                        st.write("**No signals in IF yet**")
+                    
+                    st.markdown('</div>', unsafe_allow_html=True)
+                    
+                    # THEN section
+                    st.markdown('<div class="then-block" style="border-left: 3px solid #FF9800; padding-left: 10px; margin-left: 0px;">', unsafe_allow_html=True)
+                    st.markdown("**THEN:**")
+                    
+                    # Always visible allocation dropdown
+                    st.markdown("**Add Allocation:**")
                     if st.session_state.output_allocations:
                         selected_allocation = st.selectbox(
                             "Select Allocation:",
                             [""] + list(st.session_state.output_allocations.keys()),
                             key=f"then_allocation_select_{branch_idx}"
                         )
-                        col_a, col_b = st.columns([1, 1])
-                        with col_a:
-                            if st.button("💰 Add Selected Allocation", key=f"add_then_selected_allocation_{branch_idx}"):
-                                if selected_allocation:
-                                    if 'allocations' not in branch:
-                                        branch['allocations'] = []
-                                    branch['allocations'].append({
-                                        'allocation': selected_allocation, 
-                                        'weight': 100
-                                    })
-                                    st.session_state[f'show_then_dropdown_{branch_idx}'] = False
-                                    st.success(f"✅ Allocation '{selected_allocation}' added to THEN!")
-                                    st.rerun()
-                                else:
-                                    st.warning("Please select an allocation.")
-                        with col_b:
-                            if st.button("❌ Cancel", key=f"cancel_then_allocation_{branch_idx}"):
-                                st.session_state[f'show_then_dropdown_{branch_idx}'] = False
+                        if selected_allocation:
+                            if 'allocations' not in branch:
+                                branch['allocations'] = []
+                            # Check if allocation already exists
+                            if not any(a.get('allocation') == selected_allocation for a in branch.get('allocations', [])):
+                                branch['allocations'].append({
+                                    'allocation': selected_allocation, 
+                                    'weight': 100
+                                })
+                                st.success(f"✅ Allocation '{selected_allocation}' added!")
                                 st.rerun()
                     else:
                         st.warning("No allocations available. Create allocations in the Allocation Blocks tab first.")
-                        if st.button("❌ Cancel", key=f"cancel_then_allocation_{branch_idx}"):
-                            st.session_state[f'show_then_dropdown_{branch_idx}'] = False
-                            st.rerun()
-                
-                # Display THEN allocations in collapsible expander
-                if branch.get('allocations'):
-                    with st.expander(f"💰 THEN Allocations ({len(branch['allocations'])})", expanded=True):
-                        for alloc_idx, allocation_config in enumerate(branch['allocations']):
-                            col1, col2, col3 = st.columns([2, 1, 1])
-                            with col1:
-                                allocation_config['allocation'] = st.selectbox(
-                                    f"Allocation {alloc_idx + 1}", 
-                                    list(st.session_state.output_allocations.keys()),
-                                    key=f"then_branch_{branch_idx}_allocation_{alloc_idx}"
-                                )
-                            with col2:
-                                allocation_config['weight'] = st.number_input(
-                                    "Weight %",
-                                    min_value=0,
-                                    max_value=100,
-                                    value=allocation_config.get('weight', 100),
-                                    key=f"then_branch_{branch_idx}_weight_{alloc_idx}"
-                                )
-                            with col3:
-                                if len(branch['allocations']) > 1:  # Don't allow removing the last allocation
-                                    if st.button("🗑️", key=f"remove_then_branch_{branch_idx}_allocation_{alloc_idx}"):
-                                        branch['allocations'].pop(alloc_idx)
-                                        st.rerun()
+                    
+                    # Display THEN allocations in collapsible expander
+                    if branch.get('allocations'):
+                        with st.expander(f"💰 THEN Allocations ({len(branch['allocations'])})", expanded=True):
+                            for alloc_idx, allocation_config in enumerate(branch['allocations']):
+                                col1, col2, col3 = st.columns([2, 1, 1])
+                                with col1:
+                                    allocation_config['allocation'] = st.selectbox(
+                                        f"Allocation {alloc_idx + 1}", 
+                                        list(st.session_state.output_allocations.keys()),
+                                        key=f"then_branch_{branch_idx}_allocation_{alloc_idx}"
+                                    )
+                                with col2:
+                                    allocation_config['weight'] = st.number_input(
+                                        "Weight %",
+                                        min_value=0,
+                                        max_value=100,
+                                        value=allocation_config.get('weight', 100),
+                                        key=f"then_branch_{branch_idx}_weight_{alloc_idx}"
+                                    )
+                                with col3:
+                                    if len(branch['allocations']) > 1:  # Don't allow removing the last allocation
+                                        if st.button("🗑️", key=f"remove_then_branch_{branch_idx}_allocation_{alloc_idx}"):
+                                            branch['allocations'].pop(alloc_idx)
+                                            st.rerun()
+                                    else:
+                                        st.write("")  # Empty space for alignment
+                            
+                            # Show total weight for this branch
+                            total_branch_weight = sum(alloc.get('weight', 0) for alloc in branch['allocations'])
+                            if total_branch_weight != 100:
+                                if total_branch_weight > 100:
+                                    st.error(f"⚠️ Branch total weight: {total_branch_weight}% (exceeds 100%)")
                                 else:
-                                    st.write("")  # Empty space for alignment
-                        
-                        # Show total weight for this branch
-                        total_branch_weight = sum(alloc.get('weight', 0) for alloc in branch['allocations'])
-                        if total_branch_weight != 100:
-                            if total_branch_weight > 100:
-                                st.error(f"⚠️ Branch total weight: {total_branch_weight}% (exceeds 100%)")
+                                    st.warning(f"ℹ️ Branch total weight: {total_branch_weight}% ({(100-total_branch_weight):.1f}% unallocated)")
                             else:
-                                st.warning(f"ℹ️ Branch total weight: {total_branch_weight}% ({(100-total_branch_weight):.1f}% unallocated)")
-                        else:
-                            st.success(f"✅ Branch total weight: {total_branch_weight}%")
-                else:
-                    st.write("**No allocations in THEN yet**")
-                
-                st.markdown('</div>', unsafe_allow_html=True)
-                
-                # ELSE section
-                st.markdown('<div class="else-block" style="border-left: 3px solid #4CAF50; padding-left: 10px; margin-left: 30px;">', unsafe_allow_html=True)
-                st.markdown("**ELSE:**")
-                
-                # Initialize session state for ELSE dropdown visibility
-                if f'show_else_dropdown_{branch_idx}' not in st.session_state:
-                    st.session_state[f'show_else_dropdown_{branch_idx}'] = False
-                
-                # Add button for ELSE - dropdown with available signals and allocations
-                if st.button("➕", key=f"add_else_{branch_idx}"):
-                    st.session_state[f'show_else_dropdown_{branch_idx}'] = True
-                    st.rerun()
-                
-                # Show dropdown if flag is set
-                if st.session_state[f'show_else_dropdown_{branch_idx}']:
-                    st.markdown("**Add to ELSE:**")
-                    
-                    # Show available signals and allocations count
-                    st.write(f"Debug: {len(st.session_state.signals)} signals, {len(st.session_state.output_allocations)} allocations available")
-                    
-                    # Create options list with signals, allocations, nested if/else, and else if
-                    signal_options = [f"Signal: {s['name']}" for s in st.session_state.signals]
-                    allocation_options = [f"Allocation: {a}" for a in st.session_state.output_allocations.keys()]
-                    all_options = [""] + signal_options + allocation_options + ["Nested If/Else Block", "ELSE IF (Next Condition)", "Nested IF/THEN/ELSE Chain"]
-                    
-                    if all_options:
-                        selected_option = st.selectbox(
-                            "Select Signal, Allocation, Nested Block, ELSE IF, or Nested Chain:",
-                            all_options,
-                            key=f"else_option_select_{branch_idx}"
-                        )
-                        col_a, col_b = st.columns([1, 1])
-                        with col_a:
-                            if st.button("📊 Add Selected", key=f"add_else_selected_{branch_idx}"):
-                                if selected_option:
-                                    if selected_option.startswith("Signal: "):
-                                        # Add signal to ELSE
-                                        signal_name = selected_option.replace("Signal: ", "")
-                                        if 'else_signals' not in branch:
-                                            branch['else_signals'] = []
-                                        branch['else_signals'].append({
-                                            'signal': signal_name, 
-                                            'negated': False, 
-                                            'operator': 'AND'
-                                        })
-                                        st.success(f"✅ Signal '{signal_name}' added to ELSE!")
-                                    elif selected_option.startswith("Allocation: "):
-                                        # Add allocation to ELSE
-                                        allocation_name = selected_option.replace("Allocation: ", "")
-                                        if 'else_allocations' not in branch:
-                                            branch['else_allocations'] = []
-                                        branch['else_allocations'].append({
-                                            'allocation': allocation_name, 
-                                            'weight': 100
-                                        })
-                                        st.success(f"✅ Allocation '{allocation_name}' added to ELSE!")
-                                    elif selected_option == "Nested If/Else Block":
-                                        # Add nested if/else block to ELSE
-                                        if 'else_nested_blocks' not in branch:
-                                            branch['else_nested_blocks'] = []
-                                        branch['else_nested_blocks'].append({
-                                            'type': 'nested_if_else',
-                                            'signals': [],
-                                            'allocations': [],
-                                            'else_allocations': [],
-                                            'else_signals': [],
-                                            'else_nested_blocks': []
-                                        })
-                                        st.success(f"✅ Nested If/Else block added to ELSE!")
-                                    elif selected_option == "ELSE IF (Next Condition)":
-                                        # Create a new IF/THEN/ELSE block that acts as an ELSE IF
-                                        new_branch = {
-                                            'type': 'if_else',
-                                            'signals': [],
-                                            'allocations': [],
-                                            'else_allocations': [],
-                                            'else_signals': [],
-                                            'else_nested_blocks': [],
-                                            'collapsed': False,
-                                            'is_else_if': True  # Mark as ELSE IF
-                                        }
-                                        st.session_state.strategy_branches.insert(branch_idx + 1, new_branch)
-                                        st.success(f"✅ ELSE IF block added!")
-                                    elif selected_option == "Nested IF/THEN/ELSE Chain":
-                                        # Add a complete IF/THEN/ELSE chain within the ELSE
-                                        if 'else_nested_chains' not in branch:
-                                            branch['else_nested_chains'] = []
-                                        branch['else_nested_chains'].append({
-                                            'type': 'nested_if_else_chain',
-                                            'chain_blocks': [{
-                                                'type': 'chain_if_else',
-                                                'signals': [],
-                                                'allocations': [],
-                                                'else_allocations': [],
-                                                'else_signals': [],
-                                                'else_nested_blocks': [],
-                                                'is_else_if': False
-                                            }]
-                                        })
-                                        st.success(f"✅ Nested IF/THEN/ELSE chain added to ELSE!")
-                                    
-                                    st.session_state[f'show_else_dropdown_{branch_idx}'] = False
-                                    st.rerun()
-                                else:
-                                    st.warning("Please select a signal, allocation, nested block, ELSE IF, or nested chain.")
-                        with col_b:
-                            if st.button("❌ Cancel", key=f"cancel_else_{branch_idx}"):
-                                st.session_state[f'show_else_dropdown_{branch_idx}'] = False
+                                st.success(f"✅ Branch total weight: {total_branch_weight}%")
+                            
+                            # Add button to add more allocations
+                            if st.button("➕ Add Another Allocation", key=f"add_more_then_allocation_{branch_idx}"):
+                                branch['allocations'].append({
+                                    'allocation': '', 
+                                    'weight': 100
+                                })
                                 st.rerun()
                     else:
-                        st.warning("No signals or allocations available. Create them in the Signal Blocks and Allocation Blocks tabs first.")
-                        if st.button("❌ Cancel", key=f"cancel_else_{branch_idx}"):
-                            st.session_state[f'show_else_dropdown_{branch_idx}'] = False
-                            st.rerun()
-                
-                # Display ELSE signals in collapsible expander
-                if branch.get('else_signals'):
-                    with st.expander(f"📊 ELSE Signals ({len(branch['else_signals'])})", expanded=True):
-                        for else_signal_idx, else_signal_config in enumerate(branch['else_signals']):
-                            # Display each signal in its own row
-                            st.markdown(f"**ELSE Signal {else_signal_idx + 1}:**")
-                            
-                            col1, col2, col3 = st.columns([3, 1, 1])
-                            with col1:
-                                if else_signal_config.get('signal'):
-                                    st.write(f"• {else_signal_config['signal']}")
-                                else:
-                                    # Show dropdown for empty signal
-                                    else_signal_config['signal'] = st.selectbox(
-                                        "Select Signal:",
-                                        [""] + [s['name'] for s in st.session_state.signals],
-                                        key=f"else_signal_select_{branch_idx}_{else_signal_idx}"
-                                    )
-                            with col2:
-                                else_signal_config['negated'] = st.checkbox(
-                                    "NOT",
-                                    value=else_signal_config.get('negated', False),
-                                    key=f"else_signal_negated_{branch_idx}_{else_signal_idx}"
-                                )
-                            with col3:
-                                if len(branch['else_signals']) > 1:
-                                    if st.button("🗑️", key=f"remove_else_signal_{branch_idx}_{else_signal_idx}"):
-                                        branch['else_signals'].pop(else_signal_idx)
-                                        st.rerun()
-                                else:
-                                    st.write("")
-                            
-                            # Show operator for multiple signals
-                            if len(branch['else_signals']) > 1 and else_signal_idx < len(branch['else_signals']) - 1:
-                                else_signal_config['operator'] = st.selectbox(
-                                    "Operator",
-                                    ["AND", "OR"],
-                                    index=0 if else_signal_config.get('operator', 'AND') == 'AND' else 1,
-                                    key=f"else_signal_operator_{branch_idx}_{else_signal_idx}"
-                                )
-                            
-                            # Add some spacing between signals
-                            st.markdown("<br>", unsafe_allow_html=True)
-                        
-                        # Add button to add more signals to ELSE
-                        if st.button("➕ Add Another Signal to ELSE", key=f"add_more_else_signal_{branch_idx}"):
+                        st.write("**No allocations in THEN yet**")
+                    
+                    st.markdown('</div>', unsafe_allow_html=True)
+                    
+                    # ELSE section
+                    st.markdown('<div class="else-block" style="border-left: 3px solid #4CAF50; padding-left: 10px; margin-left: 30px;">', unsafe_allow_html=True)
+                    st.markdown("**ELSE:**")
+                    
+                    # Always visible signal dropdown for ELSE
+                    st.markdown("**Add Signal to ELSE:**")
+                    if st.session_state.signals:
+                        selected_else_signal = st.selectbox(
+                            "Select Signal:",
+                            [""] + [s['name'] for s in st.session_state.signals],
+                            key=f"else_signal_select_{branch_idx}"
+                        )
+                        if selected_else_signal:
                             if 'else_signals' not in branch:
                                 branch['else_signals'] = []
-                            branch['else_signals'].append({
-                                'signal': '', 
-                                'negated': False, 
-                                'operator': 'AND'
-                            })
-                            st.rerun()
-                
-                # Display ELSE allocations in collapsible expander
-                if branch.get('else_allocations'):
-                    with st.expander(f"💰 ELSE Allocations ({len(branch['else_allocations'])})", expanded=True):
-                        for else_alloc_idx, else_allocation_config in enumerate(branch['else_allocations']):
-                            col1, col2, col3 = st.columns([2, 1, 1])
-                            with col1:
-                                else_allocation_config['allocation'] = st.selectbox(
-                                    f"ELSE Allocation {else_alloc_idx + 1}", 
-                                    list(st.session_state.output_allocations.keys()),
-                                    key=f"else_branch_{branch_idx}_allocation_{else_alloc_idx}"
-                                )
-                            with col2:
-                                else_allocation_config['weight'] = st.number_input(
-                                    "Weight %",
-                                    min_value=0,
-                                    max_value=100,
-                                    value=else_allocation_config.get('weight', 100),
-                                    key=f"else_branch_{branch_idx}_weight_{else_alloc_idx}"
-                                )
-                            with col3:
-                                if len(branch['else_allocations']) > 1:  # Don't allow removing the last allocation
-                                    if st.button("🗑️", key=f"remove_else_branch_{branch_idx}_allocation_{else_alloc_idx}"):
-                                        branch['else_allocations'].pop(else_alloc_idx)
-                                        st.rerun()
-                                else:
-                                    st.write("")  # Empty space for alignment
-                        
-                        # Show total ELSE weight for this branch
-                        total_else_weight = sum(alloc.get('weight', 0) for alloc in branch['else_allocations'])
-                        if total_else_weight != 100:
-                            if total_else_weight > 100:
-                                st.error(f"⚠️ ELSE total weight: {total_else_weight}% (exceeds 100%)")
-                            else:
-                                st.warning(f"ℹ️ ELSE total weight: {total_else_weight}% ({(100-total_else_weight):.1f}% unallocated)")
-                        else:
-                            st.success(f"✅ ELSE total weight: {total_else_weight}%")
-                
-                # Display nested IF/ELSE blocks in ELSE
-                if branch.get('else_nested_blocks'):
-                    with st.expander(f"🔗 ELSE Nested If/Else Blocks ({len(branch['else_nested_blocks'])})", expanded=True):
-                        for nested_idx, nested_block in enumerate(branch['else_nested_blocks']):
-                            st.markdown(f"""
-                            <div class="nested-else-block" style="border-left: 3px solid #9C27B0; padding-left: 10px; margin-left: 20px;">
-                                <div class="nested-else-header">
-                                    <span>🔗 Nested If/Else Block {nested_idx + 1}</span>
-                                </div>
-                            """, unsafe_allow_html=True)
+                            # Check if signal already exists
+                            if not any(s.get('signal') == selected_else_signal for s in branch.get('else_signals', [])):
+                                branch['else_signals'].append({
+                                    'signal': selected_else_signal, 
+                                    'negated': False, 
+                                    'operator': 'AND'
+                                })
+                                st.success(f"✅ Signal '{selected_else_signal}' added to ELSE!")
+                                st.rerun()
+                    else:
+                        st.warning("No signals available. Create signals in the Signal Blocks tab first.")
+                    
+                    # Always visible allocation dropdown for ELSE
+                    st.markdown("**Add Allocation to ELSE:**")
+                    if st.session_state.output_allocations:
+                        selected_else_allocation = st.selectbox(
+                            "Select Allocation:",
+                            [""] + list(st.session_state.output_allocations.keys()),
+                            key=f"else_allocation_select_{branch_idx}"
+                        )
+                        if selected_else_allocation:
+                            if 'else_allocations' not in branch:
+                                branch['else_allocations'] = []
+                            # Check if allocation already exists
+                            if not any(a.get('allocation') == selected_else_allocation for a in branch.get('else_allocations', [])):
+                                branch['else_allocations'].append({
+                                    'allocation': selected_else_allocation, 
+                                    'weight': 100
+                                })
+                                st.success(f"✅ Allocation '{selected_else_allocation}' added to ELSE!")
+                                st.rerun()
+                    else:
+                        st.warning("No allocations available. Create allocations in the Allocation Blocks tab first.")
+                    
+                    # Separate button for adding IF/THEN/ELSE chains
+                    if st.button("🔗 Add IF/THEN/ELSE Chain to ELSE", key=f"add_else_chain_{branch_idx}"):
+                        if 'else_nested_chains' not in branch:
+                            branch['else_nested_chains'] = []
+                        branch['else_nested_chains'].append({
+                            'type': 'nested_if_else_chain',
+                            'chain_blocks': [{
+                                'type': 'chain_if_else',
+                                'signals': [],
+                                'allocations': [],
+                                'else_allocations': [],
+                                'else_signals': [],
+                                'else_nested_blocks': [],
+                                'is_else_if': False
+                            }]
+                        })
+                        st.success(f"✅ IF/THEN/ELSE chain added to ELSE!")
+                        st.rerun()
+                    
+                    # Display ELSE signals in collapsible expander
+                    if branch.get('else_signals'):
+                        with st.expander(f"📊 ELSE Signals ({len(branch['else_signals'])})", expanded=True):
+                            for else_signal_idx, else_signal_config in enumerate(branch['else_signals']):
+                                # Display each signal in its own row
+                                st.markdown(f"**ELSE Signal {else_signal_idx + 1}:**")
+                                
+                                col1, col2, col3 = st.columns([3, 1, 1])
+                                with col1:
+                                    if else_signal_config.get('signal'):
+                                        st.write(f"• {else_signal_config['signal']}")
+                                    else:
+                                        # Show dropdown for empty signal
+                                        else_signal_config['signal'] = st.selectbox(
+                                            "Select Signal:",
+                                            [""] + [s['name'] for s in st.session_state.signals],
+                                            key=f"else_signal_select_{branch_idx}_{else_signal_idx}"
+                                        )
+                                with col2:
+                                    else_signal_config['negated'] = st.checkbox(
+                                        "NOT",
+                                        value=else_signal_config.get('negated', False),
+                                        key=f"else_signal_negated_{branch_idx}_{else_signal_idx}"
+                                    )
+                                with col3:
+                                    if len(branch['else_signals']) > 1:
+                                        if st.button("🗑️", key=f"remove_else_signal_{branch_idx}_{else_signal_idx}"):
+                                            branch['else_signals'].pop(else_signal_idx)
+                                            st.rerun()
+                                    else:
+                                        st.write("")
+                                
+                                # Show operator for multiple signals
+                                if len(branch['else_signals']) > 1 and else_signal_idx < len(branch['else_signals']) - 1:
+                                    else_signal_config['operator'] = st.selectbox(
+                                        "Operator",
+                                        ["AND", "OR"],
+                                        index=0 if else_signal_config.get('operator', 'AND') == 'AND' else 1,
+                                        key=f"else_signal_operator_{branch_idx}_{else_signal_idx}"
+                                    )
+                                
+                                # Add some spacing between signals
+                                st.markdown("<br>", unsafe_allow_html=True)
                             
-                            # Nested IF section
-                            st.markdown('<div class="nested-condition-block" style="border-left: 3px solid #2196F3; padding-left: 10px; margin-left: 0px;">', unsafe_allow_html=True)
-                            st.markdown("**NESTED IF:**")
-                            
-                            # Add signal button for nested IF
-                            if st.button("➕", key=f"add_nested_if_{branch_idx}_{nested_idx}"):
-                                if 'signals' not in nested_block:
-                                    nested_block['signals'] = []
-                                nested_block['signals'].append({
+                            # Add button to add more signals to ELSE
+                            if st.button("➕ Add Another Signal to ELSE", key=f"add_more_else_signal_{branch_idx}"):
+                                branch['else_signals'].append({
                                     'signal': '', 
                                     'negated': False, 
                                     'operator': 'AND'
                                 })
                                 st.rerun()
+                    
+                    # Display ELSE allocations in collapsible expander
+                    if branch.get('else_allocations'):
+                        with st.expander(f"💰 ELSE Allocations ({len(branch['else_allocations'])})", expanded=True):
+                            for else_alloc_idx, else_allocation_config in enumerate(branch['else_allocations']):
+                                col1, col2, col3 = st.columns([2, 1, 1])
+                                with col1:
+                                    else_allocation_config['allocation'] = st.selectbox(
+                                        f"ELSE Allocation {else_alloc_idx + 1}", 
+                                        list(st.session_state.output_allocations.keys()),
+                                        key=f"else_branch_{branch_idx}_allocation_{else_alloc_idx}"
+                                    )
+                                with col2:
+                                    else_allocation_config['weight'] = st.number_input(
+                                        "Weight %",
+                                        min_value=0,
+                                        max_value=100,
+                                        value=else_allocation_config.get('weight', 100),
+                                        key=f"else_branch_{branch_idx}_weight_{else_alloc_idx}"
+                                    )
+                                with col3:
+                                    if len(branch['else_allocations']) > 1:  # Don't allow removing the last allocation
+                                        if st.button("🗑️", key=f"remove_else_branch_{branch_idx}_allocation_{else_alloc_idx}"):
+                                            branch['else_allocations'].pop(else_alloc_idx)
+                                            st.rerun()
+                                    else:
+                                        st.write("")  # Empty space for alignment
                             
-                            # Display nested IF signals
-                            if nested_block.get('signals'):
-                                with st.expander(f"📊 Nested IF Signals ({len(nested_block['signals'])})", expanded=True):
-                                    for signal_idx, signal_config in enumerate(nested_block['signals']):
-                                        st.markdown(f"**Nested Signal {signal_idx + 1}:**")
-                                        
-                                        col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
-                                        with col1:
-                                            if signal_config.get('signal'):
-                                                st.write(f"• {signal_config['signal']}")
-                                            else:
-                                                signal_config['signal'] = st.selectbox(
-                                                    "Select Signal:",
-                                                    [""] + [s['name'] for s in st.session_state.signals],
-                                                    key=f"nested_if_signal_{branch_idx}_{nested_idx}_{signal_idx}"
-                                                )
-                                        with col2:
-                                            signal_config['negated'] = st.checkbox("NOT", key=f"nested_if_negated_{branch_idx}_{nested_idx}_{signal_idx}")
-                                        with col3:
-                                            if len(nested_block['signals']) > 1 and signal_idx < len(nested_block['signals']) - 1:
-                                                signal_config['operator'] = st.selectbox(
-                                                    "Operator",
-                                                    ["AND", "OR"],
-                                                    index=0 if signal_config.get('operator', 'AND') == 'AND' else 1,
-                                                    key=f"nested_if_operator_{branch_idx}_{nested_idx}_{signal_idx}"
-                                                )
-                                            else:
-                                                st.write("")
-                                        with col4:
-                                            if len(nested_block['signals']) > 1:
-                                                if st.button("🗑️", key=f"remove_nested_if_signal_{branch_idx}_{nested_idx}_{signal_idx}"):
-                                                    nested_block['signals'].pop(signal_idx)
-                                                    st.rerun()
-                                            else:
-                                                st.write("")
-                                        
-                                        st.markdown("<br>", unsafe_allow_html=True)
+                            # Show total ELSE weight for this branch
+                            total_else_weight = sum(alloc.get('weight', 0) for alloc in branch['else_allocations'])
+                            if total_else_weight != 100:
+                                if total_else_weight > 100:
+                                    st.error(f"⚠️ ELSE total weight: {total_else_weight}% (exceeds 100%)")
+                                else:
+                                    st.warning(f"ℹ️ ELSE total weight: {total_else_weight}% ({(100-total_else_weight):.1f}% unallocated)")
                             else:
-                                st.write("**No signals in nested IF yet**")
+                                st.success(f"✅ ELSE total weight: {total_else_weight}%")
                             
-                            st.markdown('</div>', unsafe_allow_html=True)
-                            
-                            # Nested THEN section
-                            st.markdown('<div class="nested-then-block" style="border-left: 3px solid #FF9800; padding-left: 10px; margin-left: 0px;">', unsafe_allow_html=True)
-                            st.markdown("**NESTED THEN:**")
-                            
-                            # Add allocation button for nested THEN
-                            if st.button("➕", key=f"add_nested_then_{branch_idx}_{nested_idx}"):
-                                if 'allocations' not in nested_block:
-                                    nested_block['allocations'] = []
-                                nested_block['allocations'].append({
+                            # Add button to add more allocations to ELSE
+                            if st.button("➕ Add Another Allocation to ELSE", key=f"add_more_else_allocation_{branch_idx}"):
+                                branch['else_allocations'].append({
                                     'allocation': '', 
                                     'weight': 100
                                 })
                                 st.rerun()
-                            
-                            # Display nested THEN allocations
-                            if nested_block.get('allocations'):
-                                with st.expander(f"💰 Nested THEN Allocations ({len(nested_block['allocations'])})", expanded=True):
-                                    for alloc_idx, allocation_config in enumerate(nested_block['allocations']):
-                                        col1, col2, col3 = st.columns([2, 1, 1])
-                                        with col1:
-                                            allocation_config['allocation'] = st.selectbox(
-                                                f"Nested Allocation {alloc_idx + 1}", 
-                                                list(st.session_state.output_allocations.keys()),
-                                                key=f"nested_then_allocation_{branch_idx}_{nested_idx}_{alloc_idx}"
-                                            )
-                                        with col2:
-                                            allocation_config['weight'] = st.number_input(
-                                                "Weight %",
-                                                min_value=0,
-                                                max_value=100,
-                                                value=allocation_config.get('weight', 100),
-                                                key=f"nested_then_weight_{branch_idx}_{nested_idx}_{alloc_idx}"
-                                            )
-                                        with col3:
-                                            if len(nested_block['allocations']) > 1:
-                                                if st.button("🗑️", key=f"remove_nested_then_{branch_idx}_{nested_idx}_{alloc_idx}"):
-                                                    nested_block['allocations'].pop(alloc_idx)
-                                                    st.rerun()
-                                            else:
-                                                st.write("")
-                                    
-                                    # Show total weight for nested branch
-                                    total_nested_weight = sum(alloc.get('weight', 0) for alloc in nested_block['allocations'])
-                                    if total_nested_weight != 100:
-                                        if total_nested_weight > 100:
-                                            st.error(f"⚠️ Nested total weight: {total_nested_weight}% (exceeds 100%)")
-                                        else:
-                                            st.warning(f"ℹ️ Nested total weight: {total_nested_weight}% ({(100-total_nested_weight):.1f}% unallocated)")
-                                    else:
-                                        st.success(f"✅ Nested total weight: {total_nested_weight}%")
-                            else:
-                                st.write("**No allocations in nested THEN yet**")
-                            
-                            st.markdown('</div>', unsafe_allow_html=True)
-                            
-                            # Delete nested block
-                            if st.button("🗑️ Delete Nested Block", key=f"delete_nested_{branch_idx}_{nested_idx}"):
-                                branch['else_nested_blocks'].pop(nested_idx)
-                                st.rerun()
-                            
-                            st.markdown("</div>", unsafe_allow_html=True)
-                
-                # Display nested IF/THEN/ELSE chains in ELSE
-                if branch.get('else_nested_chains'):
-                    with st.expander(f"🔗 ELSE Nested IF/THEN/ELSE Chains ({len(branch['else_nested_chains'])})", expanded=True):
-                        for chain_idx, chain in enumerate(branch['else_nested_chains']):
-                            st.markdown(f"""
-                            <div class="nested-chain-block" style="border-left: 3px solid #E91E63; padding-left: 10px; margin-left: 20px;">
-                                <div class="nested-chain-header">
-                                    <span>🔗 Nested IF/THEN/ELSE Chain {chain_idx + 1}</span>
-                                </div>
-                            """, unsafe_allow_html=True)
-                            
-                            # Display each block in the chain
-                            for block_idx, chain_block in enumerate(chain['chain_blocks']):
-                                # Chain block styling
-                                if chain_block.get('is_else_if'):
-                                    st.markdown(f"""
-                                    <div class="chain-else-if-block" style="border-left: 4px solid #FF5722; background-color: #FFF3E0; margin-left: 10px;">
-                                        <div class="chain-else-if-header">
-                                            <span>🔗 Chain ELSE IF Block {block_idx + 1}</span>
-                                        </div>
-                                    """, unsafe_allow_html=True)
-                                else:
-                                    st.markdown(f"""
-                                    <div class="chain-if-block" style="border-left: 4px solid #2196F3; background-color: #E3F2FD; margin-left: 10px;">
-                                        <div class="chain-if-header">
-                                            <span>🔗 Chain IF Block {block_idx + 1}</span>
-                                        </div>
-                                    """, unsafe_allow_html=True)
+                    
+                    # Display nested IF/ELSE blocks in ELSE
+                    if branch.get('else_nested_blocks'):
+                        with st.expander(f"🔗 ELSE Nested If/Else Blocks ({len(branch['else_nested_blocks'])})", expanded=True):
+                            for nested_idx, nested_block in enumerate(branch['else_nested_blocks']):
+                                st.markdown(f"""
+                                <div class="nested-else-block" style="border-left: 3px solid #9C27B0; padding-left: 10px; margin-left: 20px;">
+                                    <div class="nested-else-header">
+                                        <span>🔗 Nested If/Else Block {nested_idx + 1}</span>
+                                    </div>
+                                """, unsafe_allow_html=True)
                                 
-                                # Chain IF section
-                                st.markdown('<div class="chain-condition-block" style="border-left: 3px solid #2196F3; padding-left: 10px; margin-left: 0px;">', unsafe_allow_html=True)
-                                if chain_block.get('is_else_if'):
-                                    st.markdown("**CHAIN ELSE IF:**")
-                                else:
-                                    st.markdown("**CHAIN IF:**")
+                                # Nested IF section
+                                st.markdown('<div class="nested-condition-block" style="border-left: 3px solid #2196F3; padding-left: 10px; margin-left: 0px;">', unsafe_allow_html=True)
+                                st.markdown("**NESTED IF:**")
                                 
-                                # Add signal button for chain IF
-                                if st.button("➕", key=f"add_chain_if_{branch_idx}_{chain_idx}_{block_idx}"):
-                                    if 'signals' not in chain_block:
-                                        chain_block['signals'] = []
-                                    chain_block['signals'].append({
+                                # Add signal button for nested IF
+                                if st.button("➕", key=f"add_nested_if_{branch_idx}_{nested_idx}"):
+                                    if 'signals' not in nested_block:
+                                        nested_block['signals'] = []
+                                    nested_block['signals'].append({
                                         'signal': '', 
                                         'negated': False, 
                                         'operator': 'AND'
                                     })
                                     st.rerun()
                                 
-                                # Display chain IF signals
-                                if chain_block.get('signals'):
-                                    with st.expander(f"📊 Chain IF Signals ({len(chain_block['signals'])})", expanded=True):
-                                        for signal_idx, signal_config in enumerate(chain_block['signals']):
-                                            st.markdown(f"**Chain Signal {signal_idx + 1}:**")
+                                # Display nested IF signals
+                                if nested_block.get('signals'):
+                                    with st.expander(f"📊 Nested IF Signals ({len(nested_block['signals'])})", expanded=True):
+                                        for signal_idx, signal_config in enumerate(nested_block['signals']):
+                                            st.markdown(f"**Nested Signal {signal_idx + 1}:**")
                                             
                                             col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
                                             with col1:
@@ -1773,58 +1555,58 @@ with tab3:
                                                     signal_config['signal'] = st.selectbox(
                                                         "Select Signal:",
                                                         [""] + [s['name'] for s in st.session_state.signals],
-                                                        key=f"chain_if_signal_{branch_idx}_{chain_idx}_{block_idx}_{signal_idx}"
+                                                        key=f"nested_if_signal_{branch_idx}_{nested_idx}_{signal_idx}"
                                                     )
                                             with col2:
-                                                signal_config['negated'] = st.checkbox("NOT", key=f"chain_if_negated_{branch_idx}_{chain_idx}_{block_idx}_{signal_idx}")
+                                                signal_config['negated'] = st.checkbox("NOT", key=f"nested_if_negated_{branch_idx}_{nested_idx}_{signal_idx}")
                                             with col3:
-                                                if len(chain_block['signals']) > 1 and signal_idx < len(chain_block['signals']) - 1:
+                                                if len(nested_block['signals']) > 1 and signal_idx < len(nested_block['signals']) - 1:
                                                     signal_config['operator'] = st.selectbox(
                                                         "Operator",
                                                         ["AND", "OR"],
                                                         index=0 if signal_config.get('operator', 'AND') == 'AND' else 1,
-                                                        key=f"chain_if_operator_{branch_idx}_{chain_idx}_{block_idx}_{signal_idx}"
+                                                        key=f"nested_if_operator_{branch_idx}_{nested_idx}_{signal_idx}"
                                                     )
                                                 else:
                                                     st.write("")
                                             with col4:
-                                                if len(chain_block['signals']) > 1:
-                                                    if st.button("🗑️", key=f"remove_chain_if_signal_{branch_idx}_{chain_idx}_{block_idx}_{signal_idx}"):
-                                                        chain_block['signals'].pop(signal_idx)
+                                                if len(nested_block['signals']) > 1:
+                                                    if st.button("🗑️", key=f"remove_nested_if_signal_{branch_idx}_{nested_idx}_{signal_idx}"):
+                                                        nested_block['signals'].pop(signal_idx)
                                                         st.rerun()
                                                 else:
                                                     st.write("")
                                             
                                             st.markdown("<br>", unsafe_allow_html=True)
                                 else:
-                                    st.write("**No signals in chain IF yet**")
+                                    st.write("**No signals in nested IF yet**")
                                 
                                 st.markdown('</div>', unsafe_allow_html=True)
                                 
-                                # Chain THEN section
-                                st.markdown('<div class="chain-then-block" style="border-left: 3px solid #FF9800; padding-left: 10px; margin-left: 0px;">', unsafe_allow_html=True)
-                                st.markdown("**CHAIN THEN:**")
+                                # Nested THEN section
+                                st.markdown('<div class="nested-then-block" style="border-left: 3px solid #FF9800; padding-left: 10px; margin-left: 0px;">', unsafe_allow_html=True)
+                                st.markdown("**NESTED THEN:**")
                                 
-                                # Add allocation button for chain THEN
-                                if st.button("➕", key=f"add_chain_then_{branch_idx}_{chain_idx}_{block_idx}"):
-                                    if 'allocations' not in chain_block:
-                                        chain_block['allocations'] = []
-                                    chain_block['allocations'].append({
+                                # Add allocation button for nested THEN
+                                if st.button("➕", key=f"add_nested_then_{branch_idx}_{nested_idx}"):
+                                    if 'allocations' not in nested_block:
+                                        nested_block['allocations'] = []
+                                    nested_block['allocations'].append({
                                         'allocation': '', 
                                         'weight': 100
                                     })
                                     st.rerun()
                                 
-                                # Display chain THEN allocations
-                                if chain_block.get('allocations'):
-                                    with st.expander(f"💰 Chain THEN Allocations ({len(chain_block['allocations'])})", expanded=True):
-                                        for alloc_idx, allocation_config in enumerate(chain_block['allocations']):
+                                # Display nested THEN allocations
+                                if nested_block.get('allocations'):
+                                    with st.expander(f"💰 Nested THEN Allocations ({len(nested_block['allocations'])})", expanded=True):
+                                        for alloc_idx, allocation_config in enumerate(nested_block['allocations']):
                                             col1, col2, col3 = st.columns([2, 1, 1])
                                             with col1:
                                                 allocation_config['allocation'] = st.selectbox(
-                                                    f"Chain Allocation {alloc_idx + 1}", 
+                                                    f"Nested Allocation {alloc_idx + 1}", 
                                                     list(st.session_state.output_allocations.keys()),
-                                                    key=f"chain_then_allocation_{branch_idx}_{chain_idx}_{block_idx}_{alloc_idx}"
+                                                    key=f"nested_then_allocation_{branch_idx}_{nested_idx}_{alloc_idx}"
                                                 )
                                             with col2:
                                                 allocation_config['weight'] = st.number_input(
@@ -1832,86 +1614,214 @@ with tab3:
                                                     min_value=0,
                                                     max_value=100,
                                                     value=allocation_config.get('weight', 100),
-                                                    key=f"chain_then_weight_{branch_idx}_{chain_idx}_{block_idx}_{alloc_idx}"
+                                                    key=f"nested_then_weight_{branch_idx}_{nested_idx}_{alloc_idx}"
                                                 )
                                             with col3:
-                                                if len(chain_block['allocations']) > 1:
-                                                    if st.button("🗑️", key=f"remove_chain_then_{branch_idx}_{chain_idx}_{block_idx}_{alloc_idx}"):
-                                                        chain_block['allocations'].pop(alloc_idx)
+                                                if len(nested_block['allocations']) > 1:
+                                                    if st.button("🗑️", key=f"remove_nested_then_{branch_idx}_{nested_idx}_{alloc_idx}"):
+                                                        nested_block['allocations'].pop(alloc_idx)
                                                         st.rerun()
                                                 else:
                                                     st.write("")
                                         
-                                        # Show total weight for chain branch
-                                        total_chain_weight = sum(alloc.get('weight', 0) for alloc in chain_block['allocations'])
-                                        if total_chain_weight != 100:
-                                            if total_chain_weight > 100:
-                                                st.error(f"⚠️ Chain total weight: {total_chain_weight}% (exceeds 100%)")
+                                        # Show total weight for nested branch
+                                        total_nested_weight = sum(alloc.get('weight', 0) for alloc in nested_block['allocations'])
+                                        if total_nested_weight != 100:
+                                            if total_nested_weight > 100:
+                                                st.error(f"⚠️ Nested total weight: {total_nested_weight}% (exceeds 100%)")
                                             else:
-                                                st.warning(f"ℹ️ Chain total weight: {total_chain_weight}% ({(100-total_chain_weight):.1f}% unallocated)")
+                                                st.warning(f"ℹ️ Nested total weight: {total_nested_weight}% ({(100-total_nested_weight):.1f}% unallocated)")
                                         else:
-                                            st.success(f"✅ Chain total weight: {total_chain_weight}%")
+                                            st.success(f"✅ Nested total weight: {total_nested_weight}%")
                                 else:
-                                    st.write("**No allocations in chain THEN yet**")
+                                    st.write("**No allocations in nested THEN yet**")
                                 
                                 st.markdown('</div>', unsafe_allow_html=True)
                                 
-                                # Add button to add next block in chain
-                                if st.button("➕ Add Next Block in Chain", key=f"add_next_chain_block_{branch_idx}_{chain_idx}_{block_idx}"):
-                                    chain['chain_blocks'].append({
-                                        'type': 'chain_if_else',
-                                        'signals': [],
-                                        'allocations': [],
-                                        'else_allocations': [],
-                                        'else_signals': [],
-                                        'else_nested_blocks': [],
-                                        'is_else_if': True
-                                    })
+                                # Delete nested block
+                                if st.button("🗑️ Delete Nested Block", key=f"delete_nested_{branch_idx}_{nested_idx}"):
+                                    branch['else_nested_blocks'].pop(nested_idx)
                                     st.rerun()
                                 
-                                # Delete chain block
-                                if len(chain['chain_blocks']) > 1:
-                                    if st.button("🗑️ Delete Chain Block", key=f"delete_chain_block_{branch_idx}_{chain_idx}_{block_idx}"):
-                                        chain['chain_blocks'].pop(block_idx)
+                                st.markdown("</div>", unsafe_allow_html=True)
+                    
+                    # Display nested IF/THEN/ELSE chains in ELSE
+                    if branch.get('else_nested_chains'):
+                        with st.expander(f"🔗 ELSE Nested IF/THEN/ELSE Chains ({len(branch['else_nested_chains'])})", expanded=True):
+                            for chain_idx, chain in enumerate(branch['else_nested_chains']):
+                                st.markdown(f"""
+                                <div class="nested-chain-block" style="border-left: 3px solid #E91E63; padding-left: 10px; margin-left: 20px;">
+                                    <div class="nested-chain-header">
+                                        <span>🔗 Nested IF/THEN/ELSE Chain {chain_idx + 1}</span>
+                                    </div>
+                                """, unsafe_allow_html=True)
+                                
+                                # Display each block in the chain
+                                for block_idx, chain_block in enumerate(chain['chain_blocks']):
+                                    # Chain block styling
+                                    if chain_block.get('is_else_if'):
+                                        st.markdown(f"""
+                                        <div class="chain-else-if-block" style="border-left: 4px solid #FF5722; background-color: #FFF3E0; margin-left: 10px;">
+                                            <div class="chain-else-if-header">
+                                                <span>🔗 Chain ELSE IF Block {block_idx + 1}</span>
+                                            </div>
+                                        """, unsafe_allow_html=True)
+                                    else:
+                                        st.markdown(f"""
+                                        <div class="chain-if-block" style="border-left: 4px solid #2196F3; background-color: #E3F2FD; margin-left: 10px;">
+                                            <div class="chain-if-header">
+                                                <span>🔗 Chain IF Block {block_idx + 1}</span>
+                                            </div>
+                                        """, unsafe_allow_html=True)
+                                    
+                                    # Chain IF section
+                                    st.markdown('<div class="chain-condition-block" style="border-left: 3px solid #2196F3; padding-left: 10px; margin-left: 0px;">', unsafe_allow_html=True)
+                                    if chain_block.get('is_else_if'):
+                                        st.markdown("**CHAIN ELSE IF:**")
+                                    else:
+                                        st.markdown("**CHAIN IF:**")
+                                    
+                                    # Add signal button for chain IF
+                                    if st.button("➕", key=f"add_chain_if_{branch_idx}_{chain_idx}_{block_idx}"):
+                                        if 'signals' not in chain_block:
+                                            chain_block['signals'] = []
+                                        chain_block['signals'].append({
+                                            'signal': '', 
+                                            'negated': False, 
+                                            'operator': 'AND'
+                                        })
                                         st.rerun()
+                                    
+                                    # Display chain IF signals
+                                    if chain_block.get('signals'):
+                                        with st.expander(f"📊 Chain IF Signals ({len(chain_block['signals'])})", expanded=True):
+                                            for signal_idx, signal_config in enumerate(chain_block['signals']):
+                                                st.markdown(f"**Chain Signal {signal_idx + 1}:**")
+                                                
+                                                col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
+                                                with col1:
+                                                    if signal_config.get('signal'):
+                                                        st.write(f"• {signal_config['signal']}")
+                                                    else:
+                                                        signal_config['signal'] = st.selectbox(
+                                                            "Select Signal:",
+                                                            [""] + [s['name'] for s in st.session_state.signals],
+                                                            key=f"chain_if_signal_{branch_idx}_{chain_idx}_{block_idx}_{signal_idx}"
+                                                        )
+                                                with col2:
+                                                    signal_config['negated'] = st.checkbox("NOT", key=f"chain_if_negated_{branch_idx}_{chain_idx}_{block_idx}_{signal_idx}")
+                                                with col3:
+                                                    if len(chain_block['signals']) > 1 and signal_idx < len(chain_block['signals']) - 1:
+                                                        signal_config['operator'] = st.selectbox(
+                                                            "Operator",
+                                                            ["AND", "OR"],
+                                                            index=0 if signal_config.get('operator', 'AND') == 'AND' else 1,
+                                                            key=f"chain_if_operator_{branch_idx}_{chain_idx}_{block_idx}_{signal_idx}"
+                                                        )
+                                                    else:
+                                                        st.write("")
+                                                with col4:
+                                                    if len(chain_block['signals']) > 1:
+                                                        if st.button("🗑️", key=f"remove_chain_if_signal_{branch_idx}_{chain_idx}_{block_idx}_{signal_idx}"):
+                                                            chain_block['signals'].pop(signal_idx)
+                                                            st.rerun()
+                                                    else:
+                                                        st.write("")
+                                                
+                                                st.markdown("<br>", unsafe_allow_html=True)
+                                    else:
+                                        st.write("**No signals in chain IF yet**")
+                                    
+                                    st.markdown('</div>', unsafe_allow_html=True)
+                                    
+                                    # Chain THEN section
+                                    st.markdown('<div class="chain-then-block" style="border-left: 3px solid #FF9800; padding-left: 10px; margin-left: 0px;">', unsafe_allow_html=True)
+                                    st.markdown("**CHAIN THEN:**")
+                                    
+                                    # Add allocation button for chain THEN
+                                    if st.button("➕", key=f"add_chain_then_{branch_idx}_{chain_idx}_{block_idx}"):
+                                        if 'allocations' not in chain_block:
+                                            chain_block['allocations'] = []
+                                        chain_block['allocations'].append({
+                                            'allocation': '', 
+                                            'weight': 100
+                                        })
+                                        st.rerun()
+                                    
+                                    # Display chain THEN allocations
+                                    if chain_block.get('allocations'):
+                                        with st.expander(f"💰 Chain THEN Allocations ({len(chain_block['allocations'])})", expanded=True):
+                                            for alloc_idx, allocation_config in enumerate(chain_block['allocations']):
+                                                col1, col2, col3 = st.columns([2, 1, 1])
+                                                with col1:
+                                                    allocation_config['allocation'] = st.selectbox(
+                                                        f"Chain Allocation {alloc_idx + 1}", 
+                                                        list(st.session_state.output_allocations.keys()),
+                                                        key=f"chain_then_allocation_{branch_idx}_{chain_idx}_{block_idx}_{alloc_idx}"
+                                                    )
+                                                with col2:
+                                                    allocation_config['weight'] = st.number_input(
+                                                        "Weight %",
+                                                        min_value=0,
+                                                        max_value=100,
+                                                        value=allocation_config.get('weight', 100),
+                                                        key=f"chain_then_weight_{branch_idx}_{chain_idx}_{block_idx}_{alloc_idx}"
+                                                    )
+                                                with col3:
+                                                    if len(chain_block['allocations']) > 1:
+                                                        if st.button("🗑️", key=f"remove_chain_then_{branch_idx}_{chain_idx}_{block_idx}_{alloc_idx}"):
+                                                            chain_block['allocations'].pop(alloc_idx)
+                                                            st.rerun()
+                                                    else:
+                                                        st.write("")
+                                            
+                                            # Show total weight for chain branch
+                                            total_chain_weight = sum(alloc.get('weight', 0) for alloc in chain_block['allocations'])
+                                            if total_chain_weight != 100:
+                                                if total_chain_weight > 100:
+                                                    st.error(f"⚠️ Chain total weight: {total_chain_weight}% (exceeds 100%)")
+                                                else:
+                                                    st.warning(f"ℹ️ Chain total weight: {total_chain_weight}% ({(100-total_chain_weight):.1f}% unallocated)")
+                                            else:
+                                                st.success(f"✅ Chain total weight: {total_chain_weight}%")
+                                    else:
+                                        st.write("**No allocations in chain THEN yet**")
+                                    
+                                    st.markdown('</div>', unsafe_allow_html=True)
+                                    
+                                    # Add button to add next block in chain
+                                    if st.button("➕ Add Next Block in Chain", key=f"add_next_chain_block_{branch_idx}_{chain_idx}_{block_idx}"):
+                                        chain['chain_blocks'].append({
+                                            'type': 'chain_if_else',
+                                            'signals': [],
+                                            'allocations': [],
+                                            'else_allocations': [],
+                                            'else_signals': [],
+                                            'else_nested_blocks': [],
+                                            'is_else_if': True
+                                        })
+                                        st.rerun()
+                                    
+                                    # Delete chain block
+                                    if len(chain['chain_blocks']) > 1:
+                                        if st.button("🗑️ Delete Chain Block", key=f"delete_chain_block_{branch_idx}_{chain_idx}_{block_idx}"):
+                                            chain['chain_blocks'].pop(block_idx)
+                                            st.rerun()
+                                    
+                                    st.markdown("</div>", unsafe_allow_html=True)
+                                
+                                # Delete entire chain
+                                if st.button("🗑️ Delete Entire Chain", key=f"delete_chain_{branch_idx}_{chain_idx}"):
+                                    branch['else_nested_chains'].pop(chain_idx)
+                                    st.rerun()
                                 
                                 st.markdown("</div>", unsafe_allow_html=True)
-                            
-                            # Delete entire chain
-                            if st.button("🗑️ Delete Entire Chain", key=f"delete_chain_{branch_idx}_{chain_idx}"):
-                                branch['else_nested_chains'].pop(chain_idx)
-                                st.rerun()
-                            
-                            st.markdown("</div>", unsafe_allow_html=True)
-                
-                # Show status if no signals, allocations, nested blocks, or chains
-                if not branch.get('else_signals') and not branch.get('else_allocations') and not branch.get('else_nested_blocks') and not branch.get('else_nested_chains'):
-                    st.write("**No signals, allocations, nested blocks, or chains in ELSE yet**")
-                
-                st.markdown('</div>', unsafe_allow_html=True)
-                
-                # Delete entire If/Else block
-                if st.button("🗑️ Delete If/Else Block", key=f"delete_if_else_{branch_idx}"):
-                    st.session_state.strategy_branches.pop(branch_idx)
-                    st.rerun()
-                
-                st.markdown("</div>", unsafe_allow_html=True)
-                
-                # Add button to create additional IF/THEN/ELSE blocks at the same level
-                if st.button("➕ Add Another IF/THEN/ELSE Block", key=f"add_another_if_else_{branch_idx}"):
-                    new_branch = {
-                        'type': 'if_else',
-                        'signals': [],
-                        'allocations': [],
-                        'else_allocations': [],
-                        'else_signals': [],
-                        'else_nested_blocks': [],
-                        'collapsed': False
-                    }
-                    st.session_state.strategy_branches.insert(branch_idx + 1, new_branch)
-                    st.rerun()
-                
-                st.markdown("</div>", unsafe_allow_html=True)
+                    
+                    # Show status if no signals, allocations, nested blocks, or chains
+                    if not branch.get('else_signals') and not branch.get('else_allocations') and not branch.get('else_nested_blocks') and not branch.get('else_nested_chains'):
+                        st.write("**No signals, allocations, nested blocks, or chains in ELSE yet**")
+                    
+                    st.markdown('</div>', unsafe_allow_html=True)
             
             else:
                 # Regular branch container
