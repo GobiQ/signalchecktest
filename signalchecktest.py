@@ -1284,7 +1284,7 @@ with tab3:
                         selected_allocation = st.selectbox(
                             "Select Allocation:",
                             [""] + list(st.session_state.output_allocations.keys()),
-                            key=f"then_allocation_select_{branch_idx}"
+                            key=f"then_allocation_select_{branch_idx}_{id(branch)}"
                         )
                         if selected_allocation:
                             if 'allocations' not in branch:
@@ -1338,7 +1338,7 @@ with tab3:
                                 st.success(f"✅ Branch total weight: {total_branch_weight}%")
                             
                             # Add button to add more allocations
-                            if st.button("➕ Add Another Allocation", key=f"add_more_then_allocation_{branch_idx}"):
+                            if st.button("➕ Add Another Allocation", key=f"add_more_then_allocation_{branch_idx}_{id(branch)}"):
                                 branch['allocations'].append({
                                     'allocation': '', 
                                     'weight': 100
@@ -1393,7 +1393,7 @@ with tab3:
                         selected_else_allocation = st.selectbox(
                             "Select Allocation:",
                             [""] + list(st.session_state.output_allocations.keys()),
-                            key=f"else_allocation_select_{branch_idx}"
+                            key=f"else_allocation_select_{branch_idx}_{id(branch)}"
                         )
                         if selected_else_allocation:
                             if 'else_allocations' not in branch:
@@ -1410,7 +1410,7 @@ with tab3:
                         st.warning("No allocations available. Create allocations in the Allocation Blocks tab first.")
                     
                     # Separate button for adding IF/THEN/ELSE chains
-                    if st.button("🔗 Add IF/THEN/ELSE Chain to ELSE", key=f"add_else_chain_{branch_idx}"):
+                    if st.button("🔗 Add IF/THEN/ELSE Chain to ELSE", key=f"add_else_nested_chain_{branch_idx}_{id(branch)}"):
                         if 'else_nested_chains' not in branch:
                             branch['else_nested_chains'] = []
                         branch['else_nested_chains'].append({
@@ -1473,7 +1473,7 @@ with tab3:
                             st.info(f"📊 ELSE Distribution: {allocation_weight}% allocations, {chain_weight}% chains")
                             
                             # Add button to add more allocations to ELSE
-                            if st.button("➕ Add Another Allocation to ELSE", key=f"add_more_else_allocation_{branch_idx}"):
+                            if st.button("➕ Add Another Allocation to ELSE", key=f"add_more_else_allocation_{branch_idx}_{id(branch)}"):
                                 branch['else_allocations'].append({
                                     'allocation': '', 
                                     'weight': 100
