@@ -1648,23 +1648,34 @@ with tab3:
                                             </div>
                                         """, unsafe_allow_html=True)
                                     
-                                    # Chain IF section
+                                    # Chain IF section - Streamlined format like primary blocks
                                     st.markdown('<div class="chain-condition-block" style="border-left: 3px solid #2196F3; padding-left: 10px; margin-left: 0px;">', unsafe_allow_html=True)
                                     if chain_block.get('is_else_if'):
                                         st.markdown("**CHAIN ELSE IF:**")
                                     else:
                                         st.markdown("**CHAIN IF:**")
                                     
-                                    # Add signal button for chain IF
-                                    if st.button("➕", key=f"add_chain_if_{branch_idx}_{chain_idx}_{block_idx}"):
-                                        if 'signals' not in chain_block:
-                                            chain_block['signals'] = []
-                                        chain_block['signals'].append({
-                                            'signal': '', 
-                                            'negated': False, 
-                                            'operator': 'AND'
-                                        })
-                                        st.rerun()
+                                    # Direct signal selection (no + button needed)
+                                    if st.session_state.signals:
+                                        selected_chain_signal = st.selectbox(
+                                            "Select Signal:",
+                                            [""] + [s['name'] for s in st.session_state.signals],
+                                            key=f"chain_signal_select_{branch_idx}_{chain_idx}_{block_idx}"
+                                        )
+                                        if selected_chain_signal:
+                                            if 'signals' not in chain_block:
+                                                chain_block['signals'] = []
+                                            # Check if signal already exists
+                                            if not any(s.get('signal') == selected_chain_signal for s in chain_block.get('signals', [])):
+                                                chain_block['signals'].append({
+                                                    'signal': selected_chain_signal, 
+                                                    'negated': False, 
+                                                    'operator': 'AND'
+                                                })
+                                                st.success(f"✅ Signal '{selected_chain_signal}' added to chain!")
+                                                # Remove rerun to prevent state conflicts
+                                    else:
+                                        st.warning("No signals available. Create signals in the Signal Blocks tab first.")
                                     
                                     # Display chain IF signals
                                     if chain_block.get('signals'):
@@ -1674,14 +1685,13 @@ with tab3:
                                                 
                                                 col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
                                                 with col1:
-                                                    if signal_config.get('signal'):
-                                                        st.write(f"• {signal_config['signal']}")
-                                                    else:
-                                                        signal_config['signal'] = st.selectbox(
-                                                            "Select Signal:",
-                                                            [""] + [s['name'] for s in st.session_state.signals],
-                                                            key=f"chain_if_signal_{branch_idx}_{chain_idx}_{block_idx}_{signal_idx}"
-                                                        )
+                                                    signal_config['signal'] = st.selectbox(
+                                                        f"Chain Signal {signal_idx + 1}", 
+                                                        [""] + [s['name'] for s in st.session_state.signals],
+                                                        index=0 if not signal_config.get('signal') else 
+                                                        [s['name'] for s in st.session_state.signals].index(signal_config['signal']) + 1,
+                                                        key=f"chain_if_signal_{branch_idx}_{chain_idx}_{block_idx}_{signal_idx}"
+                                                    )
                                                 with col2:
                                                     signal_config['negated'] = st.checkbox("NOT", key=f"chain_if_negated_{branch_idx}_{chain_idx}_{block_idx}_{signal_idx}")
                                                 with col3:
@@ -1698,29 +1708,49 @@ with tab3:
                                                     if len(chain_block['signals']) > 1:
                                                         if st.button("🗑️", key=f"remove_chain_if_signal_{branch_idx}_{chain_idx}_{block_idx}_{signal_idx}"):
                                                             chain_block['signals'].pop(signal_idx)
-                                                            st.rerun()
+                                                            # Remove rerun to prevent state conflicts
                                                     else:
                                                         st.write("")
                                                 
                                                 st.markdown("<br>", unsafe_allow_html=True)
+                                            
+                                            # Add button to add more signals
+                                            if st.button("➕ Add Another Signal", key=f"add_more_chain_signal_{branch_idx}_{chain_idx}_{block_idx}"):
+                                                chain_block['signals'].append({
+                                                    'signal': '', 
+                                                    'negated': False, 
+                                                    'operator': 'AND'
+                                                })
+                                                # Remove rerun to prevent state conflicts
                                     else:
                                         st.write("**No signals in chain IF yet**")
                                     
                                     st.markdown('</div>', unsafe_allow_html=True)
                                     
-                                    # Chain THEN section
+                                    # Chain THEN section - Streamlined format like primary blocks
                                     st.markdown('<div class="chain-then-block" style="border-left: 3px solid #FF9800; padding-left: 10px; margin-left: 0px;">', unsafe_allow_html=True)
                                     st.markdown("**CHAIN THEN:**")
                                     
-                                    # Add allocation button for chain THEN
-                                    if st.button("➕", key=f"add_chain_then_{branch_idx}_{chain_idx}_{block_idx}"):
-                                        if 'allocations' not in chain_block:
-                                            chain_block['allocations'] = []
-                                        chain_block['allocations'].append({
-                                            'allocation': '', 
-                                            'weight': 100
-                                        })
-                                        st.rerun()
+                                    # Direct allocation selection (no + button needed)
+                                    if st.session_state.output_allocations:
+                                        selected_chain_allocation = st.selectbox(
+                                            "Select Allocation:",
+                                            [""] + list(st.session_state.output_allocations.keys()),
+                                            key=f"chain_allocation_select_{branch_idx}_{chain_idx}_{block_idx}_{id(chain_block)}"
+                                        )
+                                        if selected_chain_allocation:
+                                            if 'allocations' not in chain_block:
+                                                chain_block['allocations'] = []
+                                            # Check if allocation already exists
+                                            if not any(a.get('allocation') == selected_chain_allocation for a in chain_block.get('allocations', [])):
+                                                chain_block['allocations'].append({
+                                                    'allocation': selected_chain_allocation, 
+                                                    'weight': 100
+                                                })
+                                                st.success(f"✅ Allocation '{selected_chain_allocation}' added to chain!")
+                                                # Remove rerun to prevent state conflicts
+                                    else:
+                                        st.warning("No allocations available. Create allocations in the Allocation Blocks tab first.")
                                     
                                     # Display chain THEN allocations
                                     if chain_block.get('allocations'):
@@ -1734,18 +1764,21 @@ with tab3:
                                                         key=f"chain_then_allocation_{branch_idx}_{chain_idx}_{block_idx}_{alloc_idx}"
                                                     )
                                                 with col2:
-                                                    allocation_config['weight'] = st.number_input(
+                                                    new_weight = st.number_input(
                                                         "Weight %",
                                                         min_value=0,
                                                         max_value=100,
                                                         value=allocation_config.get('weight', 100),
                                                         key=f"chain_then_weight_{branch_idx}_{chain_idx}_{block_idx}_{alloc_idx}"
                                                     )
+                                                    # Only update if value actually changed to avoid unnecessary state changes
+                                                    if new_weight != allocation_config.get('weight', 100):
+                                                        allocation_config['weight'] = new_weight
                                                 with col3:
                                                     if len(chain_block['allocations']) > 1:
                                                         if st.button("🗑️", key=f"remove_chain_{branch_idx}_{chain_idx}_{block_idx}_{alloc_idx}_{id(allocation_config)}_delete"):
                                                             chain_block['allocations'].pop(alloc_idx)
-                                                            st.rerun()
+                                                            # Remove rerun to prevent state conflicts
                                                     else:
                                                         st.write("")
                                             
@@ -1758,6 +1791,14 @@ with tab3:
                                                     st.warning(f"ℹ️ Chain total weight: {total_chain_weight}% ({(100-total_chain_weight):.1f}% unallocated)")
                                             else:
                                                 st.success(f"✅ Chain total weight: {total_chain_weight}%")
+                                            
+                                            # Add button to add more allocations
+                                            if st.button("➕ Add Another Allocation", key=f"add_more_chain_allocation_{branch_idx}_{chain_idx}_{block_idx}"):
+                                                chain_block['allocations'].append({
+                                                    'allocation': '', 
+                                                    'weight': 100
+                                                })
+                                                # Remove rerun to prevent state conflicts
                                     else:
                                         st.write("**No allocations in chain THEN yet**")
                                     
@@ -1774,20 +1815,160 @@ with tab3:
                                             'else_nested_blocks': [],
                                             'is_else_if': True
                                         })
-                                        st.rerun()
+                                        # Remove rerun to prevent state conflicts
                                     
                                     # Delete chain block
                                     if len(chain['chain_blocks']) > 1:
                                         if st.button("🗑️ Delete Chain Block", key=f"delete_chain_block_{branch_idx}_{chain_idx}_{block_idx}"):
                                             chain['chain_blocks'].pop(block_idx)
-                                            st.rerun()
+                                            # Remove rerun to prevent state conflicts
                                     
                                     st.markdown("</div>", unsafe_allow_html=True)
+                                
+                                # Add ELSE block at the end of each chain (like primary blocks)
+                                st.markdown('<div class="chain-else-block" style="border-left: 3px solid #4CAF50; padding-left: 10px; margin-left: 10px;">', unsafe_allow_html=True)
+                                st.markdown("**CHAIN ELSE:**")
+                                
+                                # Weight distribution between allocations and chains for the ELSE block
+                                st.markdown("**Chain ELSE Weight Distribution:**")
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    if 'chain_else_allocation_weight' not in chain:
+                                        chain['chain_else_allocation_weight'] = 50
+                                    new_chain_else_allocation_weight = st.number_input(
+                                        "Allocation Weight %",
+                                        min_value=0,
+                                        max_value=100,
+                                        value=chain.get('chain_else_allocation_weight', 50),
+                                        key=f"chain_else_allocation_weight_{branch_idx}_{chain_idx}"
+                                    )
+                                    # Only update if value actually changed to avoid unnecessary reruns
+                                    if new_chain_else_allocation_weight != chain.get('chain_else_allocation_weight', 50):
+                                        chain['chain_else_allocation_weight'] = new_chain_else_allocation_weight
+                                with col2:
+                                    if 'chain_else_chain_weight' not in chain:
+                                        chain['chain_else_chain_weight'] = 50
+                                    new_chain_else_chain_weight = st.number_input(
+                                        "Chain Weight %",
+                                        min_value=0,
+                                        max_value=100,
+                                        value=chain.get('chain_else_chain_weight', 50),
+                                        key=f"chain_else_chain_weight_{branch_idx}_{chain_idx}"
+                                    )
+                                    # Only update if value actually changed to avoid unnecessary reruns
+                                    if new_chain_else_chain_weight != chain.get('chain_else_chain_weight', 50):
+                                        chain['chain_else_chain_weight'] = new_chain_else_chain_weight
+                                
+                                # Validate total weight
+                                total_chain_else_weight = chain.get('chain_else_allocation_weight', 0) + chain.get('chain_else_chain_weight', 0)
+                                if total_chain_else_weight != 100:
+                                    if total_chain_else_weight > 100:
+                                        st.error(f"⚠️ Chain ELSE total weight: {total_chain_else_weight}% (exceeds 100%)")
+                                    else:
+                                        st.warning(f"ℹ️ Chain ELSE total weight: {total_chain_else_weight}% ({(100-total_chain_else_weight):.1f}% unallocated)")
+                                else:
+                                    st.success(f"✅ Chain ELSE total weight: {total_chain_else_weight}%")
+                                
+                                # Direct allocation selection for chain ELSE
+                                st.markdown("**Add Allocation to Chain ELSE:**")
+                                if st.session_state.output_allocations:
+                                    selected_chain_else_allocation = st.selectbox(
+                                        "Select Allocation:",
+                                        [""] + list(st.session_state.output_allocations.keys()),
+                                        key=f"chain_else_allocation_select_{branch_idx}_{chain_idx}_{id(chain)}"
+                                    )
+                                    if selected_chain_else_allocation:
+                                        if 'chain_else_allocations' not in chain:
+                                            chain['chain_else_allocations'] = []
+                                        # Check if allocation already exists
+                                        if not any(a.get('allocation') == selected_chain_else_allocation for a in chain.get('chain_else_allocations', [])):
+                                            chain['chain_else_allocations'].append({
+                                                'allocation': selected_chain_else_allocation, 
+                                                'weight': 100
+                                            })
+                                            st.success(f"✅ Allocation '{selected_chain_else_allocation}' added to chain ELSE!")
+                                            # Remove rerun to prevent state conflicts
+                                else:
+                                    st.warning("No allocations available. Create allocations in the Allocation Blocks tab first.")
+                                
+                                # Display chain ELSE allocations
+                                if chain.get('chain_else_allocations'):
+                                    with st.expander(f"💰 Chain ELSE Allocations ({len(chain['chain_else_allocations'])})", expanded=True):
+                                        for else_alloc_idx, else_allocation_config in enumerate(chain['chain_else_allocations']):
+                                            col1, col2, col3 = st.columns([2, 1, 1])
+                                            with col1:
+                                                else_allocation_config['allocation'] = st.selectbox(
+                                                    f"Chain ELSE Allocation {else_alloc_idx + 1}", 
+                                                    list(st.session_state.output_allocations.keys()),
+                                                    key=f"chain_else_branch_{branch_idx}_{chain_idx}_allocation_{else_alloc_idx}"
+                                                )
+                                            with col2:
+                                                new_weight = st.number_input(
+                                                    "Weight %",
+                                                    min_value=0,
+                                                    max_value=100,
+                                                    value=else_allocation_config.get('weight', 100),
+                                                    key=f"chain_else_branch_{branch_idx}_{chain_idx}_weight_{else_alloc_idx}"
+                                                )
+                                                # Only update if value actually changed to avoid unnecessary state changes
+                                                if new_weight != else_allocation_config.get('weight', 100):
+                                                    else_allocation_config['weight'] = new_weight
+                                            with col3:
+                                                if len(chain['chain_else_allocations']) > 1:
+                                                    if st.button("🗑️", key=f"remove_chain_else_{branch_idx}_{chain_idx}_{else_alloc_idx}_{id(else_allocation_config)}_delete"):
+                                                        chain['chain_else_allocations'].pop(else_alloc_idx)
+                                                        # Remove rerun to prevent state conflicts
+                                                else:
+                                                    st.write("")
+                                        
+                                        # Show total chain ELSE allocation weight
+                                        total_chain_else_allocation_weight = sum(alloc.get('weight', 0) for alloc in chain['chain_else_allocations'])
+                                        if total_chain_else_allocation_weight != 100:
+                                            if total_chain_else_allocation_weight > 100:
+                                                st.error(f"⚠️ Chain ELSE allocation weight: {total_chain_else_allocation_weight}% (exceeds 100%)")
+                                            else:
+                                                st.warning(f"ℹ️ Chain ELSE allocation weight: {total_chain_else_allocation_weight}% ({(100-total_chain_else_allocation_weight):.1f}% unallocated)")
+                                        else:
+                                            st.success(f"✅ Chain ELSE allocation weight: {total_chain_else_allocation_weight}%")
+                                        
+                                        # Show weight distribution info
+                                        allocation_weight = chain.get('chain_else_allocation_weight', 50)
+                                        chain_weight = chain.get('chain_else_chain_weight', 50)
+                                        st.info(f"📊 Chain ELSE Distribution: {allocation_weight}% allocations, {chain_weight}% chains")
+                                        
+                                        # Add button to add more allocations to chain ELSE
+                                        if st.button("➕ Add Another Allocation to Chain ELSE", key=f"add_more_chain_else_allocation_{branch_idx}_{chain_idx}_{id(chain)}"):
+                                            chain['chain_else_allocations'].append({
+                                                'allocation': '', 
+                                                'weight': 100
+                                            })
+                                            # Remove rerun to prevent state conflicts
+                                
+                                # Add nested chain button for chain ELSE
+                                if st.button("🔗 Add Nested Chain to Chain ELSE", key=f"add_nested_chain_to_chain_else_{branch_idx}_{chain_idx}"):
+                                    if 'chain_else_nested_chains' not in chain:
+                                        chain['chain_else_nested_chains'] = []
+                                    chain['chain_else_nested_chains'].append({
+                                        'type': 'nested_if_else_chain',
+                                        'chain_blocks': [{
+                                            'type': 'chain_if_else',
+                                            'signals': [],
+                                            'allocations': [],
+                                            'else_allocations': [],
+                                            'else_signals': [],
+                                            'else_nested_blocks': [],
+                                            'is_else_if': False
+                                        }]
+                                    })
+                                    st.success(f"✅ Nested chain added to chain ELSE!")
+                                    # Remove rerun to prevent state conflicts
+                                
+                                st.markdown('</div>', unsafe_allow_html=True)
                                 
                                 # Delete entire chain
                                 if st.button("🗑️ Delete Entire Chain", key=f"delete_chain_{branch_idx}_{chain_idx}"):
                                     branch['else_nested_chains'].pop(chain_idx)
-                                    st.rerun()
+                                    # Remove rerun to prevent state conflicts
                                 
                                 st.markdown("</div>", unsafe_allow_html=True)
                     
