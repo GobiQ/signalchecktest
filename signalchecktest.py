@@ -1320,7 +1320,7 @@ with tab3:
                                     'operator': 'AND'
                                 })
                                 st.success(f"✅ Signal '{selected_signal}' added!")
-                                st.rerun()
+                                # Remove rerun to prevent state conflicts
                     else:
                         st.warning("No signals available. Create signals in the Signal Blocks tab first.")
                     
@@ -1360,7 +1360,7 @@ with tab3:
                                     if len(branch['signals']) > 1:
                                         if st.button("🗑️", key=f"remove_if_branch_{branch_idx}_signal_{signal_idx}"):
                                             branch['signals'].pop(signal_idx)
-                                            st.rerun()
+                                            # Remove rerun to prevent state conflicts
                                     else:
                                         st.write("")  # Empty space for alignment
                                 
@@ -1374,7 +1374,7 @@ with tab3:
                                     'negated': False, 
                                     'operator': 'AND'
                                 })
-                                st.rerun()
+                                # Remove rerun to prevent state conflicts
                     else:
                         st.write("**No signals in IF yet**")
                     
@@ -1402,7 +1402,7 @@ with tab3:
                                     'weight': 100
                                 })
                                 st.success(f"✅ Allocation '{selected_allocation}' added!")
-                                st.rerun()
+                                # Remove rerun to prevent state conflicts
                     else:
                         st.warning("No allocations available. Create allocations in the Allocation Blocks tab first.")
                     
@@ -1429,7 +1429,7 @@ with tab3:
                                     if len(branch['allocations']) > 1:  # Don't allow removing the last allocation
                                         if st.button("🗑️", key=f"remove_then_{branch_idx}_{alloc_idx}_{id(allocation_config)}_delete"):
                                             branch['allocations'].pop(alloc_idx)
-                                            st.rerun()
+                                            # Remove rerun to prevent state conflicts
                                     else:
                                         st.write("")  # Empty space for alignment
                             
@@ -1449,7 +1449,7 @@ with tab3:
                                     'allocation': '', 
                                     'weight': 100
                                 })
-                                st.rerun()
+                                # Remove rerun to prevent state conflicts
                     else:
                         st.write("**No allocations in THEN yet**")
                     
