@@ -240,6 +240,196 @@ class SignalDiscovery:
             }
         
         return results
+    
+    def calculate_performance_metrics(self, portfolio_history):
+        """Calculate various performance metrics"""
+        if portfolio_history.empty:
+            return {}
+        
+        returns = portfolio_history['portfolio_value'].pct_change().dropna()
+        
+        if len(returns) == 0:
+            return {}
+        
+        # Calculate metrics
+        total_return = (portfolio_history['portfolio_value'].iloc[-1] / portfolio_history['portfolio_value'].iloc[0] - 1) * 100
+        
+        # Sharpe ratio (assuming 0% risk-free rate)
+        sharpe_ratio = returns.mean() / returns.std() * np.sqrt(252) if returns.std() > 0 else 0
+        
+        # Maximum drawdown
+        cumulative = (1 + returns).cumprod()
+        running_max = cumulative.expanding().max()
+        drawdown = (cumulative - running_max) / running_max
+        max_drawdown = drawdown.min() * 100
+        
+        # Win rate (positive return periods)
+        win_rate = (returns > 0).mean() * 100
+        
+        return {
+            'total_return': total_return,
+            'sharpe_ratio': sharpe_ratio,
+            'max_drawdown': max_drawdown,
+            'win_rate': win_rate,
+            'volatility': returns.std() * np.sqrt(252) * 100
+        }
+    
+    def generate_random_allocations(self, tickers, num_combinations=10):
+        """Generate random allocation combinations that sum to 100%"""
+        allocations_list = []
+        
+        for _ in range(num_combinations):
+            # Generate random weights
+            weights = np.random.dirichlet(np.ones(len(tickers)))
+            allocations = {ticker: weight * 100 for ticker, weight in zip(tickers, weights)}
+            allocations_list.append(allocations)
+        
+        return allocations_list
+    
+    def generate_signal_combinations(self, rsi_periods, ma_periods):
+        """Generate different signal parameter combinations"""
+        combinations = []
+        
+        # RSI-based signals
+        for rsi_period in rsi_periods:
+            combinations.append({
+                'type': 'rsi',
+                'period': rsi_period,
+                'overbought': 70,
+                'oversold': 30
+            })
+        
+        # Moving average crossovers
+        for i, ma1 in enumerate(ma_periods):
+            for ma2 in ma_periods[i+1:]:
+                combinations.append({
+                    'type': 'ma_crossover',
+                    'fast_ma': ma1,
+                    'slow_ma': ma2
+                })
+        
+        # RSI + MA combinations
+        for rsi_period in rsi_periods:
+            for ma_period in ma_periods:
+                combinations.append({
+                    'type': 'rsi_ma_combined',
+                    'rsi_period': rsi_period,
+                    'ma_period': ma_period
+                })
+        
+        return combinations
+    
+    def optimize_strategy(self, data, tickers, num_iterations=100, optimization_metric='Total Return'):
+        """Optimize strategy by testing different allocations and signal combinations"""
+        best_result = None
+        best_score = float('-inf')
+        best_config = None
+        
+        # Generate allocation combinations
+        allocation_combinations = self.generate_random_allocations(tickers, num_iterations)
+        
+        # Generate signal combinations
+        rsi_periods = [10, 14, 20]
+        ma_periods = [20, 50, 100]
+        signal_combinations = self.generate_signal_combinations(rsi_periods, ma_periods)
+        
+        progress_bar = st.progress(0)
+        results_summary = []
+        
+        for i, allocations in enumerate(allocation_combinations):
+            for j, signal_config in enumerate(signal_combinations):
+                try:
+                    # Generate signals with current config
+                    signals = self.generate_signals_optimized(data, signal_config)
+                    
+                    # Run backtest
+                    backtest_results = self.backtest_strategy(signals, allocations)
+                    
+                    # Calculate overall performance
+                    total_return = 0
+                    total_trades = 0
+                    portfolio_history = pd.DataFrame()
+                    
+                    for ticker, result in backtest_results.items():
+                        if not result['portfolio_history'].empty:
+                            total_return += result['return_pct'] * (allocations.get(ticker, 0) / 100)
+                            total_trades += len(result['trades'])
+                            portfolio_history = pd.concat([portfolio_history, result['portfolio_history']])
+                    
+                    # Calculate performance metrics
+                    metrics = self.calculate_performance_metrics(portfolio_history)
+                    
+                    # Determine score based on optimization metric
+                    if optimization_metric == 'Total Return':
+                        score = total_return
+                    elif optimization_metric == 'Sharpe Ratio':
+                        score = metrics.get('sharpe_ratio', 0)
+                    elif optimization_metric == 'Max Drawdown':
+                        score = -metrics.get('max_drawdown', 0)  # Negative because we want to minimize drawdown
+                    elif optimization_metric == 'Win Rate':
+                        score = metrics.get('win_rate', 0)
+                    else:
+                        score = total_return
+                    
+                    # Store result
+                    result_summary = {
+                        'allocations': allocations,
+                        'signal_config': signal_config,
+                        'total_return': total_return,
+                        'metrics': metrics,
+                        'total_trades': total_trades,
+                        'score': score
+                    }
+                    results_summary.append(result_summary)
+                    
+                    # Update best result
+                    if score > best_score:
+                        best_score = score
+                        best_result = result_summary
+                        best_config = {
+                            'allocations': allocations,
+                            'signal_config': signal_config
+                        }
+                
+                except Exception as e:
+                    continue
+                
+                # Update progress
+                progress = (i * len(signal_combinations) + j + 1) / (len(allocation_combinations) * len(signal_combinations))
+                progress_bar.progress(progress)
+        
+        return best_result, results_summary
+    
+    def generate_signals_optimized(self, data, signal_config):
+        """Generate signals with specific configuration for optimization"""
+        signals = {}
+        
+        for ticker, df in data.items():
+            signal_df = pd.DataFrame(index=df.index)
+            signal_df['Close'] = df['Close']
+            
+            if signal_config['type'] == 'rsi':
+                rsi = self.calculate_rsi(df['Close'], signal_config['period'])
+                signal_df['RSI'] = rsi
+                signal_df['Signal'] = (rsi < signal_config['oversold']).astype(int) - (rsi > signal_config['overbought']).astype(int)
+            
+            elif signal_config['type'] == 'ma_crossover':
+                fast_ma = df['Close'].rolling(window=signal_config['fast_ma']).mean()
+                slow_ma = df['Close'].rolling(window=signal_config['slow_ma']).mean()
+                signal_df['Fast_MA'] = fast_ma
+                signal_df['Slow_MA'] = slow_ma
+                signal_df['Signal'] = (fast_ma > slow_ma).astype(int)
+            
+            elif signal_config['type'] == 'rsi_ma_combined':
+                rsi = self.calculate_rsi(df['Close'], signal_config['rsi_period'])
+                ma = df['Close'].rolling(window=signal_config['ma_period']).mean()
+                signal_df['RSI'] = rsi
+                signal_df['MA'] = ma
+                signal_df['Signal'] = ((rsi < 30) & (df['Close'] > ma)).astype(int) - ((rsi > 70) & (df['Close'] < ma)).astype(int)
+            
+            signals[ticker] = signal_df.dropna()
+        
+        return signals
 
 # Streamlit App
 def main():
@@ -280,7 +470,7 @@ def main():
     st.sidebar.subheader("📊 Tickers")
     ticker_input = st.sidebar.text_area(
         "Enter tickers (one per line):",
-        value="AAPL\nMSFT\nGOOGL\nTSLA",
+        value="BIL\nTLT\nCORP\nPSQ\nQQQ\nXLK",
         height=100
     )
     tickers = [t.strip().upper() for t in ticker_input.split('\n') if t.strip()]
@@ -288,7 +478,7 @@ def main():
     # Validate tickers
     if not tickers:
         st.sidebar.warning("Please enter at least one ticker symbol")
-        tickers = ["AAPL"]  # Default fallback
+        tickers = ["BIL"]  # Default fallback
     
     # Signal Configuration
     st.sidebar.subheader("🎯 Signal Configuration")
@@ -329,38 +519,43 @@ def main():
             'threshold': threshold
         })
     
-    # Allocation Configuration
-    st.sidebar.subheader("💰 Allocations")
+    # Optimization Configuration
+    st.sidebar.subheader("🔍 Optimization Settings")
+    
+    # Optimization parameters
+    num_iterations = st.sidebar.number_input("Number of iterations", 10, 1000, 100, help="More iterations = better results but slower")
+    optimization_metric = st.sidebar.selectbox(
+        "Optimization Metric",
+        ["Total Return", "Sharpe Ratio", "Max Drawdown", "Win Rate"],
+        help="Metric to optimize for"
+    )
+    
+    # Signal generation parameters
+    st.sidebar.subheader("📊 Signal Parameters")
+    rsi_periods = st.sidebar.multiselect(
+        "RSI Periods to Test",
+        [5, 10, 14, 20, 30],
+        default=[10, 14],
+        help="RSI periods to test in combinations"
+    )
+    
+    ma_periods = st.sidebar.multiselect(
+        "Moving Average Periods to Test",
+        [5, 10, 20, 50, 100, 200],
+        default=[20, 50],
+        help="Moving average periods to test"
+    )
+    
+    # Initialize allocations for optimization
     allocations = {}
-    remaining_allocation = 100.0
-    
-    # Create a stable list of tickers for allocation
-    ticker_list = list(tickers)
-    
-    for i, ticker in enumerate(ticker_list):
-        max_allocation = min(remaining_allocation, 100.0)
-        try:
-            allocation = st.sidebar.slider(
-                f"{ticker} allocation %",
-                0.0, max_allocation, 
-                min(25.0, max_allocation),
-                key=f"alloc_{i}_{ticker}"
-            )
-            allocations[ticker] = allocation
-            remaining_allocation -= allocation
-        except Exception as e:
-            st.error(f"Error creating slider for {ticker}: {str(e)}")
-            allocations[ticker] = 0.0
-    
-    st.sidebar.write(f"Remaining allocation: {remaining_allocation:.1f}%")
     
     # Main content
-    if st.button("🚀 Run Analysis", type="primary"):
+    if st.button("🚀 Run Optimization", type="primary"):
         if not tickers:
             st.error("Please enter at least one ticker symbol")
             return
         
-        with st.spinner("Fetching data and running analysis..."):
+        with st.spinner("Fetching data and running optimization..."):
             # Fetch data
             data = st.session_state.signal_discovery.fetch_data(tickers, start_date, end_date)
             
@@ -368,156 +563,168 @@ def main():
                 st.error("No data fetched. Please check your ticker symbols.")
                 return
             
-            # Generate signals
-            signals = st.session_state.signal_discovery.generate_signals(data, signal_configs)
-            
-            # Run backtest
-            backtest_results = st.session_state.signal_discovery.backtest_strategy(
-                signals, allocations, split_method
+            # Run optimization
+            best_result, all_results = st.session_state.signal_discovery.optimize_strategy(
+                data, tickers, num_iterations, optimization_metric
             )
             
+            if best_result is None:
+                st.error("No valid strategies found. Try different parameters.")
+                return
+            
             # Display results
-            st.markdown("## 📊 Analysis Results")
+            st.markdown("## 🎯 Optimization Results")
             
             # Create tabs for different views
-            tab1, tab2, tab3, tab4 = st.tabs(["Performance", "Signals", "Trades", "Detailed Analysis"])
+            tab1, tab2, tab3, tab4 = st.tabs(["Best Strategy", "All Results", "Performance Metrics", "Configuration"])
             
             with tab1:
-                st.subheader("Portfolio Performance")
+                st.subheader("Best Strategy Found")
                 
-                # Overall performance metrics
-                total_return = 0
-                total_trades = 0
+                # Display best strategy metrics
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Total Return", f"{best_result['total_return']:.2f}%")
+                with col2:
+                    st.metric("Sharpe Ratio", f"{best_result['metrics'].get('sharpe_ratio', 0):.2f}")
+                with col3:
+                    st.metric("Max Drawdown", f"{best_result['metrics'].get('max_drawdown', 0):.2f}%")
+                with col4:
+                    st.metric("Win Rate", f"{best_result['metrics'].get('win_rate', 0):.1f}%")
                 
-                performance_data = []
-                for ticker, results in backtest_results.items():
-                    performance_data.append({
-                        'Ticker': ticker,
-                        'Final Value': f"${results['final_value']:,.2f}",
-                        'Return %': f"{results['return_pct']:.2f}%",
-                        'Trades': len(results['trades']),
-                        'Train Period': results['train_period'],
-                        'Test Period': results['test_period']
-                    })
-                    total_return += results['return_pct'] * (allocations.get(ticker, 0) / 100)
-                    total_trades += len(results['trades'])
+                # Display best allocations
+                st.subheader("Optimal Allocations")
+                allocation_df = pd.DataFrame([
+                    {'Ticker': ticker, 'Allocation %': allocation}
+                    for ticker, allocation in best_result['allocations'].items()
+                ])
+                st.dataframe(allocation_df, use_container_width=True)
                 
-                # Display performance table
-                if performance_data:
-                    df_performance = pd.DataFrame(performance_data)
-                    st.dataframe(df_performance, use_container_width=True)
-                    
-                    # Overall metrics
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.metric("Total Weighted Return", f"{total_return:.2f}%")
-                    with col2:
-                        st.metric("Total Trades", total_trades)
-                    with col3:
-                        st.metric("Active Tickers", len(backtest_results))
+                # Display signal configuration
+                st.subheader("Optimal Signal Configuration")
+                signal_config = best_result['signal_config']
+                if signal_config['type'] == 'rsi':
+                    st.write(f"**RSI Strategy:** Period {signal_config['period']}, Overbought: {signal_config['overbought']}, Oversold: {signal_config['oversold']}")
+                elif signal_config['type'] == 'ma_crossover':
+                    st.write(f"**Moving Average Crossover:** Fast MA {signal_config['fast_ma']}, Slow MA {signal_config['slow_ma']}")
+                elif signal_config['type'] == 'rsi_ma_combined':
+                    st.write(f"**Combined RSI + MA:** RSI Period {signal_config['rsi_period']}, MA Period {signal_config['ma_period']}")
                 
-                # Plot portfolio performance
-                for ticker, results in backtest_results.items():
-                    if not results['portfolio_history'].empty:
-                        fig = go.Figure()
-                        
-                        fig.add_trace(go.Scatter(
-                            x=results['portfolio_history']['date'],
-                            y=results['portfolio_history']['portfolio_value'],
-                            mode='lines',
-                            name=f'{ticker} Portfolio Value',
-                            line=dict(width=2)
-                        ))
-                        
-                        fig.update_layout(
-                            title=f"{ticker} Portfolio Performance",
-                            xaxis_title="Date",
-                            yaxis_title="Portfolio Value ($)",
-                            height=400
-                        )
-                        
-                        st.plotly_chart(fig, use_container_width=True)
+                # Plot performance comparison
+                if all_results:
+                    returns = [r['total_return'] for r in all_results]
+                    fig = go.Figure()
+                    fig.add_trace(go.Histogram(x=returns, nbinsx=20, name='Strategy Returns'))
+                    fig.add_vline(x=best_result['total_return'], line_dash="dash", line_color="red", 
+                                annotation_text="Best Strategy")
+                    fig.update_layout(
+                        title="Distribution of Strategy Returns",
+                        xaxis_title="Total Return (%)",
+                        yaxis_title="Frequency",
+                        height=400
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
             
             with tab2:
-                st.subheader("Signal Analysis")
+                st.subheader("All Strategy Results")
                 
-                # Display RSI and MA signals for each ticker
-                for ticker in tickers:
-                    if ticker in signals:
-                        st.write(f"**{ticker} Signals**")
-                        
-                        # Create signal plot
-                        fig = make_subplots(
-                            rows=2, cols=1,
-                            subplot_titles=[f'{ticker} Price & Moving Averages', f'{ticker} RSI'],
-                            vertical_spacing=0.1
-                        )
-                        
-                        signal_data = signals[ticker].dropna()
-                        
-                        # Price and MAs
-                        fig.add_trace(
-                            go.Scatter(x=signal_data.index, y=signal_data['Close'], 
-                                     name='Close Price', line=dict(color='black', width=2)),
-                            row=1, col=1
-                        )
-                        
-                        ma_colors = ['blue', 'red', 'green', 'orange', 'purple', 'brown']
-                        for i, ma_period in enumerate([10, 20, 30, 100, 200, 300]):
-                            ma_col = f'MA_{ma_period}'
-                            if ma_col in signal_data.columns:
-                                fig.add_trace(
-                                    go.Scatter(x=signal_data.index, y=signal_data[ma_col],
-                                             name=f'MA {ma_period}', 
-                                             line=dict(color=ma_colors[i % len(ma_colors)])),
-                                    row=1, col=1
-                                )
-                        
-                        # RSI
-                        fig.add_trace(
-                            go.Scatter(x=signal_data.index, y=signal_data['RSI_10'],
-                                     name='RSI (10)', line=dict(color='purple')),
-                            row=2, col=1
-                        )
-                        
-                        # RSI reference lines
-                        fig.add_hline(y=70, line_dash="dash", line_color="red", row=2, col=1)
-                        fig.add_hline(y=30, line_dash="dash", line_color="green", row=2, col=1)
-                        
-                        fig.update_layout(height=600, showlegend=True)
-                        fig.update_yaxes(title_text="Price ($)", row=1, col=1)
-                        fig.update_yaxes(title_text="RSI", row=2, col=1)
-                        
-                        st.plotly_chart(fig, use_container_width=True)
+                # Create results dataframe
+                results_data = []
+                for result in all_results:
+                    results_data.append({
+                        'Total Return (%)': f"{result['total_return']:.2f}",
+                        'Sharpe Ratio': f"{result['metrics'].get('sharpe_ratio', 0):.2f}",
+                        'Max Drawdown (%)': f"{result['metrics'].get('max_drawdown', 0):.2f}",
+                        'Win Rate (%)': f"{result['metrics'].get('win_rate', 0):.1f}",
+                        'Total Trades': result['total_trades'],
+                        'Signal Type': result['signal_config']['type']
+                    })
+                
+                if results_data:
+                    df_results = pd.DataFrame(results_data)
+                    st.dataframe(df_results, use_container_width=True)
+                    
+                    # Sort by total return and show top 10
+                    st.subheader("Top 10 Strategies by Return")
+                    sorted_results = sorted(all_results, key=lambda x: x['total_return'], reverse=True)[:10]
+                    
+                    top_results_data = []
+                    for i, result in enumerate(sorted_results, 1):
+                        top_results_data.append({
+                            'Rank': i,
+                            'Total Return (%)': f"{result['total_return']:.2f}",
+                            'Signal Type': result['signal_config']['type'],
+                            'Sharpe Ratio': f"{result['metrics'].get('sharpe_ratio', 0):.2f}"
+                        })
+                    
+                    df_top = pd.DataFrame(top_results_data)
+                    st.dataframe(df_top, use_container_width=True)
             
             with tab3:
-                st.subheader("Trade History")
+                st.subheader("Performance Metrics Analysis")
                 
-                for ticker, results in backtest_results.items():
-                    if not results['trades'].empty:
-                        st.write(f"**{ticker} Trades**")
-                        st.dataframe(results['trades'], use_container_width=True)
-                        st.write("---")
+                # Performance metrics distribution
+                if all_results:
+                    metrics_data = {
+                        'Total Return (%)': [r['total_return'] for r in all_results],
+                        'Sharpe Ratio': [r['metrics'].get('sharpe_ratio', 0) for r in all_results],
+                        'Max Drawdown (%)': [r['metrics'].get('max_drawdown', 0) for r in all_results],
+                        'Win Rate (%)': [r['metrics'].get('win_rate', 0) for r in all_results]
+                    }
+                    
+                    # Create correlation matrix
+                    df_metrics = pd.DataFrame(metrics_data)
+                    correlation_matrix = df_metrics.corr()
+                    
+                    fig = go.Figure(data=go.Heatmap(
+                        z=correlation_matrix.values,
+                        x=correlation_matrix.columns,
+                        y=correlation_matrix.columns,
+                        colorscale='RdBu',
+                        zmid=0
+                    ))
+                    fig.update_layout(
+                        title="Performance Metrics Correlation Matrix",
+                        height=400
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                    # Metrics summary statistics
+                    st.subheader("Metrics Summary Statistics")
+                    summary_stats = df_metrics.describe()
+                    st.dataframe(summary_stats, use_container_width=True)
             
             with tab4:
-                st.subheader("Detailed Analysis")
+                st.subheader("Optimization Configuration")
                 
-                # Train/Test split visualization
-                st.write("**Data Split Information**")
-                for ticker, results in backtest_results.items():
-                    st.write(f"**{ticker}:**")
-                    st.write(f"- Training Period: {results['train_period']}")
-                    st.write(f"- Testing Period: {results['test_period']}")
-                    st.write(f"- Final Return: {results['return_pct']:.2f}%")
-                    st.write("---")
+                # Display optimization settings
+                st.write("**Optimization Parameters:**")
+                st.write(f"- Number of iterations: {num_iterations}")
+                st.write(f"- Optimization metric: {optimization_metric}")
+                st.write(f"- RSI periods tested: {rsi_periods}")
+                st.write(f"- MA periods tested: {ma_periods}")
                 
-                # Signal configuration summary
-                st.write("**Signal Configuration:**")
-                for i, config in enumerate(signal_configs):
-                    if config['type'] == 'rsi_comparison':
-                        st.write(f"{i+1}. RSI Comparison: {config['ticker1']} vs {config['ticker2']}")
-                    elif config['type'] == 'rsi_static':
-                        st.write(f"{i+1}. RSI Static: {config['ticker']} vs {config['threshold']}")
+                # Display strategy types tested
+                st.write("**Strategy Types Tested:**")
+                strategy_types = set()
+                for result in all_results:
+                    strategy_types.add(result['signal_config']['type'])
+                
+                for strategy_type in strategy_types:
+                    count = sum(1 for r in all_results if r['signal_config']['type'] == strategy_type)
+                    st.write(f"- {strategy_type}: {count} combinations")
+                
+                # Display allocation statistics
+                if all_results:
+                    st.write("**Allocation Statistics:**")
+                    all_allocations = []
+                    for result in all_results:
+                        for ticker, allocation in result['allocations'].items():
+                            all_allocations.append({'Ticker': ticker, 'Allocation': allocation})
+                    
+                    df_alloc = pd.DataFrame(all_allocations)
+                    allocation_stats = df_alloc.groupby('Ticker')['Allocation'].agg(['mean', 'std', 'min', 'max'])
+                    st.dataframe(allocation_stats, use_container_width=True)
 
 if __name__ == "__main__":
     main()
