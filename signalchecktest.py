@@ -473,6 +473,18 @@ def main():
     if 'signal_discovery' not in st.session_state:
         st.session_state.signal_discovery = SignalDiscovery()
     
+    # Ensure the signal_discovery object exists and has the required methods
+    if not hasattr(st.session_state.signal_discovery, 'optimize_strategy'):
+        st.session_state.signal_discovery = SignalDiscovery()
+    
+    # Test that the object has all required methods
+    required_methods = ['optimize_strategy', 'generate_signals_optimized', 'backtest_strategy', 'calculate_performance_metrics']
+    missing_methods = [method for method in required_methods if not hasattr(st.session_state.signal_discovery, method)]
+    
+    if missing_methods:
+        st.error(f"SignalDiscovery object is missing methods: {missing_methods}")
+        st.session_state.signal_discovery = SignalDiscovery()
+    
     # Sidebar configuration
     st.sidebar.header("Configuration")
     
@@ -596,14 +608,59 @@ def main():
                 st.error("No data fetched. Please check your ticker symbols.")
                 return
             
-            # Run optimization
-            best_result, all_results = st.session_state.signal_discovery.optimize_strategy(
-                data, tickers, num_iterations, optimization_metric
-            )
-            
-            if best_result is None:
-                st.error("No valid strategies found. Try different parameters.")
+            # Run optimization with error handling
+            try:
+                if not hasattr(st.session_state.signal_discovery, 'optimize_strategy'):
+                    st.error("SignalDiscovery object is missing optimize_strategy method")
+                    return
+                
+                best_result, all_results = st.session_state.signal_discovery.optimize_strategy(
+                    data, tickers, num_iterations, optimization_metric
+                )
+                
+                if best_result is None:
+                    st.error("No valid strategies found. Try different parameters.")
+                    return
+                    
+            except AttributeError as e:
+                st.error(f"AttributeError in optimize_strategy: {str(e)}")
+                st.error("This might be due to missing methods in SignalDiscovery class")
                 return
+            except Exception as e:
+                st.error(f"Error during optimization: {str(e)}")
+                st.info("Trying to run a simple backtest instead...")
+                
+                # Fallback to simple backtest
+                try:
+                    # Create simple equal allocations
+                    equal_allocations = {ticker: 100.0 / len(tickers) for ticker in tickers}
+                    
+                    # Create simple signal config
+                    simple_signal_config = {'type': 'rsi', 'period': 14, 'overbought': 70, 'oversold': 30}
+                    
+                    # Generate signals
+                    signals = st.session_state.signal_discovery.generate_signals_optimized(data, simple_signal_config)
+                    
+                    # Run backtest
+                    backtest_results = st.session_state.signal_discovery.backtest_strategy(signals, equal_allocations)
+                    
+                    # Create simple result
+                    total_return = sum(result.get('return_pct', 0) * (equal_allocations.get(ticker, 0) / 100) 
+                                    for ticker, result in backtest_results.items())
+                    
+                    best_result = {
+                        'allocations': equal_allocations,
+                        'signal_config': simple_signal_config,
+                        'total_return': total_return,
+                        'metrics': {'total_return': total_return, 'sharpe_ratio': 0, 'max_drawdown': 0, 'win_rate': 0},
+                        'total_trades': 0,
+                        'score': total_return
+                    }
+                    all_results = [best_result]
+                    
+                except Exception as fallback_error:
+                    st.error(f"Fallback also failed: {str(fallback_error)}")
+                    return
             
             # Display results
             st.markdown("## 🎯 Optimization Results")
