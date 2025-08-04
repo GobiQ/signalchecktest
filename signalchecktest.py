@@ -2046,9 +2046,9 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
             np.where(original_filtered_data['Avg_Return'] > 0, np.inf, np.where(original_filtered_data['Avg_Return'] < 0, -np.inf, 1))
         )
         
-        # Return Delta vs RSI Threshold Chart
-        st.subheader("📊 Return Delta vs RSI Threshold")
-        st.info("💡 **What this shows:** This chart displays the **difference** between target ticker average return and benchmark average return across different RSI thresholds. Positive values mean the target outperforms the benchmark, negative values mean the benchmark outperforms the target.")
+        # Return Delta (Average) vs RSI Threshold Chart
+        st.subheader("📊 Return Delta (Average) vs RSI Threshold")
+        st.info("💡 **What this shows:** This chart displays the **difference** between target ticker **average** return and benchmark **average** return across different RSI thresholds. Positive values mean the target outperforms the benchmark, negative values mean the benchmark outperforms the target.")
         
         fig_delta_rsi = go.Figure()
         
@@ -2062,7 +2062,7 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
                 name='Significant Signals',
                 marker=dict(color='green', size=8),
                 hovertemplate='<b>RSI %{x}</b><br>' +
-                            'Return Delta: %{y:.3%}<br>' +
+                            'Return Delta (Avg): %{y:.3%}<br>' +
                             'Target Avg: %{customdata[0]:.3%}<br>' +
                             'Benchmark Avg: %{customdata[1]:.3%}<br>' +
                             'Significant: ✓<extra></extra>',
@@ -2079,7 +2079,7 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
                 name='Non-Significant Signals',
                 marker=dict(color='red', size=8),
                 hovertemplate='<b>RSI %{x}</b><br>' +
-                            'Return Delta: %{y:.3%}<br>' +
+                            'Return Delta (Avg): %{y:.3%}<br>' +
                             'Target Avg: %{customdata[0]:.3%}<br>' +
                             'Benchmark Avg: %{customdata[1]:.3%}<br>' +
                             'Significant: ✗<extra></extra>',
@@ -2091,9 +2091,9 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
                                annotation_text="No Difference")
         
         fig_delta_rsi.update_layout(
-            title="Return Delta (Target - Benchmark) vs RSI Threshold",
+            title="Return Delta (Average: Target - Benchmark) vs RSI Threshold",
             xaxis_title="RSI Threshold",
-            yaxis_title="Return Delta (%)",
+            yaxis_title="Return Delta (Average) (%)",
             hovermode='closest',
             xaxis=dict(range=[0, 100]),
             yaxis=dict(tickformat='.1%'),
@@ -2102,68 +2102,69 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
         
         st.plotly_chart(fig_delta_rsi, use_container_width=True, key="delta_rsi_chart")
         
-        # Return Ratio vs RSI Threshold Chart
-        st.subheader("📊 Return Ratio vs RSI Threshold")
-        st.info("💡 **What this shows:** This chart displays the **ratio** between target ticker average return and benchmark average return across different RSI thresholds. Values > 1 mean the target outperforms the benchmark, values < 1 mean the benchmark outperforms the target.")
+        # Return Delta (Median) vs RSI Threshold Chart
+        st.subheader("📊 Return Delta (Median) vs RSI Threshold")
+        st.info("💡 **What this shows:** This chart displays the **difference** between target ticker **median** return and benchmark **median** return across different RSI thresholds. Median returns are less affected by extreme outliers than averages, providing a more robust measure of typical performance.")
         
-        fig_ratio_rsi = go.Figure()
+        # Calculate median delta
+        original_filtered_data['Median_Return_Delta'] = original_filtered_data['Median_Return'] - original_filtered_data['Benchmark_Median_Return']
         
-        # Filter out infinite values for display
-        finite_data = original_filtered_data[np.isfinite(original_filtered_data['Return_Ratio'])]
+        fig_median_delta_rsi = go.Figure()
         
         # Add points for significant signals (green)
-        significant_finite = finite_data[finite_data['significant'] == True]
-        if not significant_finite.empty:
-            fig_ratio_rsi.add_trace(go.Scatter(
-                x=significant_finite['RSI_Threshold'],
-                y=significant_finite['Return_Ratio'],
+        significant_data = original_filtered_data[original_filtered_data['significant'] == True]
+        if not significant_data.empty:
+            fig_median_delta_rsi.add_trace(go.Scatter(
+                x=significant_data['RSI_Threshold'],
+                y=significant_data['Median_Return_Delta'],
                 mode='markers',
                 name='Significant Signals',
                 marker=dict(color='green', size=8),
                 hovertemplate='<b>RSI %{x}</b><br>' +
-                            'Return Ratio: %{y:.2f}x<br>' +
-                            'Target Avg: %{customdata[0]:.3%}<br>' +
-                            'Benchmark Avg: %{customdata[1]:.3%}<br>' +
+                            'Return Delta (Median): %{y:.3%}<br>' +
+                            'Target Median: %{customdata[0]:.3%}<br>' +
+                            'Benchmark Median: %{customdata[1]:.3%}<br>' +
                             'Significant: ✓<extra></extra>',
-                customdata=significant_finite[['Avg_Return', 'Benchmark_Avg_Return']].values
+                customdata=significant_data[['Median_Return', 'Benchmark_Median_Return']].values
             ))
         
         # Add points for non-significant signals (red)
-        non_significant_finite = finite_data[finite_data['significant'] == False]
-        if not non_significant_finite.empty:
-            fig_ratio_rsi.add_trace(go.Scatter(
-                x=non_significant_finite['RSI_Threshold'],
-                y=non_significant_finite['Return_Ratio'],
+        non_significant_data = original_filtered_data[original_filtered_data['significant'] == False]
+        if not non_significant_data.empty:
+            fig_median_delta_rsi.add_trace(go.Scatter(
+                x=non_significant_data['RSI_Threshold'],
+                y=non_significant_data['Median_Return_Delta'],
                 mode='markers',
                 name='Non-Significant Signals',
                 marker=dict(color='red', size=8),
                 hovertemplate='<b>RSI %{x}</b><br>' +
-                            'Return Ratio: %{y:.2f}x<br>' +
-                            'Target Avg: %{customdata[0]:.3%}<br>' +
-                            'Benchmark Avg: %{customdata[1]:.3%}<br>' +
+                            'Return Delta (Median): %{y:.3%}<br>' +
+                            'Target Median: %{customdata[0]:.3%}<br>' +
+                            'Benchmark Median: %{customdata[1]:.3%}<br>' +
                             'Significant: ✗<extra></extra>',
-                customdata=non_significant_finite[['Avg_Return', 'Benchmark_Avg_Return']].values
+                customdata=non_significant_data[['Median_Return', 'Benchmark_Median_Return']].values
             ))
         
-        # Add reference line at y=1
-        fig_ratio_rsi.add_hline(y=1, line_dash="dash", line_color="gray", 
-                               annotation_text="Equal Performance")
+        # Add reference line at y=0
+        fig_median_delta_rsi.add_hline(y=0, line_dash="dash", line_color="gray", 
+                                      annotation_text="No Difference")
         
-        fig_ratio_rsi.update_layout(
-            title="Return Ratio (Target / Benchmark) vs RSI Threshold",
+        fig_median_delta_rsi.update_layout(
+            title="Return Delta (Median: Target - Benchmark) vs RSI Threshold",
             xaxis_title="RSI Threshold",
-            yaxis_title="Return Ratio (x)",
+            yaxis_title="Return Delta (Median) (%)",
             hovermode='closest',
             xaxis=dict(range=[0, 100]),
+            yaxis=dict(tickformat='.1%'),
             showlegend=True
         )
         
-        st.plotly_chart(fig_ratio_rsi, use_container_width=True, key="ratio_rsi_chart")
+        st.plotly_chart(fig_median_delta_rsi, use_container_width=True, key="median_delta_rsi_chart")
         
-        # Summary statistics for delta and ratio
+        # Summary statistics for average and median deltas
         st.subheader("📊 Return Comparison Summary")
         
-        # Calculate summary statistics
+        # Calculate summary statistics for average deltas
         positive_delta_count = len(original_filtered_data[original_filtered_data['Return_Delta'] > 0])
         negative_delta_count = len(original_filtered_data[original_filtered_data['Return_Delta'] < 0])
         total_signals = len(original_filtered_data)
@@ -2172,19 +2173,26 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
         significant_negative_delta = len(significant_data[significant_data['Return_Delta'] < 0])
         total_significant = len(significant_data)
         
+        # Calculate summary statistics for median deltas
+        positive_median_delta_count = len(original_filtered_data[original_filtered_data['Median_Return_Delta'] > 0])
+        negative_median_delta_count = len(original_filtered_data[original_filtered_data['Median_Return_Delta'] < 0])
+        
+        significant_positive_median_delta = len(significant_data[significant_data['Median_Return_Delta'] > 0])
+        significant_negative_median_delta = len(significant_data[significant_data['Median_Return_Delta'] < 0])
+        
         # Display summary metrics
         col1, col2, col3 = st.columns(3)
         
         with col1:
             st.metric(
-                label="Target Outperforms Benchmark",
+                label="Target Outperforms Benchmark (Average)",
                 value=f"{positive_delta_count}/{total_signals}",
                 delta=f"{(positive_delta_count/total_signals)*100:.1f}% of signals"
             )
         
         with col2:
             st.metric(
-                label="Significant Outperformance",
+                label="Significant Outperformance (Average)",
                 value=f"{significant_positive_delta}/{total_significant}",
                 delta=f"{(significant_positive_delta/total_significant)*100:.1f}% of significant signals"
             )
@@ -2194,20 +2202,57 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
             st.metric(
                 label="Average Return Delta",
                 value=f"{avg_delta:.3%}",
-                delta="Target vs Benchmark"
+                delta="Target vs Benchmark (Average)"
             )
         
-        # Show best and worst performing signals
+        # Display median metrics
+        col4, col5, col6 = st.columns(3)
+        
+        with col4:
+            st.metric(
+                label="Target Outperforms Benchmark (Median)",
+                value=f"{positive_median_delta_count}/{total_signals}",
+                delta=f"{(positive_median_delta_count/total_signals)*100:.1f}% of signals"
+            )
+        
+        with col5:
+            st.metric(
+                label="Significant Outperformance (Median)",
+                value=f"{significant_positive_median_delta}/{total_significant}",
+                delta=f"{(significant_positive_median_delta/total_significant)*100:.1f}% of significant signals"
+            )
+        
+        with col6:
+            median_delta = original_filtered_data['Median_Return_Delta'].mean()
+            st.metric(
+                label="Average Median Return Delta",
+                value=f"{median_delta:.3%}",
+                delta="Target vs Benchmark (Median)"
+            )
+        
+        # Show best and worst performing signals (Average)
         best_delta_idx = original_filtered_data['Return_Delta'].idxmax()
         worst_delta_idx = original_filtered_data['Return_Delta'].idxmin()
         
-        st.write("**🏆 Best Performing Signal:**")
+        st.write("**🏆 Best Performing Signal (Average):**")
         best_row = original_filtered_data.loc[best_delta_idx]
         st.write(f"  • RSI {best_row['RSI_Threshold']}: Target {best_row['Avg_Return']:.3%} vs Benchmark {best_row['Benchmark_Avg_Return']:.3%} = **{best_row['Return_Delta']:.3%}** delta")
         
-        st.write("**📉 Worst Performing Signal:**")
+        st.write("**📉 Worst Performing Signal (Average):**")
         worst_row = original_filtered_data.loc[worst_delta_idx]
         st.write(f"  • RSI {worst_row['RSI_Threshold']}: Target {worst_row['Avg_Return']:.3%} vs Benchmark {worst_row['Benchmark_Avg_Return']:.3%} = **{worst_row['Return_Delta']:.3%}** delta")
+        
+        # Show best and worst performing signals (Median)
+        best_median_delta_idx = original_filtered_data['Median_Return_Delta'].idxmax()
+        worst_median_delta_idx = original_filtered_data['Median_Return_Delta'].idxmin()
+        
+        st.write("**🏆 Best Performing Signal (Median):**")
+        best_median_row = original_filtered_data.loc[best_median_delta_idx]
+        st.write(f"  • RSI {best_median_row['RSI_Threshold']}: Target {best_median_row['Median_Return']:.3%} vs Benchmark {best_median_row['Benchmark_Median_Return']:.3%} = **{best_median_row['Median_Return_Delta']:.3%}** delta")
+        
+        st.write("**📉 Worst Performing Signal (Median):**")
+        worst_median_row = original_filtered_data.loc[worst_median_delta_idx]
+        st.write(f"  • RSI {worst_median_row['RSI_Threshold']}: Target {worst_median_row['Median_Return']:.3%} vs Benchmark {worst_median_row['Benchmark_Median_Return']:.3%} = **{worst_median_row['Median_Return_Delta']:.3%}** delta")
         
         # Note: QuantStats detailed reports removed to avoid import issues
         # Basic QuantStats metrics are still available in the main results table
