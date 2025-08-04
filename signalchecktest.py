@@ -1,2712 +1,2282 @@
-import streamlit as st
-import pandas as pd
 import numpy as np
-import yfinance as yf
+import pandas as pd
+import streamlit as st
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import plotly.express as px
+import yfinance as yf
 from datetime import datetime, timedelta
+from typing import Dict, Tuple, List, Optional
 import warnings
-import json
-import copy
-import hashlib
+from scipy import stats
 warnings.filterwarnings('ignore')
 
-# Page configuration
-st.set_page_config(
-    page_title="Strategy Validation Tool",
-    page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="collapsed"
-)
+# Try to import QuantStats with error handling
+try:
+    import quantstats as qs
+    # Configure QuantStats
+    qs.extend_pandas()
+    QUANTSTATS_AVAILABLE = True
+    st.success("✅ QuantStats loaded successfully!")
+except ImportError as e:
+    st.warning(f"⚠️ QuantStats import error: {str(e)}. Install with: pip install quantstats>=0.0.62")
+    QUANTSTATS_AVAILABLE = False
+except Exception as e:
+    st.warning(f"⚠️ QuantStats import failed: {str(e)}. Using fallback calculations.")
+    QUANTSTATS_AVAILABLE = False
 
-# Custom CSS for modern slate grey theme
-st.markdown("""
-<style>
-    .main {
-        background: #475569;
-        color: white;
-    }
-    .stApp {
-        background: #475569;
-    }
-    .stExpander {
-        background: rgba(255, 255, 255, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        border-radius: 10px;
-        backdrop-filter: blur(10px);
-    }
-    .strategy-builder {
-        background: rgba(255, 255, 255, 0.05);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 10px;
-        padding: 20px;
-        margin: 10px 0;
-        backdrop-filter: blur(10px);
-    }
-    .branch-container {
-        background: rgba(255, 255, 255, 0.08);
-        border: 1px solid rgba(255, 255, 255, 0.15);
-        border-radius: 8px;
-        padding: 15px;
-        margin: 10px 0;
-        backdrop-filter: blur(8px);
-    }
-    .condition-block {
-        background: rgba(59, 130, 246, 0.2);
-        border: 1px solid rgba(59, 130, 246, 0.3);
-        border-radius: 6px;
-        padding: 10px;
-        margin: 5px 0;
-        position: relative;
-    }
-    .condition-block::before {
-        content: "IF";
-        position: absolute;
-        top: -8px;
-        left: 10px;
-        background: #3b82f6;
-        color: white;
-        padding: 2px 8px;
-        border-radius: 4px;
-        font-size: 12px;
-        font-weight: bold;
-    }
-    .then-block {
-        background: rgba(34, 197, 94, 0.2);
-        border: 1px solid rgba(34, 197, 94, 0.3);
-        border-radius: 6px;
-        padding: 10px;
-        margin: 5px 0;
-        position: relative;
-    }
-    .then-block::before {
-        content: "THEN";
-        position: absolute;
-        top: -8px;
-        left: 10px;
-        background: #22c55e;
-        color: white;
-        padding: 2px 8px;
-        border-radius: 4px;
-        font-size: 12px;
-        font-weight: bold;
-    }
-    .else-block {
-        background: rgba(239, 68, 68, 0.2);
-        border: 1px solid rgba(239, 68, 68, 0.3);
-        border-radius: 6px;
-        padding: 10px;
-        margin: 5px 0;
-        position: relative;
-    }
-    .else-block::before {
-        content: "ELSE";
-        position: absolute;
-        top: -8px;
-        left: 10px;
-        background: #ef4444;
-        color: white;
-        padding: 2px 8px;
-        border-radius: 4px;
-        font-size: 12px;
-        font-weight: bold;
-    }
-    .nested-else-block {
-        background: rgba(168, 85, 247, 0.2);
-        border: 1px solid rgba(168, 85, 247, 0.3);
-        border-radius: 6px;
-        padding: 10px;
-        margin: 5px 0;
-        position: relative;
-    }
-    .nested-else-block::before {
-        content: "ELSE IF";
-        position: absolute;
-        top: -8px;
-        left: 10px;
-        background: #a855f7;
-        color: white;
-        padding: 2px 8px;
-        border-radius: 4px;
-        font-size: 12px;
-        font-weight: bold;
-    }
-    .allocation-display {
-        background: rgba(255, 255, 255, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        border-radius: 6px;
-        padding: 8px;
-        margin: 5px 0;
-    }
-    .if-else-block {
-        background: rgba(255, 255, 255, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        border-radius: 8px;
-        padding: 15px;
-        margin: 10px 0;
-        backdrop-filter: blur(8px);
-    }
-    .if-else-header {
-        background: rgba(59, 130, 246, 0.3);
-        border-radius: 6px;
-        padding: 8px;
-        margin-bottom: 10px;
-        font-weight: bold;
-    }
-    .stButton > button {
-        background: rgba(59, 130, 246, 0.8);
-        color: white !important;
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        border-radius: 6px;
-        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-    }
-    .stButton > button:hover {
-        background: rgba(59, 130, 246, 1);
-        border-color: rgba(255, 255, 255, 0.4);
-    }
-    .stSelectbox > div > div {
-        background: rgba(255, 255, 255, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        color: white;
-    }
-    .stTextInput > div > div > input {
-        background: rgba(255, 255, 255, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        color: white;
-    }
-    .stNumberInput > div > div > input {
-        background: rgba(255, 255, 255, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        color: white;
-    }
-</style>
-""", unsafe_allow_html=True)
+st.set_page_config(page_title="Signal Check", layout="wide")
 
-# Initialize session state
-if 'signals' not in st.session_state:
-    st.session_state.signals = []
-    # Add pre-built signals automatically
-    prebuilt_signals = [
-        {
-            'name': 'If 10d RSI QQQ > 80',
-            'type': 'Custom Indicator',
-            'signal_ticker1': 'QQQ',
-            'signal_ticker2': 'QQQ',
-            'indicator1': 'RSI',
-            'indicator2': 'Static Value',
-            'operator': '>',
-            'days1': 10,
-            'days2': None,
-            'static_value': 80.0
-        },
-        {
-            'name': 'If 10d RSI QQQ < 30',
-            'type': 'Custom Indicator',
-            'signal_ticker1': 'QQQ',
-            'signal_ticker2': 'QQQ',
-            'indicator1': 'RSI',
-            'indicator2': 'Static Value',
-            'operator': '<',
-            'days1': 10,
-            'days2': None,
-            'static_value': 30.0
-        },
-        {
-            'name': 'If Current Price SPY > 200d SMA SPY',
-            'type': 'Custom Indicator',
-            'signal_ticker1': 'SPY',
-            'signal_ticker2': 'SPY',
-            'indicator1': 'Current Price',
-            'indicator2': 'SMA',
-            'operator': '>',
-            'days1': None,
-            'days2': 200,
-            'static_value': None
-        },
-        {
-            'name': 'If Current Price SPY > 20d SMA SPY',
-            'type': 'Custom Indicator',
-            'signal_ticker1': 'SPY',
-            'signal_ticker2': 'SPY',
-            'indicator1': 'Current Price',
-            'indicator2': 'SMA',
-            'operator': '>',
-            'days1': None,
-            'days2': 20,
-            'static_value': None
-        }
-    ]
-    st.session_state.signals = prebuilt_signals
+st.title("Signal Check")
+st.write("RSI Threshold Statistics")
 
-if 'output_allocations' not in st.session_state:
-    st.session_state.output_allocations = {}
-    # Add pre-built allocations automatically
-    prebuilt_allocations = {
-        'TQQQ': {
-            'name': 'TQQQ',
-            'tickers': [{'ticker': 'TQQQ', 'weight': 100}]
-        },
-        'QLD': {
-            'name': 'QLD',
-            'tickers': [{'ticker': 'QLD', 'weight': 100}]
-        },
-        'QQQ': {
-            'name': 'QQQ',
-            'tickers': [{'ticker': 'QQQ', 'weight': 100}]
-        },
-        'SPY': {
-            'name': 'SPY',
-            'tickers': [{'ticker': 'SPY', 'weight': 100}]
-        },
-        'XLP': {
-            'name': 'XLP',
-            'tickers': [{'ticker': 'XLP', 'weight': 100}]
-        },
-        'XLU': {
-            'name': 'XLU',
-            'tickers': [{'ticker': 'XLU', 'weight': 100}]
-        },
-        'BIL': {
-            'name': 'BIL',
-            'tickers': [{'ticker': 'BIL', 'weight': 100}]
-        },
-        'UVXY': {
-            'name': 'UVXY',
-            'tickers': [{'ticker': 'UVXY', 'weight': 100}]
-        },
-        'VIXY': {
-            'name': 'VIXY',
-            'tickers': [{'ticker': 'VIXY', 'weight': 100}]
-        },
-        'BIL VIXY Defensive': {
-            'name': 'BIL VIXY Defensive',
-            'tickers': [
-                {'ticker': 'BIL', 'weight': 50},
-                {'ticker': 'VIXY', 'weight': 50}
-            ]
-        },
-        'XLP XLU Defensive': {
-            'name': 'XLP XLU Defensive',
-            'tickers': [
-                {'ticker': 'XLP', 'weight': 50},
-                {'ticker': 'XLU', 'weight': 50}
-            ]
-        }
-    }
-    st.session_state.output_allocations = prebuilt_allocations
-
-if 'strategy_branches' not in st.session_state:
-    st.session_state.strategy_branches = []
-
-if 'copied_block' not in st.session_state:
-    st.session_state.copied_block = None
-
-# Reference Blocks System
-if 'reference_blocks' not in st.session_state:
-    st.session_state.reference_blocks = {}
-
-if 'saved_blocks' not in st.session_state:
-    st.session_state.saved_blocks = {}
-
-# Logic Block Caching System
-if 'block_cache' not in st.session_state:
-    st.session_state.block_cache = {}
-
-if 'computed_signals' not in st.session_state:
-    st.session_state.computed_signals = {}
-
-if 'cache_hits' not in st.session_state:
-    st.session_state.cache_hits = 0
-
-if 'cache_misses' not in st.session_state:
-    st.session_state.cache_misses = 0
-
-# Helper Functions
-def generate_block_signature(block_data):
-    """Generate a unique signature for a logic block"""
-    signature_data = {
-        'signals': block_data.get('signals', []),
-        'allocations': block_data.get('allocations', []),
-        'else_allocations': block_data.get('else_allocations', []),
-        'type': block_data.get('type', 'custom')
-    }
-    return hashlib.md5(json.dumps(signature_data, sort_keys=True).encode()).hexdigest()
-
-def compute_logic_block(block_data, signal_results, data, benchmark_ticker):
-    """Compute logic block with caching"""
-    signature = generate_block_signature(block_data)
-    
-    if signature in st.session_state.block_cache:
-        st.session_state.cache_hits += 1
-        return st.session_state.block_cache[signature]
-    
-    st.session_state.cache_misses += 1
-    
-    # Compute the logic block
-    if block_data.get('type') == 'if_else':
-        # Handle If/Else logic
-        if_signals = block_data.get('signals', [])
-        if_allocations = block_data.get('allocations', [])
-        else_allocations = block_data.get('else_allocations', [])
-        
-        # Evaluate IF conditions
-        if_result = True
-        for signal_config in if_signals:
-            signal_name = signal_config.get('signal', '')
-            if signal_name and signal_name in signal_results:
-                signal_result = signal_results[signal_name]
-                if signal_config.get('negated', False):
-                    signal_result = ~signal_result
-                
-                if signal_config.get('operator', 'AND') == 'AND':
-                    if_result = if_result & signal_result
-                else:
-                    if_result = if_result | signal_result
-        
-        # Return appropriate allocation based on IF result
-        if if_result.any():
-            result = if_allocations
-        else:
-            result = else_allocations
-        
-        st.session_state.block_cache[signature] = result
-        return result
-    
-    return []
-
-def get_cache_stats():
-    """Get cache statistics"""
-    total_requests = st.session_state.cache_hits + st.session_state.cache_misses
-    hit_rate = (st.session_state.cache_hits / total_requests * 100) if total_requests > 0 else 0
-    return {
-        'hits': st.session_state.cache_hits,
-        'misses': st.session_state.cache_misses,
-        'total': total_requests,
-        'hit_rate': hit_rate
-    }
-
-def clear_cache():
-    """Clear the block cache"""
-    st.session_state.block_cache = {}
-    st.session_state.cache_hits = 0
-    st.session_state.cache_misses = 0
-
-# Reference Block Management Functions
-def save_reference_block(block_data, block_name, block_type="custom"):
-    """Save a logic block as a reference block for reuse"""
-    reference_block = {
-        'name': block_name,
-        'type': block_type,
-        'data': copy.deepcopy(block_data),
-        'created_at': datetime.now().isoformat(),
-        'usage_count': 0
-    }
-    st.session_state.reference_blocks[block_name] = reference_block
-    return block_name
-
-def load_reference_block(block_name):
-    """Load a reference block by name"""
-    if block_name in st.session_state.reference_blocks:
-        block = st.session_state.reference_blocks[block_name]
-        block['usage_count'] += 1
-        return copy.deepcopy(block['data'])
-    return None
-
-def get_reference_block_preview(block_name):
-    """Get a preview of a reference block"""
-    if block_name in st.session_state.reference_blocks:
-        block = st.session_state.reference_blocks[block_name]
-        signals_count = len(block['data'].get('signals', []))
-        allocations_count = len(block['data'].get('allocations', []))
-        usage_count = block['usage_count']
-        return f"📋 {signals_count} signals, {allocations_count} allocations (used {usage_count} times)"
-    return "Block not found"
-
-def delete_reference_block(block_name):
-    """Delete a reference block"""
-    if block_name in st.session_state.reference_blocks:
-        del st.session_state.reference_blocks[block_name]
-        return True
-    return False
-
-def get_all_reference_blocks():
-    """Get all available reference blocks"""
-    return list(st.session_state.reference_blocks.keys())
-
-# Technical Analysis Functions
 def calculate_rsi(prices: pd.Series, window: int = 14, method: str = "wilders") -> pd.Series:
-    """Calculate RSI with TradingView/Composer.trade compatibility"""
+    """Calculate RSI using specified method (Wilder's smoothing or simple moving average)"""
+    if len(prices) < window + 1:
+        return pd.Series(index=prices.index, dtype=float)
+    
     delta = prices.diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
+    
+    # Separate gains and losses
+    gains = delta.where(delta > 0, 0)
+    losses = -delta.where(delta < 0, 0)
     
     if method == "wilders":
-        rs = gain / loss
-        rsi = 100 - (100 / (1 + rs))
+        # Wilder's smoothing: use exponential moving average with alpha = 1/window
+        alpha = 1.0 / window
+        
+        # Calculate smoothed average gains and losses
+        avg_gains = gains.ewm(alpha=alpha, adjust=False).mean()
+        avg_losses = losses.ewm(alpha=alpha, adjust=False).mean()
     else:
-        rs = gain / loss
-        rsi = 100 - (100 / (1 + rs))
+        # Simple moving average method
+        avg_gains = gains.rolling(window=window).mean()
+        avg_losses = losses.rolling(window=window).mean()
+    
+    # Calculate relative strength
+    rs = avg_gains / avg_losses
+    
+    # Calculate RSI
+    rsi = 100 - (100 / (1 + rs))
     
     return rsi
 
+def calculate_sortino_ratio(returns: np.ndarray, risk_free_rate: float = 0.02, use_quantstats: bool = True) -> float:
+    """Calculate Sortino ratio using QuantStats or fallback"""
+    if len(returns) == 0:
+        return 0
+    
+    # Convert to pandas Series for QuantStats
+    returns_series = pd.Series(returns)
+    
+    if QUANTSTATS_AVAILABLE and use_quantstats:
+        try:
+            # Use QuantStats sortino ratio calculation
+            sortino_ratio = qs.stats.sortino(returns_series, rf=risk_free_rate)
+            return sortino_ratio if not np.isnan(sortino_ratio) else 0
+        except Exception:
+            pass  # Fall through to original calculation
+    
+    # Fallback to original calculation
+    rf_per_trade = risk_free_rate / 252
+    excess_returns = returns - rf_per_trade
+    downside_returns = excess_returns[excess_returns < 0]
+    
+    if len(downside_returns) == 0:
+        return np.inf if excess_returns.mean() > 0 else 0
+    
+    downside_deviation = np.sqrt(np.mean(downside_returns**2))
+    
+    if downside_deviation == 0:
+        return np.inf if excess_returns.mean() > 0 else 0
+    
+    return excess_returns.mean() / downside_deviation
+
 def get_stock_data(ticker: str, start_date=None, end_date=None, exclusions=None) -> pd.Series:
-    """Fetch stock data with timezone normalization"""
+    """Fetch stock data using yfinance with optional date range and exclusions"""
     try:
         stock = yf.Ticker(ticker)
-        data = stock.history(start=start_date, end=end_date)
+        
+        if start_date and end_date:
+            data = stock.history(start=start_date, end=end_date)
+        else:
+            # Default to maximum available period
+            data = stock.history(period="max")
         
         if data.empty:
-            return pd.Series(dtype=float)
+            st.error(f"No data found for ticker: {ticker}")
+            return None
         
-        # Normalize timezone
-        data.index = data.index.tz_localize(None)
-        
-        # Handle exclusions (holidays, etc.)
+        # Apply exclusions if provided
         if exclusions:
-            data = data[~data.index.isin(exclusions)]
+            for exclusion in exclusions:
+                exclusion_start = pd.Timestamp(exclusion['start'])
+                exclusion_end = pd.Timestamp(exclusion['end'])
+                # Remove data within exclusion period
+                data = data[~((data.index >= exclusion_start) & (data.index <= exclusion_end))]
         
         return data['Close']
     except Exception as e:
         st.error(f"Error fetching data for {ticker}: {str(e)}")
-        return pd.Series(dtype=float)
+        return None
 
-def calculate_equity_curve(signals: pd.Series, prices: pd.Series, allocation: float = 1.0) -> pd.Series:
-    """Calculate equity curve from signals and prices"""
-    if signals.empty or prices.empty:
-        return pd.Series(dtype=float)
+def analyze_rsi_signals(signal_prices: pd.Series, target_prices: pd.Series, rsi_threshold: float, comparison: str = "less_than", rsi_period: int = 14, rsi_method: str = "wilders", use_quantstats: bool = True, preconditions: List[Dict] = None, precondition_data: Dict[str, pd.Series] = None) -> Dict:
+    """Analyze RSI signals for a specific threshold with optional preconditions"""
+    # Calculate RSI for the SIGNAL ticker using specified period and method
+    signal_rsi = calculate_rsi(signal_prices, window=rsi_period, method=rsi_method)
     
-    # Align signals and prices
-    aligned_data = pd.concat([signals, prices], axis=1).dropna()
-    if aligned_data.empty:
-        return pd.Series(dtype=float)
+    # Generate buy signals based on SIGNAL RSI threshold and comparison
+    if comparison == "less_than":
+        # "≤" configuration: Buy TARGET when SIGNAL RSI ≤ threshold, sell when SIGNAL RSI < threshold
+        base_signals = (signal_rsi <= rsi_threshold).astype(int)
+    else:  # greater_than
+        # "≥" configuration: Buy TARGET when SIGNAL RSI ≥ threshold, sell when SIGNAL RSI < threshold
+        base_signals = (signal_rsi >= rsi_threshold).astype(int)
     
-    signals_aligned = aligned_data.iloc[:, 0]
-    prices_aligned = aligned_data.iloc[:, 1]
+    # Apply preconditions if provided
+    if preconditions and precondition_data:
+        # Start with all signals as valid
+        precondition_mask = pd.Series(True, index=signal_prices.index)
+        
+        for precondition in preconditions:
+            precondition_ticker = precondition['signal_ticker']
+            precondition_comparison = precondition['comparison']
+            precondition_threshold = precondition['threshold']
+            
+            # Get RSI data for this precondition ticker
+            if precondition_ticker in precondition_data:
+                precondition_rsi = calculate_rsi(precondition_data[precondition_ticker], window=rsi_period, method=rsi_method)
+                
+                # Apply the precondition condition
+                if precondition_comparison == "less_than":
+                    precondition_condition = (precondition_rsi <= precondition_threshold)
+                else:  # greater_than
+                    precondition_condition = (precondition_rsi >= precondition_threshold)
+                
+                # Update the mask (all preconditions must be True)
+                precondition_mask = precondition_mask & precondition_condition
+            else:
+                st.warning(f"⚠️ No data found for precondition ticker: {precondition_ticker}")
+                return {
+                    'total_trades': 0,
+                    'win_rate': 0,
+                    'avg_return': 0,
+                    'median_return': 0,
+                    'returns': [],
+                    'avg_hold_days': 0,
+                    'sortino_ratio': 0,
+                    'equity_curve': pd.Series(1.0, index=target_prices.index),
+                    'trades': [],
+                    'annualized_return': 0
+                }
+        
+        # Apply precondition mask to base signals
+        signals = base_signals & precondition_mask
+    else:
+        signals = base_signals
     
-    # Calculate returns
-    returns = prices_aligned.pct_change()
+    # Calculate equity curve day by day - buy/sell TARGET based on SIGNAL RSI
+    equity_curve = pd.Series(1.0, index=target_prices.index)
+    current_equity = 1.0
+    in_position = False
+    entry_equity = 1.0
+    entry_date = None
+    entry_price = None
+    trades = []
     
-    # Apply signals
-    strategy_returns = returns * signals_aligned * allocation
+    for i, date in enumerate(target_prices.index):
+        current_signal = signals[date] if date in signals.index else 0
+        current_price = target_prices[date]  # TARGET price
+        
+        if current_signal == 1 and not in_position:
+            # Enter position - buy TARGET at close when SIGNAL RSI meets condition
+            in_position = True
+            entry_equity = current_equity
+            entry_date = date
+            entry_price = current_price
+            
+        elif current_signal == 0 and in_position:
+            # Exit position - sell TARGET at close when SIGNAL RSI no longer meets condition
+            trade_return = (current_price - entry_price) / entry_price
+            current_equity = entry_equity * (1 + trade_return)
+            
+            hold_days = (date - entry_date).days
+            trades.append({
+                'entry_date': entry_date,
+                'exit_date': date,
+                'entry_price': entry_price,
+                'exit_price': current_price,
+                'return': trade_return,
+                'hold_days': hold_days
+            })
+            
+            in_position = False
+        
+        # Update equity curve
+        if in_position:
+            # Mark-to-market the TARGET position
+            current_equity = entry_equity * (current_price / entry_price)
+        
+        equity_curve[date] = current_equity
     
-    # Calculate cumulative equity curve
-    equity_curve = (1 + strategy_returns).cumprod()
+    # Handle case where we're still in position at the end
+    if in_position:
+        final_price = target_prices.iloc[-1]
+        final_date = target_prices.index[-1]
+        trade_return = (final_price - entry_price) / entry_price
+        current_equity = entry_equity * (1 + trade_return)
+        
+        hold_days = (final_date - entry_date).days
+        trades.append({
+            'entry_date': entry_date,
+            'exit_date': final_date,
+            'entry_price': entry_price,
+            'exit_price': final_price,
+            'return': trade_return,
+            'hold_days': hold_days
+        })
+        equity_curve.iloc[-1] = current_equity
     
-    return equity_curve
-
-def calculate_metrics(equity_curve: pd.Series, returns: pd.Series) -> dict:
-    """Calculate comprehensive performance metrics"""
-    if equity_curve.empty:
-        return {}
+    if not trades:
+        return {
+            'total_trades': 0,
+            'win_rate': 0,
+            'avg_return': 0,
+            'median_return': 0,
+            'returns': [],
+            'avg_hold_days': 0,
+            'sortino_ratio': 0,
+            'equity_curve': equity_curve,
+            'trades': [],
+            'annualized_return': 0
+        }
     
-    # Basic metrics
-    total_return = (equity_curve.iloc[-1] / equity_curve.iloc[0]) - 1
-    annualized_return = ((equity_curve.iloc[-1] / equity_curve.iloc[0]) ** (252 / len(equity_curve))) - 1
+    returns = np.array([trade['return'] for trade in trades])
+    win_rate = (returns > 0).mean()
+    avg_return = returns.mean()
+    median_return = np.median(returns)
+    avg_hold_days = np.mean([trade['hold_days'] for trade in trades])
+    sortino_ratio = calculate_sortino_ratio(returns, use_quantstats=use_quantstats)
     
-    # Volatility
-    strategy_returns = equity_curve.pct_change().dropna()
-    volatility = strategy_returns.std() * np.sqrt(252)
-    
-    # Sharpe Ratio
-    risk_free_rate = 0.02  # 2% annual risk-free rate
-    sharpe_ratio = (annualized_return - risk_free_rate) / volatility if volatility > 0 else 0
-    
-    # Sortino Ratio
-    downside_returns = strategy_returns[strategy_returns < 0]
-    downside_deviation = downside_returns.std() * np.sqrt(252) if len(downside_returns) > 0 else 0
-    sortino_ratio = (annualized_return - risk_free_rate) / downside_deviation if downside_deviation > 0 else 0
-    
-    # Maximum Drawdown
-    rolling_max = equity_curve.expanding().max()
-    drawdown = (equity_curve - rolling_max) / rolling_max
-    max_drawdown = drawdown.min()
-    
-    # Calmar Ratio
-    calmar_ratio = annualized_return / abs(max_drawdown) if max_drawdown != 0 else 0
-    
-    # Win Rate and Trade Statistics
-    trades = strategy_returns[strategy_returns != 0]
-    win_rate = (trades > 0).mean() if len(trades) > 0 else 0
-    total_trades = len(trades)
-    avg_trade_return = trades.mean() if len(trades) > 0 else 0
+    # Calculate annualized return
+    total_days = (target_prices.index[-1] - target_prices.index[0]).days
+    total_return = equity_curve.iloc[-1] - 1
+    annualized_return = (1 + total_return) ** (365 / total_days) - 1 if total_days > 0 else 0
     
     return {
-        'total_return': total_return,
-        'annualized_return': annualized_return,
-        'volatility': volatility,
-        'sharpe_ratio': sharpe_ratio,
-        'sortino_ratio': sortino_ratio,
-        'max_drawdown': max_drawdown,
-        'calmar_ratio': calmar_ratio,
+        'total_trades': len(returns),
         'win_rate': win_rate,
-        'total_trades': total_trades,
-        'avg_trade_return': avg_trade_return
+        'avg_return': avg_return,
+        'median_return': median_return,
+        'returns': returns,
+        'avg_hold_days': avg_hold_days,
+        'sortino_ratio': sortino_ratio,
+        'equity_curve': equity_curve,
+        'trades': trades,
+        'annualized_return': annualized_return
     }
 
-def calculate_sma(prices: pd.Series, window: int) -> pd.Series:
-    """Calculate Simple Moving Average"""
-    return prices.rolling(window=window).mean()
-
-def calculate_ema(prices: pd.Series, window: int) -> pd.Series:
-    """Calculate Exponential Moving Average"""
-    return prices.ewm(span=window).mean()
-
-def calculate_cumulative_return(prices: pd.Series, window: int) -> pd.Series:
-    """Calculate cumulative return over window"""
-    return (prices / prices.shift(window)) - 1
-
-def calculate_max_drawdown_series(prices: pd.Series, window: int) -> pd.Series:
-    """Calculate rolling maximum drawdown"""
-    rolling_max = prices.rolling(window=window).max()
-    return (prices - rolling_max) / rolling_max
-
-def calculate_indicator(prices: pd.Series, indicator_type: str, days: int = None) -> pd.Series:
-    """Calculate various technical indicators"""
-    if indicator_type == "RSI":
-        return calculate_rsi(prices, days or 14)
-    elif indicator_type == "SMA":
-        return calculate_sma(prices, days or 200)
-    elif indicator_type == "EMA":
-        return calculate_ema(prices, days or 20)
-    elif indicator_type == "Current Price":
-        return prices
-    elif indicator_type == "Cumulative Return":
-        return calculate_cumulative_return(prices, days or 252)
-    elif indicator_type == "Max Drawdown":
-        return calculate_max_drawdown_series(prices, days or 252)
+def calculate_statistical_significance(strategy_equity_curve: pd.Series, benchmark_equity_curve: pd.Series, 
+                                    strategy_annualized: float, benchmark_annualized: float) -> Dict:
+    """Calculate statistical significance by comparing strategy vs SPY equity curves under same conditions"""
+    
+    if len(strategy_equity_curve) == 0 or len(benchmark_equity_curve) == 0:
+        return {
+            't_statistic': 0,
+            'p_value': 1.0,
+            'confidence_level': 0,
+            'significant': False,
+            'effect_size': 0,
+            'power': 0,
+            'insufficient_data': True
+        }
+    
+    # Align the equity curves on the same dates
+    common_dates = strategy_equity_curve.index.intersection(benchmark_equity_curve.index)
+    if len(common_dates) < 20:  # Increased minimum data points for more reliable tests
+        return {
+            't_statistic': 0,
+            'p_value': 1.0,
+            'confidence_level': 0,
+            'significant': False,
+            'effect_size': 0,
+            'power': 0,
+            'insufficient_data': True
+        }
+    
+    strategy_aligned = strategy_equity_curve[common_dates]
+    benchmark_aligned = benchmark_equity_curve[common_dates]
+    
+    # Calculate daily returns for both strategies
+    strategy_returns = strategy_aligned.pct_change().dropna()
+    benchmark_returns = benchmark_aligned.pct_change().dropna()
+    
+    # Ensure we have enough data points
+    if len(strategy_returns) < 20 or len(benchmark_returns) < 20:
+        return {
+            't_statistic': 0,
+            'p_value': 1.0,
+            'confidence_level': 0,
+            'significant': False,
+            'effect_size': 0,
+            'power': 0,
+            'insufficient_data': True
+        }
+    
+    # Perform two-tailed t-test first
+    t_stat, p_value_two_tail = stats.ttest_ind(strategy_returns.values, benchmark_returns.values)
+    
+    # Calculate the difference in means
+    strategy_mean = np.mean(strategy_returns.values)
+    benchmark_mean = np.mean(benchmark_returns.values)
+    mean_difference = strategy_mean - benchmark_mean
+    
+    # Calculate effect size (Cohen's d)
+    pooled_std = np.sqrt(((len(strategy_returns) - 1) * np.var(strategy_returns.values, ddof=1) + 
+                          (len(benchmark_returns) - 1) * np.var(benchmark_returns.values, ddof=1)) / 
+                         (len(strategy_returns) + len(benchmark_returns) - 2))
+    
+    effect_size = mean_difference / pooled_std if pooled_std > 0 else 0
+    
+    # Calculate one-tailed p-value based on direction
+    if mean_difference > 0:
+        # Strategy outperforms benchmark
+        p_value_one_tail = p_value_two_tail / 2
+        confidence_level = (1 - p_value_one_tail) * 100
+        significant = p_value_one_tail < 0.05
     else:
-        return pd.Series(dtype=float)
+        # Strategy underperforms benchmark - calculate confidence for underperformance
+        p_value_one_tail = 1 - (p_value_two_tail / 2)
+        confidence_level = (1 - p_value_one_tail) * 100
+        significant = p_value_one_tail < 0.05  # Significant underperformance
+    
+    # Calculate statistical power (simplified)
+    power = 0.8 if len(strategy_returns) > 30 and abs(effect_size) > 0.5 else 0.5
+    
+    return {
+        't_statistic': t_stat,
+        'p_value': p_value_one_tail,
+        'confidence_level': confidence_level,
+        'significant': significant,
+        'effect_size': effect_size,
+        'power': power,
+        'insufficient_data': False
+    }
 
-def evaluate_signal_condition(indicator1_values: pd.Series, indicator2_values: pd.Series, operator: str) -> pd.Series:
-    """Evaluate signal condition between two indicators"""
-    if indicator1_values.empty or indicator2_values.empty:
-        return pd.Series(dtype=bool)
+def calculate_max_drawdown(equity_curve: pd.Series, use_quantstats: bool = True) -> float:
+    """Calculate maximum drawdown using QuantStats or fallback"""
+    if equity_curve.empty:
+        return 0.0
     
-    # Align the series
-    aligned_data = pd.concat([indicator1_values, indicator2_values], axis=1).dropna()
-    if aligned_data.empty:
-        return pd.Series(dtype=bool)
+    if QUANTSTATS_AVAILABLE and use_quantstats:
+        try:
+            # Use QuantStats max drawdown calculation
+            max_dd = qs.stats.max_drawdown(equity_curve)
+            return abs(max_dd) if not np.isnan(max_dd) else 0.0
+        except Exception:
+            pass  # Fall through to original calculation
     
-    indicator1_aligned = aligned_data.iloc[:, 0]
-    indicator2_aligned = aligned_data.iloc[:, 1]
-    
-    if operator == ">":
-        return indicator1_aligned > indicator2_aligned
-    elif operator == "<":
-        return indicator1_aligned < indicator2_aligned
-    elif operator == ">=":
-        return indicator1_aligned >= indicator2_aligned
-    elif operator == "<=":
-        return indicator1_aligned <= indicator2_aligned
-    elif operator == "==":
-        return indicator1_aligned == indicator2_aligned
-    elif operator == "!=":
-        return indicator1_aligned != indicator2_aligned
-    else:
-        return pd.Series(dtype=bool)
+    # Fallback to original calculation
+    running_max = equity_curve.expanding().max()
+    drawdown = (equity_curve - running_max) / running_max
+    return abs(drawdown.min())
 
-def calculate_multi_ticker_equity_curve(signals: pd.Series, allocation: dict, data: dict) -> pd.Series:
-    """Calculate equity curve for multi-ticker allocation"""
-    if signals.empty or not allocation or not data:
-        return pd.Series(dtype=float)
+def calculate_sharpe_ratio(returns: np.ndarray, risk_free_rate: float = 0.02, use_quantstats: bool = True) -> float:
+    """Calculate Sharpe ratio using QuantStats or fallback"""
+    if len(returns) == 0:
+        return 0.0
     
-    # Get tickers and weights
-    tickers = allocation.get('tickers', [])
-    if not tickers:
-        return pd.Series(dtype=float)
+    # Convert to pandas Series for QuantStats
+    returns_series = pd.Series(returns)
     
-    # Calculate weighted returns
-    weighted_returns = pd.Series(0.0, index=signals.index)
+    if QUANTSTATS_AVAILABLE and use_quantstats:
+        try:
+            # Use QuantStats sharpe ratio calculation
+            sharpe_ratio = qs.stats.sharpe(returns_series, rf=risk_free_rate)
+            return sharpe_ratio if not np.isnan(sharpe_ratio) else 0.0
+        except Exception:
+            pass  # Fall through to original calculation
     
-    for ticker_config in tickers:
-        ticker = ticker_config.get('ticker', '')
-        weight = ticker_config.get('weight', 0) / 100.0
+    # Fallback to original calculation
+    rf_per_trade = risk_free_rate / 252
+    excess_returns = returns - rf_per_trade
+    if np.std(excess_returns) == 0:
+        return 0.0 if np.mean(excess_returns) == 0 else np.inf
+    return np.mean(excess_returns) / np.std(excess_returns)
+
+def calculate_additional_metrics(returns: np.ndarray, equity_curve: pd.Series, annual_return: float, use_quantstats: bool = True) -> Dict:
+    """Add more comprehensive risk metrics using QuantStats or fallback"""
+    if len(returns) == 0 or equity_curve.empty:
+        return {
+            'max_drawdown': 0.0,
+            'calmar_ratio': 0.0,
+            'var_95': 0.0,
+            'sharpe_ratio': 0.0,
+            'volatility': 0.0,
+            'beta': 0.0,
+            'alpha': 0.0,
+            'information_ratio': 0.0
+        }
+    
+    # Convert to pandas Series for QuantStats
+    returns_series = pd.Series(returns)
+    
+    # Use QuantStats if available
+    if QUANTSTATS_AVAILABLE and use_quantstats:
+        try:
+            # Use QuantStats for various metrics
+            max_dd = calculate_max_drawdown(equity_curve, use_quantstats)
+            sharpe = calculate_sharpe_ratio(returns, use_quantstats=use_quantstats)
+            
+            # Calculate Calmar ratio using QuantStats
+            calmar_ratio = qs.stats.calmar(returns_series) if len(returns) > 0 else 0.0
+            
+            # Calculate Value at Risk using QuantStats
+            var_95 = qs.stats.var(returns_series, 0.05) if len(returns) > 0 else 0.0
+            
+            # Calculate volatility using QuantStats
+            volatility = qs.stats.volatility(returns_series) if len(returns) > 0 else 0.0
+            
+            # Additional QuantStats metrics
+            beta = qs.stats.beta(returns_series, returns_series) if len(returns) > 0 else 0.0  # Self-beta as placeholder
+            alpha = qs.stats.alpha(returns_series, returns_series) if len(returns) > 0 else 0.0  # Self-alpha as placeholder
+            information_ratio = qs.stats.information_ratio(returns_series, returns_series) if len(returns) > 0 else 0.0  # Self-IR as placeholder
+            
+            return {
+                'max_drawdown': max_dd,
+                'calmar_ratio': calmar_ratio if not np.isnan(calmar_ratio) else (annual_return / max_dd if max_dd > 0 else 0.0),
+                'var_95': var_95 if not np.isnan(var_95) else (np.percentile(returns, 5) if len(returns) > 0 else 0.0),
+                'sharpe_ratio': sharpe,
+                'volatility': volatility if not np.isnan(volatility) else (np.std(returns) * np.sqrt(252) if len(returns) > 0 else 0.0),
+                'beta': beta if not np.isnan(beta) else 0.0,
+                'alpha': alpha if not np.isnan(alpha) else 0.0,
+                'information_ratio': information_ratio if not np.isnan(information_ratio) else 0.0
+            }
+        except Exception:
+            pass  # Fall through to fallback calculations
+    
+    # Fallback to original calculations
+    max_dd = calculate_max_drawdown(equity_curve, use_quantstats)
+    sharpe = calculate_sharpe_ratio(returns, use_quantstats=use_quantstats)
+    
+    return {
+        'max_drawdown': max_dd,
+        'calmar_ratio': annual_return / max_dd if max_dd > 0 else 0.0,
+        'var_95': np.percentile(returns, 5) if len(returns) > 0 else 0.0,
+        'sharpe_ratio': sharpe,
+        'volatility': np.std(returns) * np.sqrt(252) if len(returns) > 0 else 0.0,
+        'beta': 0.0,
+        'alpha': 0.0,
+        'information_ratio': 0.0
+    }
+
+def validate_data_quality(data: pd.Series, ticker: str) -> Tuple[bool, List[str]]:
+    """Add data quality checks and return messages to display later"""
+    messages = []
+    
+    if data is None or data.empty:
+        st.error(f"❌ No data available for {ticker}")
+        return False, messages
+    
+    # Check for missing data
+    missing_pct = data.isnull().sum() / len(data) * 100
+    if missing_pct > 5:  # More than 5% missing
+        st.warning(f"⚠️ {missing_pct:.1f}% missing data detected for {ticker}")
+    
+    # Check for stock splits/dividends (extreme price movements)
+    daily_returns = data.pct_change().dropna()
+    extreme_moves = abs(daily_returns) > 0.15  # 15% daily moves
+    if extreme_moves.sum() > 0:
+        messages.append(f"🔍 Detected {extreme_moves.sum()} extreme price movements (>15%) for {ticker}")
+    
+    # Check for sufficient data
+    if len(data) < 252:  # Less than 1 year
+        st.warning(f"⚠️ Limited data for {ticker}: {len(data)} days (recommend at least 252 days)")
+    
+    return True, messages
+
+# QuantStats report generation removed to avoid import issues
+# Basic QuantStats metrics are still available in the main analysis functions
+
+def run_rsi_analysis(signal_ticker: str, target_ticker: str, rsi_threshold: float, comparison: str, 
+                    start_date=None, end_date=None, rsi_period: int = 14, rsi_method: str = "wilders", benchmark_ticker: str = "SPY", use_quantstats: bool = True, preconditions: List[Dict] = None, exclusions: List[Dict] = None) -> Tuple[pd.DataFrame, pd.Series, List[str]]:
+    """Run comprehensive RSI analysis across the specified range with optional preconditions and exclusions"""
+    
+    # Fetch data with quality validation
+    all_messages = []
+    
+    with st.spinner(f"Fetching data for {signal_ticker}..."):
+        signal_data = get_stock_data(signal_ticker, start_date, end_date, exclusions)
+        is_valid, messages = validate_data_quality(signal_data, signal_ticker)
+        all_messages.extend(messages)
+        if not is_valid:
+            return None, None
+    
+    with st.spinner(f"Fetching data for {target_ticker}..."):
+        target_data = get_stock_data(target_ticker, start_date, end_date, exclusions)
+        is_valid, messages = validate_data_quality(target_data, target_ticker)
+        all_messages.extend(messages)
+        if not is_valid:
+            return None, None
+    
+    # Fetch benchmark data for comparison - use user-selected benchmark
+    with st.spinner(f"Fetching benchmark data ({benchmark_ticker})..."):
+        benchmark_data = get_stock_data(benchmark_ticker, start_date, end_date, exclusions)
+        is_valid, messages = validate_data_quality(benchmark_data, benchmark_ticker)
+        all_messages.extend(messages)
+        if not is_valid:
+            return None, None
+    
+    # Fetch precondition data if preconditions are set
+    precondition_data = {}
+    if preconditions:
+        unique_precondition_tickers = list(set([p['signal_ticker'] for p in preconditions]))
+        for ticker in unique_precondition_tickers:
+            if ticker != signal_ticker:  # Don't fetch again if it's the same as main signal
+                with st.spinner(f"Fetching precondition data for {ticker}..."):
+                    ticker_data = get_stock_data(ticker, start_date, end_date, exclusions)
+                    is_valid, messages = validate_data_quality(ticker_data, ticker)
+                    all_messages.extend(messages)
+                    if not is_valid:
+                        return None, None
+                    precondition_data[ticker] = ticker_data
         
-        if ticker in data:
-            ticker_prices = data[ticker]
-            ticker_returns = ticker_prices.pct_change()
-            weighted_returns += ticker_returns * weight * signals
+        # Add main signal data to precondition data for consistency
+        precondition_data[signal_ticker] = signal_data
     
-    # Calculate cumulative equity curve
-    equity_curve = (1 + weighted_returns).cumprod()
+    if signal_data is None or target_data is None or benchmark_data is None:
+        return None, None
     
-    return equity_curve 
-
-# Main Application Interface
-st.title("✨ Strategy Validation Tool")
-st.caption("Build, test, and validate trading strategies with advanced conditional logic")
-
-# Create tabs
-tab1, tab2, tab3, tab4 = st.tabs(["📊 Signal Blocks", "💰 Allocation Blocks", "🎯 Strategy Builder", "📈 Backtest"])
-
-# Tab 1: Signal Blocks
-with tab1:
-    st.header("📊 Signal Blocks")
+    # Align data on common dates
+    common_dates = signal_data.index.intersection(target_data.index).intersection(benchmark_data.index)
+    signal_data = signal_data[common_dates]
+    target_data = target_data[common_dates]
+    benchmark_data = benchmark_data[common_dates]
     
-    # Pre-built signal blocks
-    st.subheader("🚀 Pre-built Signals")
-    st.write("The following signals are automatically available:")
+    # Create buy-and-hold benchmark
+    benchmark = benchmark_data / benchmark_data.iloc[0]  # Normalize to start at 1.0
     
-    # Display pre-built signals as a clean list
-    prebuilt_signal_names = [
-        "If 10d RSI QQQ > 80",
-        "If 10d RSI QQQ < 30", 
-        "If Current Price SPY > 200d SMA SPY",
-        "If Current Price SPY > 20d SMA SPY"
-    ]
+    # Calculate benchmark returns for statistical testing
+    benchmark_returns = benchmark_data.pct_change().dropna()
     
-    for signal_name in prebuilt_signal_names:
-        st.write(f"• **{signal_name}**")
+    # Generate RSI thresholds based on the specified range
+    rsi_thresholds = np.arange(rsi_min, rsi_max + 0.5, 0.5)
     
-    st.markdown("---")
+    results = []
     
-    # Create custom signal
-    with st.expander("➕ Create Custom Signal", expanded=False):
-        signal_name = st.text_input("Signal Name", placeholder="e.g., RSI Oversold")
+    progress_bar = st.progress(0)
+    total_thresholds = len(rsi_thresholds)
+    
+    for i, threshold in enumerate(rsi_thresholds):
+        analysis = analyze_rsi_signals(signal_data, target_data, threshold, comparison, rsi_period, rsi_method, use_quantstats, preconditions, precondition_data)
         
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            signal_ticker1 = st.text_input("Signal Ticker", value="SPY", help="Ticker to analyze")
-            indicator1 = st.selectbox(
-                "Indicator 1",
-                ["RSI", "SMA", "EMA", "Current Price", "Cumulative Return", "Max Drawdown", "Static RSI", "RSI Comparison"],
-                key="indicator1"
+        # Calculate statistical significance
+        strategy_equity_curve = analysis['equity_curve']
+        if len(strategy_equity_curve) > 0:
+            # Create benchmark equity curve that follows the same RSI conditions
+            # This ensures we're comparing strategy vs benchmark under the same conditions
+            signal_rsi = calculate_rsi(signal_data, window=rsi_period, method=rsi_method)
+            
+            # Generate buy signals for benchmark (same as strategy)
+            if comparison == "less_than":
+                benchmark_base_signals = (signal_rsi <= threshold).astype(int)
+            else:  # greater_than
+                benchmark_base_signals = (signal_rsi >= threshold).astype(int)
+            
+            # Apply preconditions to benchmark signals if they exist
+            if preconditions and precondition_data:
+                benchmark_precondition_mask = pd.Series(True, index=signal_data.index)
+                
+                for precondition in preconditions:
+                    precondition_ticker = precondition['signal_ticker']
+                    precondition_comparison = precondition['comparison']
+                    precondition_threshold = precondition['threshold']
+                    
+                    if precondition_ticker in precondition_data:
+                        precondition_rsi = calculate_rsi(precondition_data[precondition_ticker], window=rsi_period, method=rsi_method)
+                        
+                        if precondition_comparison == "less_than":
+                            precondition_condition = (precondition_rsi <= precondition_threshold)
+                        else:  # greater_than
+                            precondition_condition = (precondition_rsi >= precondition_threshold)
+                        
+                        benchmark_precondition_mask = benchmark_precondition_mask & precondition_condition
+                
+                benchmark_signals = benchmark_base_signals & benchmark_precondition_mask
+            else:
+                benchmark_signals = benchmark_base_signals
+            
+            # Calculate benchmark equity curve using benchmark prices (same logic as strategy)
+            benchmark_equity_curve = pd.Series(1.0, index=benchmark_data.index)
+            current_equity = 1.0
+            in_position = False
+            entry_equity = 1.0
+            entry_price = None
+            benchmark_trades = []
+            
+            for date in benchmark_data.index:
+                current_signal = benchmark_signals[date] if date in benchmark_signals.index else 0
+                current_price = benchmark_data[date]
+                
+                if current_signal == 1 and not in_position:
+                    # Enter position
+                    in_position = True
+                    entry_equity = current_equity
+                    entry_price = current_price
+                    
+                elif current_signal == 0 and in_position:
+                    # Exit position
+                    trade_return = (current_price - entry_price) / entry_price
+                    current_equity = entry_equity * (1 + trade_return)
+                    benchmark_trades.append(trade_return)
+                    in_position = False
+                
+                # Update equity curve
+                if in_position:
+                    current_equity = entry_equity * (current_price / entry_price)
+                
+                benchmark_equity_curve[date] = current_equity
+            
+            # Handle case where we're still in position at the end
+            if in_position:
+                final_price = benchmark_data.iloc[-1]
+                trade_return = (final_price - entry_price) / entry_price
+                current_equity = entry_equity * (1 + trade_return)
+                benchmark_trades.append(trade_return)
+                benchmark_equity_curve.iloc[-1] = current_equity
+            
+            # Calculate benchmark average and median returns
+            benchmark_avg_return = np.mean(benchmark_trades) if benchmark_trades else 0
+            benchmark_median_return = np.median(benchmark_trades) if benchmark_trades else 0
+            benchmark_annualized = (benchmark.iloc[-1] - 1) * (365 / (benchmark.index[-1] - benchmark.index[0]).days)
+            stats_result = calculate_statistical_significance(
+                strategy_equity_curve, 
+                benchmark_equity_curve,
+                analysis['annualized_return'],
+                benchmark_annualized
             )
             
-            # Days field for first indicator
-            if indicator1 not in ["Current Price", "Static RSI", "RSI Comparison"]:
-                # Set smart defaults based on indicator type
-                default_days1 = 10 if indicator1 == "RSI" else 200
-                days1 = st.number_input(
-                    f"# of Days for {indicator1}",
-                    min_value=1,
-                    max_value=252,
-                    value=default_days1,
-                    key="days1"
-                )
-            else:
-                days1 = None
-        
-        with col2:
-            # Operator selection
-            if indicator1 == "Static RSI":
-                operator = st.selectbox(
-                    "Comparison",
-                    ["less_than", "greater_than"],
-                    key="operator"
-                )
-            else:
-                operator = st.selectbox(
-                    "Operator",
-                    [">", "<", ">=", "<=", "==", "!="],
-                    key="operator"
-                )
+            # Calculate additional risk metrics
+            risk_metrics = calculate_additional_metrics(analysis['returns'], analysis['equity_curve'], analysis['annualized_return'], use_quantstats)
+        else:
+            # Calculate benchmark average and median returns even when strategy has no trades
+            signal_rsi = calculate_rsi(signal_data, window=rsi_period, method=rsi_method)
             
-            # Handle RSI-specific logic
-            if indicator1 == "Static RSI":
-                # For Static RSI, show threshold input instead of indicator2
-                with col2:
-                    # Set smart RSI threshold defaults based on operator
-                    default_threshold = 32.5 if operator == "less_than" else 78.5
-                    rsi_threshold = st.number_input(
-                        "RSI Threshold",
-                        min_value=0.0,
-                        max_value=100.0,
-                        value=default_threshold,
-                        step=0.5,
-                        key="rsi_threshold"
-                    )
-                signal_ticker2 = signal_ticker1  # Not used for Static RSI
-                indicator2 = "Static Value"
-                days2 = None
-                static_value = rsi_threshold
+            # Generate buy signals for benchmark (same as strategy)
+            if comparison == "less_than":
+                benchmark_base_signals = (signal_rsi <= threshold).astype(int)
+            else:  # greater_than
+                benchmark_base_signals = (signal_rsi >= threshold).astype(int)
+            
+            # Apply preconditions to benchmark signals if they exist
+            if preconditions and precondition_data:
+                benchmark_precondition_mask = pd.Series(True, index=signal_data.index)
                 
-            elif indicator1 == "RSI Comparison":
-                # For RSI Comparison, automatically set indicator2 to RSI
-                signal_ticker2 = st.text_input("Signal Ticker 2", value="QQQ", help="Second ticker to analyze")
-                indicator2 = "RSI"
-                days2 = st.number_input(
-                    "RSI Period",
-                    min_value=1,
-                    max_value=50,
-                    value=14,
-                    key="days2"
-                )
-                static_value = None
+                for precondition in preconditions:
+                    precondition_ticker = precondition['signal_ticker']
+                    precondition_comparison = precondition['comparison']
+                    precondition_threshold = precondition['threshold']
+                    
+                    if precondition_ticker in precondition_data:
+                        precondition_rsi = calculate_rsi(precondition_data[precondition_ticker], window=rsi_period, method=rsi_method)
+                        
+                        if precondition_comparison == "less_than":
+                            precondition_condition = (precondition_rsi <= precondition_threshold)
+                        else:  # greater_than
+                            precondition_condition = (precondition_rsi >= precondition_threshold)
+                        
+                        benchmark_precondition_mask = benchmark_precondition_mask & precondition_condition
                 
+                benchmark_signals = benchmark_base_signals & benchmark_precondition_mask
             else:
-                # Regular Custom Indicator logic
-                signal_ticker2 = st.text_input("Signal Ticker 2", value="QQQ", help="Second ticker to analyze")
-                indicator2 = st.selectbox(
-                    "Indicator 2",
-                    ["SMA", "EMA", "Current Price", "Cumulative Return", "Max Drawdown", "Static Value"],
-                    key="indicator2"
-                )
+                benchmark_signals = benchmark_base_signals
+            
+            # Calculate benchmark equity curve using benchmark prices (same logic as strategy)
+            benchmark_equity_curve = pd.Series(1.0, index=benchmark_data.index)
+            current_equity = 1.0
+            in_position = False
+            entry_equity = 1.0
+            entry_price = None
+            benchmark_trades = []
+            
+            for date in benchmark_data.index:
+                current_signal = benchmark_signals[date] if date in benchmark_signals.index else 0
+                current_price = benchmark_data[date]
                 
-                # Days field for second indicator or static value
-                if indicator2 not in ["Current Price", "Static Value"]:
-                    # Set smart defaults based on indicator type
-                    default_days2 = 200 if indicator2 == "SMA" else 14
-                    days2 = st.number_input(
-                        f"# of Days for {indicator2}",
-                        min_value=1,
-                        max_value=252,
-                        value=default_days2,
-                        key="days2"
-                    )
-                elif indicator2 == "Static Value":
-                    static_value = st.number_input(
-                        "Static Value",
-                        min_value=0.0,
-                        max_value=1000.0,
-                        value=50.0,
-                        step=0.1,
-                        key="static_value"
-                    )
+                if current_signal == 1 and not in_position:
+                    # Enter position
+                    in_position = True
+                    entry_equity = current_equity
+                    entry_price = current_price
+                    
+                elif current_signal == 0 and in_position:
+                    # Exit position
+                    trade_return = (current_price - entry_price) / entry_price
+                    current_equity = entry_equity * (1 + trade_return)
+                    benchmark_trades.append(trade_return)
+                    in_position = False
                 
-                # Handle Signal Ticker 2 logic
-                if indicator2 == "Static Value":
-                    signal_ticker2 = signal_ticker1  # Use same ticker for static value comparisons
-            
-            # Display the signal logic
-            if indicator1 == "Static RSI":
-                st.info(f"**Signal Logic:** {signal_ticker1} RSI({days1}) {operator} {static_value}")
-            elif indicator1 == "RSI Comparison":
-                st.info(f"**Signal Logic:** {signal_ticker1} RSI({days1}) vs {signal_ticker2} RSI({days2})")
-            elif indicator1 not in ["Current Price"] and indicator2 not in ["Current Price", "Static Value"]:
-                st.info(f"**Signal Logic:** {signal_ticker1} {indicator1}({days1}) {operator} {signal_ticker2} {indicator2}({days2})")
-            elif indicator1 not in ["Current Price"] and indicator2 == "Static Value":
-                st.info(f"**Signal Logic:** {signal_ticker1} {indicator1}({days1}) {operator} {static_value}")
-            elif indicator1 not in ["Current Price"]:
-                st.info(f"**Signal Logic:** {signal_ticker1} {indicator1} {operator} {signal_ticker2} {indicator2}")
-            elif indicator2 not in ["Current Price", "Static Value"]:
-                st.info(f"**Signal Logic:** {signal_ticker1} {indicator1} {operator} {signal_ticker2} {indicator2}({days2})")
-            elif indicator2 == "Static Value":
-                st.info(f"**Signal Logic:** {signal_ticker1} {indicator1} {operator} {static_value}")
-            else:
-                st.info(f"**Signal Logic:** {signal_ticker1} {indicator1} {operator} {signal_ticker2} {indicator2}")
-            
-            if st.button("Add Signal", type="primary"):
-                if indicator1 == "Static RSI":
-                    signal = {
-                        'name': signal_name,
-                        'type': 'Static RSI',
-                        'signal_ticker': signal_ticker1,
-                        'target_ticker': signal_ticker1,  # Default to same ticker
-                        'rsi_period': days1,
-                        'rsi_threshold': static_value,
-                        'comparison': operator
-                    }
-                elif indicator1 == "RSI Comparison":
-                    signal = {
-                        'name': signal_name,
-                        'type': 'RSI Comparison',
-                        'signal_ticker': signal_ticker1,
-                        'comparison_ticker': signal_ticker2,
-                        'target_ticker': signal_ticker1,  # Default to same ticker
-                        'rsi_period': days1,
-                        'comparison_operator': 'less_than' if operator == '<' else 'greater_than'
-                    }
-                else:
-                    signal = {
-                        'name': signal_name,
-                        'type': 'Custom Indicator',
-                        'signal_ticker1': signal_ticker1,
-                        'signal_ticker2': signal_ticker2,
-                        'indicator1': indicator1,
-                        'indicator2': indicator2,
-                        'operator': operator,
-                        'days1': days1 if indicator1 not in ["Current Price"] else None,
-                        'days2': days2 if indicator2 not in ["Current Price", "Static Value"] else None,
-                        'static_value': static_value if indicator2 == "Static Value" else None
-                    }
-                st.session_state.signals.append(signal)
-                st.success(f"Reference Signal '{signal_name}' added!")
-                st.rerun()
-    
-    # Display existing signals
-    if st.session_state.signals:
-        st.subheader("📋 Active Reference Signal Blocks")
-        for signal_idx, signal in enumerate(st.session_state.signals):
-            with st.container():
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    st.write(f"**{signal['name']}**")
-                    if signal['type'] == "Custom Indicator":
-                        indicator1_text = f"{signal['indicator1']}({signal['days1']})" if signal['days1'] else signal['indicator1']
-                        if signal['indicator2'] == "Static Value":
-                            indicator2_text = str(signal['static_value'])
-                        else:
-                            indicator2_text = f"{signal['indicator2']}({signal['days2']})" if signal['days2'] else signal['indicator2']
-                        st.caption(f"{signal['signal_ticker1']} {indicator1_text} {signal['operator']} {signal['signal_ticker2']} {indicator2_text}")
-                    elif signal['type'] == "Static RSI":
-                        st.caption(f"{signal['signal_ticker']} RSI {signal['rsi_period']}-day {signal['comparison']} {signal['rsi_threshold']}")
-                    else:
-                        st.caption(f"{signal['signal_ticker']} vs {signal['comparison_ticker']} RSI {signal['comparison_operator']}")
-                with col2:
-                    if st.button("🗑️", key=f"delete_signal_{signal_idx}"):
-                        st.session_state.signals.pop(signal_idx)
-                        st.rerun()
-    else:
-        st.info("No reference signal blocks created yet. Create your first signal above.")
-
-# Tab 2: Allocation Blocks
-with tab2:
-    st.header("💰 Allocation Blocks")
-    
-    # Pre-built allocation blocks
-    st.subheader("🚀 Pre-built Allocations")
-    st.write("The following allocations are automatically available:")
-    
-    # Display pre-built allocations as clean lists
-    st.write("**Single Ticker Allocations:**")
-    single_ticker_allocations = ["TQQQ (3x QQQ)", "QLD (2x QQQ)", "QQQ (Nasdaq)", "SPY (S&P 500)", "XLP (Consumer Staples)", "XLU (Utilities)", "BIL (T-Bills)", "UVXY (Volatility)", "VIXY (VIX)"]
-    for allocation in single_ticker_allocations:
-        st.write(f"• **{allocation}**")
-    
-    st.write("**Multi-Ticker Allocations:**")
-    multi_ticker_allocations = ["BIL VIXY Defensive (50/50)", "XLP XLU Defensive (50/50)"]
-    for allocation in multi_ticker_allocations:
-        st.write(f"• **{allocation}**")
-    
-    st.markdown("---")
-    
-    # Create allocation
-    with st.expander("➕ Create Allocation Block", expanded=False):
-        allocation_name = st.text_input("Allocation Name", placeholder="e.g., Aggressive Growth")
-        
-        st.subheader("📊 Ticker Components")
-        
-        # Initialize ticker components in session state
-        if 'current_allocation_tickers' not in st.session_state:
-            st.session_state.current_allocation_tickers = []
-        
-        # Add ticker component
-        col1, col2 = st.columns(2)
-        with col1:
-            new_ticker = st.text_input("Ticker", placeholder="e.g., SPY", key="new_ticker")
-        with col2:
-            ticker_weight = st.number_input("Weight (%)", min_value=0, max_value=100, value=100, key="ticker_weight")
-        
-        # Info about auto-add feature
-        if not st.session_state.current_allocation_tickers and new_ticker:
-            st.info("💡 **Tip:** You can click 'Create Allocation Block' to automatically add this ticker with 100% weight.")
-        
-        # Add ticker button
-        if st.button("➕ Add Ticker", key="add_ticker"):
-            if new_ticker and ticker_weight > 0:
-                ticker_component = {
-                    'ticker': new_ticker.upper(),
-                    'weight': ticker_weight
-                }
-                st.session_state.current_allocation_tickers.append(ticker_component)
-                st.rerun()
-        
-        # Display current ticker components
-        if st.session_state.current_allocation_tickers:
-            st.subheader("📋 Current Tickers")
-            total_weight = sum([tc['weight'] for tc in st.session_state.current_allocation_tickers])
-            
-            for i, ticker_component in enumerate(st.session_state.current_allocation_tickers):
-                col1, col2, col3 = st.columns([2, 1, 1])
-                with col1:
-                    st.write(f"**{ticker_component['ticker']}**")
-                with col2:
-                    st.write(f"{ticker_component['weight']}%")
-                with col3:
-                    if st.button("🗑️", key=f"remove_ticker_{i}"):
-                        st.session_state.current_allocation_tickers.pop(i)
-                        st.rerun()
-            
-            st.write(f"**Total Weight: {total_weight}%**")
-            
-            # Equal weight button for multiple tickers
-            if len(st.session_state.current_allocation_tickers) > 1:
-                if st.button("⚖️ Equal Weight All", key="equal_weight"):
-                    equal_weight = 100 / len(st.session_state.current_allocation_tickers)
-                    for tc in st.session_state.current_allocation_tickers:
-                        tc['weight'] = equal_weight
-                    st.rerun()
-            
-            if total_weight != 100:
-                if total_weight > 100:
-                    st.error(f"⚠️ Total weight exceeds 100% ({total_weight}%)")
-                else:
-                    st.warning(f"ℹ️ Total weight: {total_weight}% ({(100-total_weight):.1f}% unallocated)")
-            else:
-                st.success(f"✅ Total weight: {total_weight}%")
-        
-        # Create allocation button
-        if st.button("Create Allocation Block", type="primary"):
-            if allocation_name:
-                # Check if we have tickers in the list or if we should auto-add the current ticker
-                if st.session_state.current_allocation_tickers:
-                    # Use existing tickers
-                    tickers_to_use = st.session_state.current_allocation_tickers.copy()
-                elif new_ticker:
-                    # Auto-add the current ticker with 100% weight
-                    tickers_to_use = [{
-                        'ticker': new_ticker.upper(),
-                        'weight': 100
-                    }]
-                else:
-                    st.error("Please provide at least one ticker.")
+                # Update equity curve
+                if in_position:
+                    current_equity = entry_equity * (current_price / entry_price)
                 
-                total_weight = sum([tc['weight'] for tc in tickers_to_use])
-                
-                if total_weight == 100:
-                    allocation = {
-                        'name': allocation_name,
-                        'tickers': tickers_to_use,
-                        'total_weight': total_weight
-                    }
-                    st.session_state.output_allocations[allocation_name] = allocation
-                    st.session_state.current_allocation_tickers = []  # Reset for next allocation
-                    st.success(f"Allocation Block '{allocation_name}' created successfully!")
-                    st.rerun()
-                else:
-                    st.error("Total weight must equal 100% to create allocation.")
-            else:
-                st.error("Please provide an allocation name.")
-    
-    # Display existing allocations
-    if st.session_state.output_allocations:
-        st.subheader("📋 Active Allocation Blocks")
-        for name, allocation in st.session_state.output_allocations.items():
-            with st.container():
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    st.write(f"**{allocation['name']}**")
-                    ticker_text = ", ".join([f"{tc['ticker']} ({tc['weight']}%)" for tc in allocation['tickers']])
-                    st.caption(ticker_text)
-                with col2:
-                    if st.button("🗑️", key=f"delete_allocation_{name}"):
-                        del st.session_state.output_allocations[name]
-                        st.rerun()
-    else:
-        st.info("No allocation blocks created yet. Create your first allocation above.")
-
-# Tab 3: Strategy Builder
-with tab3:
-    st.header("🎯 Strategy Builder")
-    
-    # Ensure pre-built signals are available
-    if not st.session_state.signals:
-        # Re-add pre-built signals if they're missing
-        prebuilt_signals = [
-            {
-                'name': 'If 10d RSI QQQ > 80',
-                'type': 'Custom Indicator',
-                'signal_ticker1': 'QQQ',
-                'signal_ticker2': 'QQQ',
-                'indicator1': 'RSI',
-                'indicator2': 'Static Value',
-                'operator': '>',
-                'days1': 10,
-                'days2': None,
-                'static_value': 80.0
-            },
-            {
-                'name': 'If 10d RSI QQQ < 30',
-                'type': 'Custom Indicator',
-                'signal_ticker1': 'QQQ',
-                'signal_ticker2': 'QQQ',
-                'indicator1': 'RSI',
-                'indicator2': 'Static Value',
-                'operator': '<',
-                'days1': 10,
-                'days2': None,
-                'static_value': 30.0
-            },
-            {
-                'name': 'If Current Price SPY > 200d SMA SPY',
-                'type': 'Custom Indicator',
-                'signal_ticker1': 'SPY',
-                'signal_ticker2': 'SPY',
-                'indicator1': 'Current Price',
-                'indicator2': 'SMA',
-                'operator': '>',
-                'days1': None,
-                'days2': 200,
-                'static_value': None
-            },
-            {
-                'name': 'If Current Price SPY > 20d SMA SPY',
-                'type': 'Custom Indicator',
-                'signal_ticker1': 'SPY',
-                'signal_ticker2': 'SPY',
-                'indicator1': 'Current Price',
-                'indicator2': 'SMA',
-                'operator': '>',
-                'days1': None,
-                'days2': 20,
-                'static_value': None
+                benchmark_equity_curve[date] = current_equity
+            
+            # Handle case where we're still in position at the end
+            if in_position:
+                final_price = benchmark_data.iloc[-1]
+                trade_return = (final_price - entry_price) / entry_price
+                current_equity = entry_equity * (1 + trade_return)
+                benchmark_trades.append(trade_return)
+                benchmark_equity_curve.iloc[-1] = current_equity
+            
+            # Calculate benchmark average and median returns
+            benchmark_avg_return = np.mean(benchmark_trades) if benchmark_trades else 0
+            benchmark_median_return = np.median(benchmark_trades) if benchmark_trades else 0
+            
+            stats_result = {
+                't_statistic': 0,
+                'p_value': 1.0,
+                'confidence_level': 0,
+                'significant': False,
+                'effect_size': 0,
+                'power': 0,
+                'insufficient_data': True
             }
-        ]
-        st.session_state.signals = prebuilt_signals
-    
-    # Reference Blocks Management
-    with st.expander("📚 Reference Blocks Manager", expanded=False):
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.subheader("💾 Save Current Block")
-            block_name = st.text_input("Block Name", placeholder="e.g., RSI Oversold Strategy")
-            if st.button("💾 Save as Reference Block"):
-                if st.session_state.strategy_branches:
-                    # Save the last branch as a reference block
-                    last_branch = st.session_state.strategy_branches[-1]
-                    if block_name:
-                        save_reference_block(last_branch, block_name)
-                        st.success(f"✅ Block '{block_name}' saved as reference!")
-                        st.rerun()
-                    else:
-                        st.error("Please provide a block name.")
-                else:
-                    st.warning("No strategy branches to save.")
-        
-        with col2:
-            st.subheader("📋 Saved Reference Blocks")
-            reference_blocks = get_all_reference_blocks()
-            if reference_blocks:
-                for block_name in reference_blocks:
-                    col_a, col_b, col_c = st.columns([3, 1, 1])
-                    with col_a:
-                        st.write(f"**{block_name}**")
-                        st.caption(get_reference_block_preview(block_name))
-                    with col_b:
-                        if st.button("📋 Load", key=f"load_ref_{block_name}"):
-                            loaded_block = load_reference_block(block_name)
-                            if loaded_block:
-                                st.session_state.strategy_branches.append(loaded_block)
-                                st.success(f"✅ Block '{block_name}' loaded!")
-                                st.rerun()
-                    with col_c:
-                        if st.button("🗑️", key=f"delete_ref_{block_name}"):
-                            delete_reference_block(block_name)
-                            st.success(f"✅ Block '{block_name}' deleted!")
-                            st.rerun()
-            else:
-                st.info("No reference blocks saved yet.")
-    
-    # Cache management
-    with st.expander("⚡ Cache Manager", expanded=False):
-        col1, col2 = st.columns(2)
-        with col1:
-            cache_stats = get_cache_stats()
-            st.metric("Cache Hits", cache_stats['hits'])
-            st.metric("Cache Misses", cache_stats['misses'])
-        with col2:
-            st.metric("Hit Rate", f"{cache_stats['hit_rate']:.1f}%")
-            if st.button("🗑️ Clear Cache"):
-                clear_cache()
-                st.success("Cache cleared!")
-    
-    # Strategy builder interface
-    st.markdown('<div class="strategy-builder">', unsafe_allow_html=True)
-    
-    # Strategy creation interface
-    st.subheader("🎯 Build Your Strategy")
-    
-    # Strategy management section
-    st.markdown("### 📋 Strategy Management")
-    
-    # Strategy name and save/run controls
-    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
-    
-    with col1:
-        if 'strategy_name' not in st.session_state:
-            st.session_state.strategy_name = "My Strategy"
-        st.session_state.strategy_name = st.text_input(
-            "Strategy Name:",
-            value=st.session_state.strategy_name,
-            key="strategy_name_input"
-        )
-    
-    with col2:
-        if st.button("💾 Save Strategy", type="secondary"):
-            if st.session_state.strategy_name.strip():
-                # Save the entire strategy
-                strategy_data = {
-                    'name': st.session_state.strategy_name,
-                    'branches': st.session_state.strategy_branches,
-                    'signals': st.session_state.signals,
-                    'allocations': st.session_state.output_allocations,
-                    'created_at': datetime.now().isoformat()
-                }
-                
-                # Save to session state for now (could be extended to file/database)
-                if 'saved_strategies' not in st.session_state:
-                    st.session_state.saved_strategies = {}
-                
-                st.session_state.saved_strategies[st.session_state.strategy_name] = strategy_data
-                st.success(f"✅ Strategy '{st.session_state.strategy_name}' saved!")
-            else:
-                st.error("Please provide a strategy name.")
-    
-    with col3:
-        if st.button("📂 Load Strategy", type="secondary"):
-            if 'saved_strategies' in st.session_state and st.session_state.saved_strategies:
-                strategy_names = list(st.session_state.saved_strategies.keys())
-                selected_strategy = st.selectbox(
-                    "Select Strategy to Load:",
-                    [""] + strategy_names,
-                    key="load_strategy_select"
-                )
-                if selected_strategy:
-                    strategy_data = st.session_state.saved_strategies[selected_strategy]
-                    st.session_state.strategy_branches = strategy_data['branches']
-                    st.session_state.signals = strategy_data['signals']
-                    st.session_state.output_allocations = strategy_data['allocations']
-                    st.session_state.strategy_name = strategy_data['name']
-                    st.success(f"✅ Strategy '{selected_strategy}' loaded!")
-                    st.rerun()
-            else:
-                st.warning("No saved strategies available.")
-    
-    with col4:
-        if st.button("🗑️ Clear Strategy", type="secondary"):
-            st.session_state.strategy_branches = []
-            st.session_state.strategy_name = "My Strategy"
-            st.success("Strategy cleared!")
-            st.rerun()
-    
-    # Show saved strategies info
-    if 'saved_strategies' in st.session_state and st.session_state.saved_strategies:
-        st.info(f"📁 Saved Strategies: {len(st.session_state.saved_strategies)} strategies available")
-    
-    st.markdown("---")
-    
-    # Prominent Run Backtest section
-    st.markdown("### 🚀 Execute Strategy")
-    
-    # Backtest configuration
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        start_date = st.date_input("Start Date", value=datetime.now() - timedelta(days=365))
-        st.session_state.backtest_start_date = start_date
-    with col2:
-        end_date = st.date_input("End Date", value=datetime.now())
-        st.session_state.backtest_end_date = end_date
-    with col3:
-        benchmark_ticker = st.text_input("Benchmark Ticker", value="SPY")
-        st.session_state.backtest_benchmark = benchmark_ticker
-    
-    # Strategy validation and run button
-    if st.session_state.strategy_branches:
-        if st.session_state.output_allocations:
-            # Strategy is ready to run
-            st.success("✅ Strategy is ready to run!")
             
+            # Calculate additional risk metrics (even when no trades)
+            risk_metrics = calculate_additional_metrics(analysis['returns'], analysis['equity_curve'], analysis['annualized_return'], use_quantstats)
+        
+        results.append({
+            'RSI_Threshold': threshold,
+            'Total_Trades': analysis['total_trades'],
+            'Win_Rate': analysis['win_rate'],
+            'Avg_Return': analysis['avg_return'],
+            'Median_Return': analysis.get('median_return', 0),  # Use get() with default value
+            'Benchmark_Avg_Return': benchmark_avg_return,
+            'Benchmark_Median_Return': benchmark_median_return,
+            'Avg_Hold_Days': analysis['avg_hold_days'],
+            'Sortino_Ratio': analysis['sortino_ratio'],
+            'Return_Std': np.std(analysis['returns']) if len(analysis['returns']) > 0 else 0,
+            'Best_Return': np.max(analysis['returns']) if len(analysis['returns']) > 0 else 0,
+            'Worst_Return': np.min(analysis['returns']) if len(analysis['returns']) > 0 else 0,
+            'Final_Equity': analysis['equity_curve'].iloc[-1] if analysis['equity_curve'] is not None else 1.0,
+            'Total_Return': (analysis['equity_curve'].iloc[-1] - 1) if analysis['equity_curve'] is not None else 0,
+            'annualized_return': analysis['annualized_return'],
+            'equity_curve': analysis['equity_curve'],
+            'trades': analysis['trades'],
+            'returns': analysis['returns'],
+            't_statistic': stats_result['t_statistic'],
+            'p_value': stats_result['p_value'],
+            'confidence_level': stats_result['confidence_level'],
+            'significant': stats_result['significant'],
+            'effect_size': stats_result['effect_size'],
+            'power': stats_result['power'],
+            'insufficient_data': stats_result.get('insufficient_data', False),
+            'max_drawdown': risk_metrics['max_drawdown'],
+            'calmar_ratio': risk_metrics['calmar_ratio'],
+            'var_95': risk_metrics['var_95'],
+            'sharpe_ratio': risk_metrics['sharpe_ratio'],
+            'volatility': risk_metrics['volatility'],
+            'beta': risk_metrics.get('beta', 0.0),
+            'alpha': risk_metrics.get('alpha', 0.0),
+            'information_ratio': risk_metrics.get('information_ratio', 0.0)
+        })
+        
+        progress_bar.progress((i + 1) / total_thresholds)
+    
+    return pd.DataFrame(results), benchmark, all_messages
+
+
+
+# Streamlit Interface
+st.sidebar.header("⚙️ Configuration")
+
+# QuantStats Configuration
+use_quantstats = st.sidebar.checkbox("Enable QuantStats Integration", value=True, help="Enable use of QuantStats library. When disabled, the app will use fallback calculations.")
+
+# Preconditions System
+st.sidebar.subheader("Preconditions", help="Preconditions add additional RSI conditions that must ALL be true before the main signal is considered. This allows for multi-condition signal validation.")
+
+# Initialize preconditions in session state if not exists
+if 'preconditions' not in st.session_state:
+    st.session_state.preconditions = []
+
+# Display existing preconditions
+if st.session_state.preconditions:
+    st.sidebar.write("**Current Preconditions:**")
+    for i, precondition in enumerate(st.session_state.preconditions):
+        with st.sidebar.container():
             col1, col2 = st.columns([3, 1])
             with col1:
-                st.info(f"📊 Strategy: '{st.session_state.strategy_name}' | Branches: {len(st.session_state.strategy_branches)} | Allocations: {len(st.session_state.output_allocations)}")
+                st.write(f"• {precondition['signal_ticker']} RSI {precondition['comparison']} {precondition['threshold']}")
             with col2:
-                if st.button("🚀 Run Backtest", type="primary", use_container_width=True):
-                    # The backtest logic will be triggered here
-                    st.session_state.run_backtest = True
+                if st.button(f"🗑️", key=f"remove_precondition_{i}"):
+                    st.session_state.preconditions.pop(i)
                     st.rerun()
-        else:
-            st.warning("⚠️ Please create at least one allocation block first.")
-    else:
-        st.warning("⚠️ Please create at least one strategy branch first.")
+
+# Add new precondition
+with st.sidebar.expander("➕ Add Precondition", expanded=False):
+    st.write("**Add a new RSI precondition:**")
     
-    st.markdown("---")
+    # Precondition signal ticker (can be different from main signal)
+    precondition_signal = st.text_input("Precondition Signal Ticker", 
+                                       value="QQQ", 
+                                       key="precondition_signal",
+                                       help="The ticker whose RSI will be checked for this precondition. Can be the same as or different from the main signal ticker.")
     
-    # Add new strategy component
-    if st.button("➕ Add Strategy Component", key="add_component"):
-        new_branch = {
-            'type': 'if_else',
-            'signals': [],
-            'allocations': [],
-            'else_allocations': [],
-            'collapsed': False
+    # Precondition RSI comparison
+    precondition_comparison = st.selectbox("Precondition RSI Condition", 
+                                          ["less_than", "greater_than"], 
+                                          format_func=lambda x: "RSI ≤ threshold" if x == "less_than" else "RSI ≥ threshold",
+                                          key="precondition_comparison",
+                                          help="Choose the RSI condition for this precondition.")
+    
+    # Precondition RSI threshold
+    precondition_threshold = st.number_input("Precondition RSI Threshold", 
+                                           min_value=0.0, max_value=100.0, value=80.0, step=0.5,
+                                           key="precondition_threshold",
+                                           help="The RSI threshold value for this precondition.")
+    
+    # Add precondition button
+    if st.button("➕ Add Precondition", key="add_precondition"):
+        new_precondition = {
+            'signal_ticker': precondition_signal.upper().strip(),
+            'comparison': precondition_comparison,
+            'threshold': precondition_threshold
         }
-        st.session_state.strategy_branches.append(new_branch)
+        st.session_state.preconditions.append(new_precondition)
         st.rerun()
-    
-    # Display strategy branches
-    if st.session_state.strategy_branches:
-        st.markdown("---")
-        st.subheader("📋 Active Strategy Components")
-        
-        for branch_idx, branch in enumerate(st.session_state.strategy_branches):
-            st.markdown("---")
-            
-            # Handle If/Else structure differently
-            if branch.get('type') == 'if_else':
-                # If/Else collapsible block
-                if branch.get('is_else_if'):
-                    # ELSE IF block styling
-                    st.markdown("""
-                    <div class="if-else-block" style="border-left: 4px solid #FF5722; background-color: #FFF3E0;">
-                        <div class="if-else-header">
-                            <span>🔗 ELSE IF</span>
-                        </div>
-                    """, unsafe_allow_html=True)
-                else:
-                    # Regular IF/ELSE block styling
-                    st.markdown("""
-                    <div class="if-else-block">
-                        <div class="if-else-header">
-                            <span>🔗 If/Else</span>
-                        </div>
-                    """, unsafe_allow_html=True)
-                
-                # Block operations menu inside the If/Else box
-                col_menu, col_spacer = st.columns([1, 9])
-                with col_menu:
-                    block_menu_action = st.selectbox(
-                        '',
-                        ["", "Copy", "Paste", "Delete", "Save as Reference"],
-                        key=f"block_menu_{branch_idx}",
-                        label_visibility="collapsed"
-                    )
-                    if block_menu_action == "Copy":
-                        st.session_state.copied_block = copy.deepcopy(branch)
-                        st.success("Block copied!")
-                    elif block_menu_action == "Paste":
-                        if st.session_state.copied_block:
-                            st.session_state.strategy_branches.insert(branch_idx+1, copy.deepcopy(st.session_state.copied_block))
-                            st.success("Block pasted!")
-                            st.rerun()
-                        else:
-                            st.warning("⚠️ No block in clipboard")
-                    elif block_menu_action == "Delete":
-                        st.session_state.strategy_branches.pop(branch_idx)
-                        st.rerun()
-                    elif block_menu_action == "Save as Reference":
-                        ref_name = st.text_input("Reference Block Name:", key=f"ref_name_{branch_idx}")
-                        if st.button("💾 Save", key=f"save_ref_{branch_idx}"):
-                            if ref_name:
-                                save_reference_block(branch, ref_name)
-                                st.success(f"✅ Block saved as '{ref_name}'!")
-                                st.rerun()
-                            else:
-                                st.error("Please provide a name.")
-                
-                st.markdown("""
-                    </div>
-                """, unsafe_allow_html=True)
-                
-                # Make the entire IF/THEN/ELSE block collapsible
-                with st.expander(f"🔗 IF/THEN/ELSE Block {branch_idx + 1}", expanded=True):
-                    # IF section
-                    st.markdown('<div class="condition-block" style="border-left: 3px solid #2196F3; padding-left: 10px; margin-left: 0px;">', unsafe_allow_html=True)
-                    if branch.get('is_else_if'):
-                        st.markdown("**ELSE IF:**")
-                    else:
-                        st.markdown("**IF:**")
-                    
-                    # Always visible signal dropdown
-                    st.markdown("**Add Signal:**")
-                    if st.session_state.signals:
-                        selected_signal = st.selectbox(
-                            "Select Signal:",
-                            [""] + [s['name'] for s in st.session_state.signals],
-                            key=f"if_signal_select_{branch_idx}"
-                        )
-                        if selected_signal:
-                            if 'signals' not in branch:
-                                branch['signals'] = []
-                            # Check if signal already exists
-                            if not any(s.get('signal') == selected_signal for s in branch.get('signals', [])):
-                                branch['signals'].append({
-                                    'signal': selected_signal, 
-                                    'negated': False, 
-                                    'operator': 'AND'
-                                })
-                                st.success(f"✅ Signal '{selected_signal}' added!")
-                                # Remove rerun to prevent state conflicts
-                    else:
-                        st.warning("No signals available. Create signals in the Signal Blocks tab first.")
-                    
-                    # Display IF signals in collapsible expander
-                    if branch.get('signals'):
-                        with st.expander(f"📊 IF Signals ({len(branch['signals'])})", expanded=True):
-                            for signal_idx, signal_config in enumerate(branch['signals']):
-                                # Display each signal in its own row
-                                st.markdown(f"**Signal {signal_idx + 1}:**")
-                                
-                                col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
-                                
-                                with col1:
-                                    signal_config['signal'] = st.selectbox(
-                                        f"Signal {signal_idx + 1}", 
-                                        [""] + [s['name'] for s in st.session_state.signals],
-                                        index=0 if not signal_config.get('signal') else 
-                                        [s['name'] for s in st.session_state.signals].index(signal_config['signal']) + 1,
-                                        key=f"if_branch_{branch_idx}_signal_{signal_idx}"
-                                    )
-                                
-                                with col2:
-                                    signal_config['negated'] = st.checkbox("NOT", key=f"if_branch_{branch_idx}_negated_{signal_idx}")
-                                
-                                with col3:
-                                    if len(branch['signals']) > 1 and signal_idx < len(branch['signals']) - 1:
-                                        signal_config['operator'] = st.selectbox(
-                                            "Operator",
-                                            ["AND", "OR"],
-                                            index=0 if signal_config.get('operator', 'AND') == 'AND' else 1,
-                                            key=f"if_branch_{branch_idx}_operator_{signal_idx}"
-                                        )
-                                    else:
-                                        st.write("")  # Empty space for alignment
-                                
-                                with col4:
-                                    if len(branch['signals']) > 1:
-                                        if st.button("🗑️", key=f"remove_if_branch_{branch_idx}_signal_{signal_idx}"):
-                                            branch['signals'].pop(signal_idx)
-                                            # Remove rerun to prevent state conflicts
-                                    else:
-                                        st.write("")  # Empty space for alignment
-                                
-                                # Add some spacing between signals
-                                st.markdown("<br>", unsafe_allow_html=True)
-                            
-                            # Add button to add more signals
-                            if st.button("➕ Add Another Signal", key=f"add_more_if_signal_{branch_idx}"):
-                                branch['signals'].append({
-                                    'signal': '', 
-                                    'negated': False, 
-                                    'operator': 'AND'
-                                })
-                                # Remove rerun to prevent state conflicts
-                    else:
-                        st.write("**No signals in IF yet**")
-                    
-                    st.markdown('</div>', unsafe_allow_html=True)
-                    
-                    # THEN section
-                    st.markdown('<div class="then-block" style="border-left: 3px solid #FF9800; padding-left: 10px; margin-left: 0px;">', unsafe_allow_html=True)
-                    st.markdown("**THEN:**")
-                    
-                    # Always visible allocation dropdown
-                    st.markdown("**Add Allocation:**")
-                    if st.session_state.output_allocations:
-                        selected_allocation = st.selectbox(
-                            "Select Allocation:",
-                            [""] + list(st.session_state.output_allocations.keys()),
-                            key=f"then_allocation_select_{branch_idx}_{id(branch)}"
-                        )
-                        if selected_allocation:
-                            if 'allocations' not in branch:
-                                branch['allocations'] = []
-                            # Check if allocation already exists
-                            if not any(a.get('allocation') == selected_allocation for a in branch.get('allocations', [])):
-                                branch['allocations'].append({
-                                    'allocation': selected_allocation, 
-                                    'weight': 100
-                                })
-                                st.success(f"✅ Allocation '{selected_allocation}' added!")
-                                # Remove rerun to prevent state conflicts
-                    else:
-                        st.warning("No allocations available. Create allocations in the Allocation Blocks tab first.")
-                    
-                    # Display THEN allocations in collapsible expander
-                    if branch.get('allocations'):
-                        with st.expander(f"💰 THEN Allocations ({len(branch['allocations'])})", expanded=True):
-                            for alloc_idx, allocation_config in enumerate(branch['allocations']):
-                                col1, col2, col3 = st.columns([2, 1, 1])
-                                with col1:
-                                    allocation_config['allocation'] = st.selectbox(
-                                        f"Allocation {alloc_idx + 1}", 
-                                        list(st.session_state.output_allocations.keys()),
-                                        key=f"then_branch_{branch_idx}_allocation_{alloc_idx}"
-                                    )
-                                with col2:
-                                    allocation_config['weight'] = st.number_input(
-                                        "Weight %",
-                                        min_value=0,
-                                        max_value=100,
-                                        value=allocation_config.get('weight', 100),
-                                        key=f"then_branch_{branch_idx}_weight_{alloc_idx}"
-                                    )
-                                with col3:
-                                    if len(branch['allocations']) > 1:  # Don't allow removing the last allocation
-                                        if st.button("🗑️", key=f"remove_then_{branch_idx}_{alloc_idx}_{id(allocation_config)}_delete"):
-                                            branch['allocations'].pop(alloc_idx)
-                                            # Remove rerun to prevent state conflicts
-                                    else:
-                                        st.write("")  # Empty space for alignment
-                            
-                            # Show total weight for this branch
-                            total_branch_weight = sum(alloc.get('weight', 0) for alloc in branch['allocations'])
-                            if total_branch_weight != 100:
-                                if total_branch_weight > 100:
-                                    st.error(f"⚠️ Branch total weight: {total_branch_weight}% (exceeds 100%)")
-                                else:
-                                    st.warning(f"ℹ️ Branch total weight: {total_branch_weight}% ({(100-total_branch_weight):.1f}% unallocated)")
-                            else:
-                                st.success(f"✅ Branch total weight: {total_branch_weight}%")
-                            
-                            # Add button to add more allocations
-                            if st.button("➕ Add Another Allocation", key=f"add_more_then_allocation_{branch_idx}_{id(branch)}"):
-                                branch['allocations'].append({
-                                    'allocation': '', 
-                                    'weight': 100
-                                })
-                                # Remove rerun to prevent state conflicts
-                    else:
-                        st.write("**No allocations in THEN yet**")
-                    
-                    st.markdown('</div>', unsafe_allow_html=True)
-                    
-                    # ELSE section
-                    st.markdown('<div class="else-block" style="border-left: 3px solid #4CAF50; padding-left: 10px; margin-left: 30px;">', unsafe_allow_html=True)
-                    st.markdown("**ELSE:**")
-                    
-                    # Weight distribution between allocations and chains
-                    st.markdown("**ELSE Weight Distribution:**")
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        if 'else_allocation_weight' not in branch:
-                            branch['else_allocation_weight'] = 0
-                        new_allocation_weight = st.number_input(
-                            "Allocation Weight %",
-                            min_value=0,
-                            max_value=100,
-                            value=branch.get('else_allocation_weight', 0),
-                            key=f"else_allocation_weight_{branch_idx}"
-                        )
-                        # Only update if value actually changed to avoid unnecessary reruns
-                        if new_allocation_weight != branch.get('else_allocation_weight', 0):
-                            branch['else_allocation_weight'] = new_allocation_weight
-                    with col2:
-                        if 'else_chain_weight' not in branch:
-                            branch['else_chain_weight'] = 100
-                        new_chain_weight = st.number_input(
-                            "Chain Weight %",
-                            min_value=0,
-                            max_value=100,
-                            value=branch.get('else_chain_weight', 100),
-                            key=f"else_chain_weight_{branch_idx}"
-                        )
-                        # Only update if value actually changed to avoid unnecessary reruns
-                        if new_chain_weight != branch.get('else_chain_weight', 100):
-                            branch['else_chain_weight'] = new_chain_weight
-                    
-                    # Validate total weight
-                    total_else_weight = branch.get('else_allocation_weight', 0) + branch.get('else_chain_weight', 100)
-                    if total_else_weight != 100:
-                        if total_else_weight > 100:
-                            st.error(f"⚠️ ELSE total weight: {total_else_weight}% (exceeds 100%)")
-                        else:
-                            st.warning(f"ℹ️ ELSE total weight: {total_else_weight}% ({(100-total_else_weight):.1f}% unallocated)")
-                    else:
-                        st.success(f"✅ ELSE total weight: {total_else_weight}%")
-                    
-                    # Always visible allocation dropdown for ELSE
-                    st.markdown("**Add Allocation to ELSE:**")
-                    if st.session_state.output_allocations:
-                        selected_else_allocation = st.selectbox(
-                            "Select Allocation:",
-                            [""] + list(st.session_state.output_allocations.keys()),
-                            key=f"else_allocation_select_{branch_idx}_{id(branch)}"
-                        )
-                        if selected_else_allocation:
-                            if 'else_allocations' not in branch:
-                                branch['else_allocations'] = []
-                            # Check if allocation already exists
-                            if not any(a.get('allocation') == selected_else_allocation for a in branch.get('else_allocations', [])):
-                                branch['else_allocations'].append({
-                                    'allocation': selected_else_allocation, 
-                                    'weight': 100
-                                })
-                                st.success(f"✅ Allocation '{selected_else_allocation}' added to ELSE!")
-                                # Remove rerun to prevent state conflicts
-                    else:
-                        st.warning("No allocations available. Create allocations in the Allocation Blocks tab first.")
-                    
-                    # Separate button for adding IF/THEN/ELSE chains
-                    if st.button("🔗 Add IF/THEN/ELSE Chain to ELSE", key=f"add_else_nested_chain_{branch_idx}_{id(branch)}"):
-                        if 'else_nested_chains' not in branch:
-                            branch['else_nested_chains'] = []
-                        branch['else_nested_chains'].append({
-                            'type': 'nested_if_else_chain',
-                            'chain_blocks': [{
-                                'type': 'chain_if_else',
-                                'signals': [],
-                                'allocations': [],
-                                'else_allocations': [],
-                                'else_signals': [],
-                                'else_nested_blocks': [],
-                                'is_else_if': False
-                            }]
-                        })
-                        st.success(f"✅ IF/THEN/ELSE chain added to ELSE!")
-                        # Remove rerun to prevent state conflicts
-                    
 
-                    
-                    # Display ELSE allocations in collapsible expander
-                    if branch.get('else_allocations'):
-                        with st.expander(f"💰 ELSE Allocations ({len(branch['else_allocations'])})", expanded=True):
-                            for else_alloc_idx, else_allocation_config in enumerate(branch['else_allocations']):
-                                col1, col2, col3 = st.columns([2, 1, 1])
-                                with col1:
-                                    else_allocation_config['allocation'] = st.selectbox(
-                                        f"ELSE Allocation {else_alloc_idx + 1}", 
-                                        list(st.session_state.output_allocations.keys()),
-                                        key=f"else_branch_{branch_idx}_allocation_{else_alloc_idx}"
-                                    )
-                                with col2:
-                                    new_weight = st.number_input(
-                                        "Weight %",
-                                        min_value=0,
-                                        max_value=100,
-                                        value=else_allocation_config.get('weight', 100),
-                                        key=f"else_branch_{branch_idx}_weight_{else_alloc_idx}"
-                                    )
-                                    # Only update if value actually changed to avoid unnecessary state changes
-                                    if new_weight != else_allocation_config.get('weight', 100):
-                                        else_allocation_config['weight'] = new_weight
-                                with col3:
-                                    if len(branch['else_allocations']) > 1:  # Don't allow removing the last allocation
-                                        if st.button("🗑️", key=f"remove_else_{branch_idx}_{else_alloc_idx}_{id(else_allocation_config)}_delete"):
-                                            branch['else_allocations'].pop(else_alloc_idx)
-                                            # Remove rerun to prevent state conflicts
-                                    else:
-                                        st.write("")  # Empty space for alignment
-                            
-                            # Show total ELSE allocation weight for this branch
-                            total_else_allocation_weight = sum(alloc.get('weight', 0) for alloc in branch['else_allocations'])
-                            if total_else_allocation_weight != 100:
-                                if total_else_allocation_weight > 100:
-                                    st.error(f"⚠️ ELSE allocation weight: {total_else_allocation_weight}% (exceeds 100%)")
-                                else:
-                                    st.warning(f"ℹ️ ELSE allocation weight: {total_else_allocation_weight}% ({(100-total_else_allocation_weight):.1f}% unallocated)")
-                            else:
-                                st.success(f"✅ ELSE allocation weight: {total_else_allocation_weight}%")
-                            
-                            # Show weight distribution info
-                            allocation_weight = branch.get('else_allocation_weight', 0)
-                            chain_weight = branch.get('else_chain_weight', 100)
-                            st.info(f"📊 ELSE Distribution: {allocation_weight}% allocations, {chain_weight}% chains")
-                            
-                            # Add button to add more allocations to ELSE
-                            if st.button("➕ Add Another Allocation to ELSE", key=f"add_more_else_allocation_{branch_idx}_{id(branch)}"):
-                                branch['else_allocations'].append({
-                                    'allocation': '', 
-                                    'weight': 100
-                                })
-                                # Remove rerun to prevent state conflicts
-                    
-                    # Display nested IF/ELSE blocks in ELSE
-                    if branch.get('else_nested_blocks'):
-                        with st.expander(f"🔗 ELSE Nested If/Else Blocks ({len(branch['else_nested_blocks'])})", expanded=True):
-                            for nested_idx, nested_block in enumerate(branch['else_nested_blocks']):
-                                st.markdown(f"""
-                                <div class="nested-else-block" style="border-left: 3px solid #9C27B0; padding-left: 10px; margin-left: 20px;">
-                                    <div class="nested-else-header">
-                                        <span>🔗 Nested If/Else Block {nested_idx + 1}</span>
-                                    </div>
-                                """, unsafe_allow_html=True)
-                                
-                                # Nested IF section
-                                st.markdown('<div class="nested-condition-block" style="border-left: 3px solid #2196F3; padding-left: 10px; margin-left: 0px;">', unsafe_allow_html=True)
-                                st.markdown("**NESTED IF:**")
-                                
-                                # Add signal button for nested IF
-                                if st.button("➕", key=f"add_nested_if_{branch_idx}_{nested_idx}"):
-                                    if 'signals' not in nested_block:
-                                        nested_block['signals'] = []
-                                    nested_block['signals'].append({
-                                        'signal': '', 
-                                        'negated': False, 
-                                        'operator': 'AND'
-                                    })
-                                    st.rerun()
-                                
-                                # Display nested IF signals
-                                if nested_block.get('signals'):
-                                    with st.expander(f"📊 Nested IF Signals ({len(nested_block['signals'])})", expanded=True):
-                                        for signal_idx, signal_config in enumerate(nested_block['signals']):
-                                            st.markdown(f"**Nested Signal {signal_idx + 1}:**")
-                                            
-                                            col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
-                                            with col1:
-                                                if signal_config.get('signal'):
-                                                    st.write(f"• {signal_config['signal']}")
-                                                else:
-                                                    signal_config['signal'] = st.selectbox(
-                                                        "Select Signal:",
-                                                        [""] + [s['name'] for s in st.session_state.signals],
-                                                        key=f"nested_if_signal_{branch_idx}_{nested_idx}_{signal_idx}"
-                                                    )
-                                            with col2:
-                                                signal_config['negated'] = st.checkbox("NOT", key=f"nested_if_negated_{branch_idx}_{nested_idx}_{signal_idx}")
-                                            with col3:
-                                                if len(nested_block['signals']) > 1 and signal_idx < len(nested_block['signals']) - 1:
-                                                    signal_config['operator'] = st.selectbox(
-                                                        "Operator",
-                                                        ["AND", "OR"],
-                                                        index=0 if signal_config.get('operator', 'AND') == 'AND' else 1,
-                                                        key=f"nested_if_operator_{branch_idx}_{nested_idx}_{signal_idx}"
-                                                    )
-                                                else:
-                                                    st.write("")
-                                            with col4:
-                                                if len(nested_block['signals']) > 1:
-                                                    if st.button("🗑️", key=f"remove_nested_if_signal_{branch_idx}_{nested_idx}_{signal_idx}"):
-                                                        nested_block['signals'].pop(signal_idx)
-                                                        st.rerun()
-                                                else:
-                                                    st.write("")
-                                            
-                                            st.markdown("<br>", unsafe_allow_html=True)
-                                else:
-                                    st.write("**No signals in nested IF yet**")
-                                
-                                st.markdown('</div>', unsafe_allow_html=True)
-                                
-                                # Nested THEN section
-                                st.markdown('<div class="nested-then-block" style="border-left: 3px solid #FF9800; padding-left: 10px; margin-left: 0px;">', unsafe_allow_html=True)
-                                st.markdown("**NESTED THEN:**")
-                                
-                                # Add allocation button for nested THEN
-                                if st.button("➕", key=f"add_nested_then_{branch_idx}_{nested_idx}"):
-                                    if 'allocations' not in nested_block:
-                                        nested_block['allocations'] = []
-                                    nested_block['allocations'].append({
-                                        'allocation': '', 
-                                        'weight': 100
-                                    })
-                                    st.rerun()
-                                
-                                # Display nested THEN allocations
-                                if nested_block.get('allocations'):
-                                    with st.expander(f"💰 Nested THEN Allocations ({len(nested_block['allocations'])})", expanded=True):
-                                        for alloc_idx, allocation_config in enumerate(nested_block['allocations']):
-                                            col1, col2, col3 = st.columns([2, 1, 1])
-                                            with col1:
-                                                allocation_config['allocation'] = st.selectbox(
-                                                    f"Nested Allocation {alloc_idx + 1}", 
-                                                    list(st.session_state.output_allocations.keys()),
-                                                    key=f"nested_then_allocation_{branch_idx}_{nested_idx}_{alloc_idx}"
-                                                )
-                                            with col2:
-                                                allocation_config['weight'] = st.number_input(
-                                                    "Weight %",
-                                                    min_value=0,
-                                                    max_value=100,
-                                                    value=allocation_config.get('weight', 100),
-                                                    key=f"nested_then_weight_{branch_idx}_{nested_idx}_{alloc_idx}"
-                                                )
-                                            with col3:
-                                                if len(nested_block['allocations']) > 1:
-                                                    if st.button("🗑️", key=f"remove_nested_{branch_idx}_{nested_idx}_{alloc_idx}_{id(allocation_config)}_delete"):
-                                                        nested_block['allocations'].pop(alloc_idx)
-                                                        st.rerun()
-                                                else:
-                                                    st.write("")
-                                        
-                                        # Show total weight for nested branch
-                                        total_nested_weight = sum(alloc.get('weight', 0) for alloc in nested_block['allocations'])
-                                        if total_nested_weight != 100:
-                                            if total_nested_weight > 100:
-                                                st.error(f"⚠️ Nested total weight: {total_nested_weight}% (exceeds 100%)")
-                                            else:
-                                                st.warning(f"ℹ️ Nested total weight: {total_nested_weight}% ({(100-total_nested_weight):.1f}% unallocated)")
-                                        else:
-                                            st.success(f"✅ Nested total weight: {total_nested_weight}%")
-                                else:
-                                    st.write("**No allocations in nested THEN yet**")
-                                
-                                st.markdown('</div>', unsafe_allow_html=True)
-                                
-                                # Delete nested block
-                                if st.button("🗑️ Delete Nested Block", key=f"delete_nested_{branch_idx}_{nested_idx}"):
-                                    branch['else_nested_blocks'].pop(nested_idx)
-                                    st.rerun()
-                                
-                                st.markdown("</div>", unsafe_allow_html=True)
-                    
-                    # Display nested IF/THEN/ELSE chains in ELSE
-                    if branch.get('else_nested_chains'):
-                        with st.expander(f"🔗 ELSE Nested IF/THEN/ELSE Chains ({len(branch['else_nested_chains'])})", expanded=True):
-                            for chain_idx, chain in enumerate(branch['else_nested_chains']):
-                                st.markdown(f"""
-                                <div class="nested-chain-block" style="border-left: 3px solid #E91E63; padding-left: 10px; margin-left: 20px;">
-                                    <div class="nested-chain-header">
-                                        <span>🔗 Nested IF/THEN/ELSE Chain {chain_idx + 1}</span>
-                                    </div>
-                                """, unsafe_allow_html=True)
-                                
-                                # Display each block in the chain
-                                for block_idx, chain_block in enumerate(chain['chain_blocks']):
-                                    # Chain block styling
-                                    if chain_block.get('is_else_if'):
-                                        st.markdown(f"""
-                                        <div class="chain-else-if-block" style="border-left: 4px solid #FF5722; background-color: #FFF3E0; margin-left: 10px;">
-                                            <div class="chain-else-if-header">
-                                                <span>🔗 Chain ELSE IF Block {block_idx + 1}</span>
-                                            </div>
-                                        """, unsafe_allow_html=True)
-                                    else:
-                                        st.markdown(f"""
-                                        <div class="chain-if-block" style="border-left: 4px solid #2196F3; background-color: #E3F2FD; margin-left: 10px;">
-                                            <div class="chain-if-header">
-                                                <span>🔗 Chain IF Block {block_idx + 1}</span>
-                                            </div>
-                                        """, unsafe_allow_html=True)
-                                    
-                                    # Chain IF section - Streamlined format like primary blocks
-                                    st.markdown('<div class="chain-condition-block" style="border-left: 3px solid #2196F3; padding-left: 10px; margin-left: 0px;">', unsafe_allow_html=True)
-                                    if chain_block.get('is_else_if'):
-                                        st.markdown("**CHAIN ELSE IF:**")
-                                    else:
-                                        st.markdown("**CHAIN IF:**")
-                                    
-                                    # Direct signal selection (no + button needed)
-                                    if st.session_state.signals:
-                                        selected_chain_signal = st.selectbox(
-                                            "Select Signal:",
-                                            [""] + [s['name'] for s in st.session_state.signals],
-                                            key=f"chain_signal_select_{branch_idx}_{chain_idx}_{block_idx}"
-                                        )
-                                        if selected_chain_signal:
-                                            if 'signals' not in chain_block:
-                                                chain_block['signals'] = []
-                                            # Check if signal already exists
-                                            if not any(s.get('signal') == selected_chain_signal for s in chain_block.get('signals', [])):
-                                                chain_block['signals'].append({
-                                                    'signal': selected_chain_signal, 
-                                                    'negated': False, 
-                                                    'operator': 'AND'
-                                                })
-                                                st.success(f"✅ Signal '{selected_chain_signal}' added to chain!")
-                                                # Remove rerun to prevent state conflicts
-                                    else:
-                                        st.warning("No signals available. Create signals in the Signal Blocks tab first.")
-                                    
-                                    # Display chain IF signals
-                                    if chain_block.get('signals'):
-                                        with st.expander(f"📊 Chain IF Signals ({len(chain_block['signals'])})", expanded=True):
-                                            for signal_idx, signal_config in enumerate(chain_block['signals']):
-                                                st.markdown(f"**Chain Signal {signal_idx + 1}:**")
-                                                
-                                                col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
-                                                with col1:
-                                                    signal_config['signal'] = st.selectbox(
-                                                        f"Chain Signal {signal_idx + 1}", 
-                                                        [""] + [s['name'] for s in st.session_state.signals],
-                                                        index=0 if not signal_config.get('signal') else 
-                                                        [s['name'] for s in st.session_state.signals].index(signal_config['signal']) + 1,
-                                                        key=f"chain_if_signal_{branch_idx}_{chain_idx}_{block_idx}_{signal_idx}"
-                                                    )
-                                                with col2:
-                                                    signal_config['negated'] = st.checkbox("NOT", key=f"chain_if_negated_{branch_idx}_{chain_idx}_{block_idx}_{signal_idx}")
-                                                with col3:
-                                                    if len(chain_block['signals']) > 1 and signal_idx < len(chain_block['signals']) - 1:
-                                                        signal_config['operator'] = st.selectbox(
-                                                            "Operator",
-                                                            ["AND", "OR"],
-                                                            index=0 if signal_config.get('operator', 'AND') == 'AND' else 1,
-                                                            key=f"chain_if_operator_{branch_idx}_{chain_idx}_{block_idx}_{signal_idx}"
-                                                        )
-                                                    else:
-                                                        st.write("")
-                                                with col4:
-                                                    if len(chain_block['signals']) > 1:
-                                                        if st.button("🗑️", key=f"remove_chain_if_signal_{branch_idx}_{chain_idx}_{block_idx}_{signal_idx}"):
-                                                            chain_block['signals'].pop(signal_idx)
-                                                            # Remove rerun to prevent state conflicts
-                                                    else:
-                                                        st.write("")
-                                                
-                                                st.markdown("<br>", unsafe_allow_html=True)
-                                            
-                                            # Add button to add more signals
-                                            if st.button("➕ Add Another Signal", key=f"add_more_chain_signal_{branch_idx}_{chain_idx}_{block_idx}"):
-                                                chain_block['signals'].append({
-                                                    'signal': '', 
-                                                    'negated': False, 
-                                                    'operator': 'AND'
-                                                })
-                                                # Remove rerun to prevent state conflicts
-                                    else:
-                                        st.write("**No signals in chain IF yet**")
-                                    
-                                    st.markdown('</div>', unsafe_allow_html=True)
-                                    
-                                    # Chain THEN section - Streamlined format like primary blocks
-                                    st.markdown('<div class="chain-then-block" style="border-left: 3px solid #FF9800; padding-left: 10px; margin-left: 0px;">', unsafe_allow_html=True)
-                                    st.markdown("**CHAIN THEN:**")
-                                    
-                                    # Direct allocation selection (no + button needed)
-                                    if st.session_state.output_allocations:
-                                        selected_chain_allocation = st.selectbox(
-                                            "Select Allocation:",
-                                            [""] + list(st.session_state.output_allocations.keys()),
-                                            key=f"chain_allocation_select_{branch_idx}_{chain_idx}_{block_idx}_{id(chain_block)}"
-                                        )
-                                        if selected_chain_allocation:
-                                            if 'allocations' not in chain_block:
-                                                chain_block['allocations'] = []
-                                            # Check if allocation already exists
-                                            if not any(a.get('allocation') == selected_chain_allocation for a in chain_block.get('allocations', [])):
-                                                chain_block['allocations'].append({
-                                                    'allocation': selected_chain_allocation, 
-                                                    'weight': 100
-                                                })
-                                                st.success(f"✅ Allocation '{selected_chain_allocation}' added to chain!")
-                                                # Remove rerun to prevent state conflicts
-                                    else:
-                                        st.warning("No allocations available. Create allocations in the Allocation Blocks tab first.")
-                                    
-                                    # Display chain THEN allocations
-                                    if chain_block.get('allocations'):
-                                        with st.expander(f"💰 Chain THEN Allocations ({len(chain_block['allocations'])})", expanded=True):
-                                            for alloc_idx, allocation_config in enumerate(chain_block['allocations']):
-                                                col1, col2, col3 = st.columns([2, 1, 1])
-                                                with col1:
-                                                    allocation_config['allocation'] = st.selectbox(
-                                                        f"Chain Allocation {alloc_idx + 1}", 
-                                                        list(st.session_state.output_allocations.keys()),
-                                                        key=f"chain_then_allocation_{branch_idx}_{chain_idx}_{block_idx}_{alloc_idx}"
-                                                    )
-                                                with col2:
-                                                    new_weight = st.number_input(
-                                                        "Weight %",
-                                                        min_value=0,
-                                                        max_value=100,
-                                                        value=allocation_config.get('weight', 100),
-                                                        key=f"chain_then_weight_{branch_idx}_{chain_idx}_{block_idx}_{alloc_idx}"
-                                                    )
-                                                    # Only update if value actually changed to avoid unnecessary state changes
-                                                    if new_weight != allocation_config.get('weight', 100):
-                                                        allocation_config['weight'] = new_weight
-                                                with col3:
-                                                    if len(chain_block['allocations']) > 1:
-                                                        if st.button("🗑️", key=f"remove_chain_{branch_idx}_{chain_idx}_{block_idx}_{alloc_idx}_{id(allocation_config)}_delete"):
-                                                            chain_block['allocations'].pop(alloc_idx)
-                                                            # Remove rerun to prevent state conflicts
-                                                    else:
-                                                        st.write("")
-                                            
-                                            # Show total weight for chain branch
-                                            total_chain_weight = sum(alloc.get('weight', 0) for alloc in chain_block['allocations'])
-                                            if total_chain_weight != 100:
-                                                if total_chain_weight > 100:
-                                                    st.error(f"⚠️ Chain total weight: {total_chain_weight}% (exceeds 100%)")
-                                                else:
-                                                    st.warning(f"ℹ️ Chain total weight: {total_chain_weight}% ({(100-total_chain_weight):.1f}% unallocated)")
-                                            else:
-                                                st.success(f"✅ Chain total weight: {total_chain_weight}%")
-                                            
-                                            # Add button to add more allocations
-                                            if st.button("➕ Add Another Allocation", key=f"add_more_chain_allocation_{branch_idx}_{chain_idx}_{block_idx}"):
-                                                chain_block['allocations'].append({
-                                                    'allocation': '', 
-                                                    'weight': 100
-                                                })
-                                                # Remove rerun to prevent state conflicts
-                                    else:
-                                        st.write("**No allocations in chain THEN yet**")
-                                    
-                                    st.markdown('</div>', unsafe_allow_html=True)
-                                    
-                                    # Add button to add next block in chain
-                                    if st.button("➕ Add Next Block in Chain", key=f"add_next_chain_block_{branch_idx}_{chain_idx}_{block_idx}"):
-                                        chain['chain_blocks'].append({
-                                            'type': 'chain_if_else',
-                                            'signals': [],
-                                            'allocations': [],
-                                            'else_allocations': [],
-                                            'else_signals': [],
-                                            'else_nested_blocks': [],
-                                            'is_else_if': True
-                                        })
-                                        # Remove rerun to prevent state conflicts
-                                    
-                                    # Delete chain block
-                                    if len(chain['chain_blocks']) > 1:
-                                        if st.button("🗑️ Delete Chain Block", key=f"delete_chain_block_{branch_idx}_{chain_idx}_{block_idx}"):
-                                            chain['chain_blocks'].pop(block_idx)
-                                            # Remove rerun to prevent state conflicts
-                                    
-                                    st.markdown("</div>", unsafe_allow_html=True)
-                                
-                                # Add ELSE block at the end of each chain (like primary blocks)
-                                st.markdown('<div class="chain-else-block" style="border-left: 3px solid #4CAF50; padding-left: 10px; margin-left: 10px;">', unsafe_allow_html=True)
-                                st.markdown("**CHAIN ELSE:**")
-                                
-                                # Weight distribution between allocations and chains for the ELSE block
-                                st.markdown("**Chain ELSE Weight Distribution:**")
-                                col1, col2 = st.columns(2)
-                                with col1:
-                                    if 'chain_else_allocation_weight' not in chain:
-                                        chain['chain_else_allocation_weight'] = 0
-                                    new_chain_else_allocation_weight = st.number_input(
-                                        "Allocation Weight %",
-                                        min_value=0,
-                                        max_value=100,
-                                        value=chain.get('chain_else_allocation_weight', 0),
-                                        key=f"chain_else_allocation_weight_{branch_idx}_{chain_idx}"
-                                    )
-                                    # Only update if value actually changed to avoid unnecessary reruns
-                                    if new_chain_else_allocation_weight != chain.get('chain_else_allocation_weight', 0):
-                                        chain['chain_else_allocation_weight'] = new_chain_else_allocation_weight
-                                with col2:
-                                    if 'chain_else_chain_weight' not in chain:
-                                        chain['chain_else_chain_weight'] = 100
-                                    new_chain_else_chain_weight = st.number_input(
-                                        "Chain Weight %",
-                                        min_value=0,
-                                        max_value=100,
-                                        value=chain.get('chain_else_chain_weight', 100),
-                                        key=f"chain_else_chain_weight_{branch_idx}_{chain_idx}"
-                                    )
-                                    # Only update if value actually changed to avoid unnecessary reruns
-                                    if new_chain_else_chain_weight != chain.get('chain_else_chain_weight', 100):
-                                        chain['chain_else_chain_weight'] = new_chain_else_chain_weight
-                                
-                                # Validate total weight
-                                total_chain_else_weight = chain.get('chain_else_allocation_weight', 0) + chain.get('chain_else_chain_weight', 100)
-                                if total_chain_else_weight != 100:
-                                    if total_chain_else_weight > 100:
-                                        st.error(f"⚠️ Chain ELSE total weight: {total_chain_else_weight}% (exceeds 100%)")
-                                    else:
-                                        st.warning(f"ℹ️ Chain ELSE total weight: {total_chain_else_weight}% ({(100-total_chain_else_weight):.1f}% unallocated)")
-                                else:
-                                    st.success(f"✅ Chain ELSE total weight: {total_chain_else_weight}%")
-                                
-                                # Direct allocation selection for chain ELSE
-                                st.markdown("**Add Allocation to Chain ELSE:**")
-                                if st.session_state.output_allocations:
-                                    selected_chain_else_allocation = st.selectbox(
-                                        "Select Allocation:",
-                                        [""] + list(st.session_state.output_allocations.keys()),
-                                        key=f"chain_else_allocation_select_{branch_idx}_{chain_idx}_{id(chain)}"
-                                    )
-                                    if selected_chain_else_allocation:
-                                        if 'chain_else_allocations' not in chain:
-                                            chain['chain_else_allocations'] = []
-                                        # Check if allocation already exists
-                                        if not any(a.get('allocation') == selected_chain_else_allocation for a in chain.get('chain_else_allocations', [])):
-                                            chain['chain_else_allocations'].append({
-                                                'allocation': selected_chain_else_allocation, 
-                                                'weight': 100
-                                            })
-                                            st.success(f"✅ Allocation '{selected_chain_else_allocation}' added to chain ELSE!")
-                                            # Remove rerun to prevent state conflicts
-                                else:
-                                    st.warning("No allocations available. Create allocations in the Allocation Blocks tab first.")
-                                
-                                # Display chain ELSE allocations
-                                if chain.get('chain_else_allocations'):
-                                    with st.expander(f"💰 Chain ELSE Allocations ({len(chain['chain_else_allocations'])})", expanded=True):
-                                        for else_alloc_idx, else_allocation_config in enumerate(chain['chain_else_allocations']):
-                                            col1, col2, col3 = st.columns([2, 1, 1])
-                                            with col1:
-                                                else_allocation_config['allocation'] = st.selectbox(
-                                                    f"Chain ELSE Allocation {else_alloc_idx + 1}", 
-                                                    list(st.session_state.output_allocations.keys()),
-                                                    key=f"chain_else_branch_{branch_idx}_{chain_idx}_allocation_{else_alloc_idx}"
-                                                )
-                                            with col2:
-                                                new_weight = st.number_input(
-                                                    "Weight %",
-                                                    min_value=0,
-                                                    max_value=100,
-                                                    value=else_allocation_config.get('weight', 100),
-                                                    key=f"chain_else_branch_{branch_idx}_{chain_idx}_weight_{else_alloc_idx}"
-                                                )
-                                                # Only update if value actually changed to avoid unnecessary state changes
-                                                if new_weight != else_allocation_config.get('weight', 100):
-                                                    else_allocation_config['weight'] = new_weight
-                                            with col3:
-                                                if len(chain['chain_else_allocations']) > 1:
-                                                    if st.button("🗑️", key=f"remove_chain_else_{branch_idx}_{chain_idx}_{else_alloc_idx}_{id(else_allocation_config)}_delete"):
-                                                        chain['chain_else_allocations'].pop(else_alloc_idx)
-                                                        # Remove rerun to prevent state conflicts
-                                                else:
-                                                    st.write("")
-                                        
-                                        # Show total chain ELSE allocation weight
-                                        total_chain_else_allocation_weight = sum(alloc.get('weight', 0) for alloc in chain['chain_else_allocations'])
-                                        if total_chain_else_allocation_weight != 100:
-                                            if total_chain_else_allocation_weight > 100:
-                                                st.error(f"⚠️ Chain ELSE allocation weight: {total_chain_else_allocation_weight}% (exceeds 100%)")
-                                            else:
-                                                st.warning(f"ℹ️ Chain ELSE allocation weight: {total_chain_else_allocation_weight}% ({(100-total_chain_else_allocation_weight):.1f}% unallocated)")
-                                        else:
-                                            st.success(f"✅ Chain ELSE allocation weight: {total_chain_else_allocation_weight}%")
-                                        
-                                        # Show weight distribution info
-                                        allocation_weight = chain.get('chain_else_allocation_weight', 0)
-                                        chain_weight = chain.get('chain_else_chain_weight', 100)
-                                        st.info(f"📊 Chain ELSE Distribution: {allocation_weight}% allocations, {chain_weight}% chains")
-                                        
-                                        # Add button to add more allocations to chain ELSE
-                                        if st.button("➕ Add Another Allocation to Chain ELSE", key=f"add_more_chain_else_allocation_{branch_idx}_{chain_idx}_{id(chain)}"):
-                                            chain['chain_else_allocations'].append({
-                                                'allocation': '', 
-                                                'weight': 100
-                                            })
-                                            # Remove rerun to prevent state conflicts
-                                
-                                # Add nested chain button for chain ELSE
-                                if st.button("🔗 Add Nested Chain to Chain ELSE", key=f"add_nested_chain_to_chain_else_{branch_idx}_{chain_idx}"):
-                                    if 'chain_else_nested_chains' not in chain:
-                                        chain['chain_else_nested_chains'] = []
-                                    chain['chain_else_nested_chains'].append({
-                                        'type': 'nested_if_else_chain',
-                                        'chain_blocks': [{
-                                            'type': 'chain_if_else',
-                                            'signals': [],
-                                            'allocations': [],
-                                            'else_allocations': [],
-                                            'else_signals': [],
-                                            'else_nested_blocks': [],
-                                            'is_else_if': False
-                                        }]
-                                    })
-                                    st.success(f"✅ Nested chain added to chain ELSE!")
-                                    # Remove rerun to prevent state conflicts
-                                
-                                # Display nested chains within chain ELSE
-                                if chain.get('chain_else_nested_chains'):
-                                    with st.expander(f"🔗 Chain ELSE Nested Chains ({len(chain['chain_else_nested_chains'])})", expanded=True):
-                                        for nested_chain_idx, nested_chain in enumerate(chain['chain_else_nested_chains']):
-                                            st.markdown(f"""
-                                            <div class="nested-nested-chain-block" style="border-left: 3px solid #9C27B0; padding-left: 10px; margin-left: 20px;">
-                                                <div class="nested-nested-chain-header">
-                                                    <span>🔗 Nested Chain {nested_chain_idx + 1} in Chain ELSE</span>
-                                                </div>
-                                            """, unsafe_allow_html=True)
-                                            
-                                            # Display each block in the nested chain
-                                            for nested_block_idx, nested_chain_block in enumerate(nested_chain['chain_blocks']):
-                                                # Nested chain block styling
-                                                if nested_chain_block.get('is_else_if'):
-                                                    st.markdown(f"""
-                                                    <div class="nested-nested-else-if-block" style="border-left: 4px solid #FF5722; background-color: #FFF3E0; margin-left: 10px;">
-                                                        <div class="nested-nested-else-if-header">
-                                                            <span>🔗 Nested Chain ELSE IF Block {nested_block_idx + 1}</span>
-                                                        </div>
-                                                    """, unsafe_allow_html=True)
-                                                else:
-                                                    st.markdown(f"""
-                                                    <div class="nested-nested-if-block" style="border-left: 4px solid #2196F3; background-color: #E3F2FD; margin-left: 10px;">
-                                                        <div class="nested-nested-if-header">
-                                                            <span>🔗 Nested Chain IF Block {nested_block_idx + 1}</span>
-                                                        </div>
-                                                    """, unsafe_allow_html=True)
-                                                
-                                                # Nested Chain IF section
-                                                st.markdown('<div class="nested-chain-condition-block" style="border-left: 3px solid #2196F3; padding-left: 10px; margin-left: 0px;">', unsafe_allow_html=True)
-                                                if nested_chain_block.get('is_else_if'):
-                                                    st.markdown("**NESTED CHAIN ELSE IF:**")
-                                                else:
-                                                    st.markdown("**NESTED CHAIN IF:**")
-                                                
-                                                # Direct signal selection for nested chain
-                                                if st.session_state.signals:
-                                                    selected_nested_chain_signal = st.selectbox(
-                                                        "Select Signal:",
-                                                        [""] + [s['name'] for s in st.session_state.signals],
-                                                        key=f"nested_chain_signal_select_{branch_idx}_{chain_idx}_{nested_chain_idx}_{nested_block_idx}"
-                                                    )
-                                                    if selected_nested_chain_signal:
-                                                        if 'signals' not in nested_chain_block:
-                                                            nested_chain_block['signals'] = []
-                                                        # Check if signal already exists
-                                                        if not any(s.get('signal') == selected_nested_chain_signal for s in nested_chain_block.get('signals', [])):
-                                                            nested_chain_block['signals'].append({
-                                                                'signal': selected_nested_chain_signal, 
-                                                                'negated': False, 
-                                                                'operator': 'AND'
-                                                            })
-                                                            st.success(f"✅ Signal '{selected_nested_chain_signal}' added to nested chain!")
-                                                else:
-                                                    st.warning("No signals available. Create signals in the Signal Blocks tab first.")
-                                                
-                                                # Display nested chain IF signals
-                                                if nested_chain_block.get('signals'):
-                                                    with st.expander(f"📊 Nested Chain IF Signals ({len(nested_chain_block['signals'])})", expanded=True):
-                                                        for signal_idx, signal_config in enumerate(nested_chain_block['signals']):
-                                                            st.markdown(f"**Nested Chain Signal {signal_idx + 1}:**")
-                                                            
-                                                            col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
-                                                            with col1:
-                                                                signal_config['signal'] = st.selectbox(
-                                                                    f"Nested Chain Signal {signal_idx + 1}", 
-                                                                    [""] + [s['name'] for s in st.session_state.signals],
-                                                                    index=0 if not signal_config.get('signal') else 
-                                                                    [s['name'] for s in st.session_state.signals].index(signal_config['signal']) + 1,
-                                                                    key=f"nested_chain_if_signal_{branch_idx}_{chain_idx}_{nested_chain_idx}_{nested_block_idx}_{signal_idx}"
-                                                                )
-                                                            with col2:
-                                                                signal_config['negated'] = st.checkbox("NOT", key=f"nested_chain_if_negated_{branch_idx}_{chain_idx}_{nested_chain_idx}_{nested_block_idx}_{signal_idx}")
-                                                            with col3:
-                                                                if len(nested_chain_block['signals']) > 1 and signal_idx < len(nested_chain_block['signals']) - 1:
-                                                                    signal_config['operator'] = st.selectbox(
-                                                                        "Operator",
-                                                                        ["AND", "OR"],
-                                                                        index=0 if signal_config.get('operator', 'AND') == 'AND' else 1,
-                                                                        key=f"nested_chain_if_operator_{branch_idx}_{chain_idx}_{nested_chain_idx}_{nested_block_idx}_{signal_idx}"
-                                                                    )
-                                                                else:
-                                                                    st.write("")
-                                                            with col4:
-                                                                if len(nested_chain_block['signals']) > 1:
-                                                                    if st.button("🗑️", key=f"remove_nested_chain_if_signal_{branch_idx}_{chain_idx}_{nested_chain_idx}_{nested_block_idx}_{signal_idx}"):
-                                                                        nested_chain_block['signals'].pop(signal_idx)
-                                                                else:
-                                                                    st.write("")
-                                                            
-                                                            st.markdown("<br>", unsafe_allow_html=True)
-                                                        
-                                                        # Add button to add more signals
-                                                        if st.button("➕ Add Another Signal", key=f"add_more_nested_chain_signal_{branch_idx}_{chain_idx}_{nested_chain_idx}_{nested_block_idx}"):
-                                                            nested_chain_block['signals'].append({
-                                                                'signal': '', 
-                                                                'negated': False, 
-                                                                'operator': 'AND'
-                                                            })
-                                                else:
-                                                    st.write("**No signals in nested chain IF yet**")
-                                                
-                                                st.markdown('</div>', unsafe_allow_html=True)
-                                                
-                                                # Nested Chain THEN section
-                                                st.markdown('<div class="nested-chain-then-block" style="border-left: 3px solid #FF9800; padding-left: 10px; margin-left: 0px;">', unsafe_allow_html=True)
-                                                st.markdown("**NESTED CHAIN THEN:**")
-                                                
-                                                # Direct allocation selection for nested chain
-                                                if st.session_state.output_allocations:
-                                                    selected_nested_chain_allocation = st.selectbox(
-                                                        "Select Allocation:",
-                                                        [""] + list(st.session_state.output_allocations.keys()),
-                                                        key=f"nested_chain_allocation_select_{branch_idx}_{chain_idx}_{nested_chain_idx}_{nested_block_idx}_{id(nested_chain_block)}"
-                                                    )
-                                                    if selected_nested_chain_allocation:
-                                                        if 'allocations' not in nested_chain_block:
-                                                            nested_chain_block['allocations'] = []
-                                                        # Check if allocation already exists
-                                                        if not any(a.get('allocation') == selected_nested_chain_allocation for a in nested_chain_block.get('allocations', [])):
-                                                            nested_chain_block['allocations'].append({
-                                                                'allocation': selected_nested_chain_allocation, 
-                                                                'weight': 100
-                                                            })
-                                                            st.success(f"✅ Allocation '{selected_nested_chain_allocation}' added to nested chain!")
-                                                else:
-                                                    st.warning("No allocations available. Create allocations in the Allocation Blocks tab first.")
-                                                
-                                                # Display nested chain THEN allocations
-                                                if nested_chain_block.get('allocations'):
-                                                    with st.expander(f"💰 Nested Chain THEN Allocations ({len(nested_chain_block['allocations'])})", expanded=True):
-                                                        for alloc_idx, allocation_config in enumerate(nested_chain_block['allocations']):
-                                                            col1, col2, col3 = st.columns([2, 1, 1])
-                                                            with col1:
-                                                                allocation_config['allocation'] = st.selectbox(
-                                                                    f"Nested Chain Allocation {alloc_idx + 1}", 
-                                                                    list(st.session_state.output_allocations.keys()),
-                                                                    key=f"nested_chain_then_allocation_{branch_idx}_{chain_idx}_{nested_chain_idx}_{nested_block_idx}_{alloc_idx}"
-                                                                )
-                                                            with col2:
-                                                                new_weight = st.number_input(
-                                                                    "Weight %",
-                                                                    min_value=0,
-                                                                    max_value=100,
-                                                                    value=allocation_config.get('weight', 100),
-                                                                    key=f"nested_chain_then_weight_{branch_idx}_{chain_idx}_{nested_chain_idx}_{nested_block_idx}_{alloc_idx}"
-                                                                )
-                                                                # Only update if value actually changed to avoid unnecessary state changes
-                                                                if new_weight != allocation_config.get('weight', 100):
-                                                                    allocation_config['weight'] = new_weight
-                                                            with col3:
-                                                                if len(nested_chain_block['allocations']) > 1:
-                                                                    if st.button("🗑️", key=f"remove_nested_chain_{branch_idx}_{chain_idx}_{nested_chain_idx}_{nested_block_idx}_{alloc_idx}_{id(allocation_config)}_delete"):
-                                                                        nested_chain_block['allocations'].pop(alloc_idx)
-                                                                else:
-                                                                    st.write("")
-                                                        
-                                                        # Show total weight for nested chain branch
-                                                        total_nested_chain_weight = sum(alloc.get('weight', 0) for alloc in nested_chain_block['allocations'])
-                                                        if total_nested_chain_weight != 100:
-                                                            if total_nested_chain_weight > 100:
-                                                                st.error(f"⚠️ Nested chain total weight: {total_nested_chain_weight}% (exceeds 100%)")
-                                                            else:
-                                                                st.warning(f"ℹ️ Nested chain total weight: {total_nested_chain_weight}% ({(100-total_nested_chain_weight):.1f}% unallocated)")
-                                                        else:
-                                                            st.success(f"✅ Nested chain total weight: {total_nested_chain_weight}%")
-                                                        
-                                                        # Add button to add more allocations
-                                                        if st.button("➕ Add Another Allocation", key=f"add_more_nested_chain_allocation_{branch_idx}_{chain_idx}_{nested_chain_idx}_{nested_block_idx}"):
-                                                            nested_chain_block['allocations'].append({
-                                                                'allocation': '', 
-                                                                'weight': 100
-                                                            })
-                                                else:
-                                                    st.write("**No allocations in nested chain THEN yet**")
-                                                
-                                                st.markdown('</div>', unsafe_allow_html=True)
-                                                
-                                                # Add button to add next block in nested chain
-                                                if st.button("➕ Add Next Block in Nested Chain", key=f"add_next_nested_chain_block_{branch_idx}_{chain_idx}_{nested_chain_idx}_{nested_block_idx}"):
-                                                    nested_chain['chain_blocks'].append({
-                                                        'type': 'chain_if_else',
-                                                        'signals': [],
-                                                        'allocations': [],
-                                                        'else_allocations': [],
-                                                        'else_signals': [],
-                                                        'else_nested_blocks': [],
-                                                        'is_else_if': True
-                                                    })
-                                                
-                                                # Delete nested chain block
-                                                if len(nested_chain['chain_blocks']) > 1:
-                                                    if st.button("🗑️ Delete Nested Chain Block", key=f"delete_nested_chain_block_{branch_idx}_{chain_idx}_{nested_chain_idx}_{nested_block_idx}"):
-                                                        nested_chain['chain_blocks'].pop(nested_block_idx)
-                                                
-                                                st.markdown("</div>", unsafe_allow_html=True)
-                                            
-                                            # Delete nested chain
-                                            if st.button("🗑️ Delete Nested Chain", key=f"delete_nested_chain_{branch_idx}_{chain_idx}_{nested_chain_idx}"):
-                                                chain['chain_else_nested_chains'].pop(nested_chain_idx)
-                                            
-                                            st.markdown("</div>", unsafe_allow_html=True)
-                                
-                                st.markdown('</div>', unsafe_allow_html=True)
-                                
-                                # Delete entire chain
-                                if st.button("🗑️ Delete Entire Chain", key=f"delete_chain_{branch_idx}_{chain_idx}"):
-                                    branch['else_nested_chains'].pop(chain_idx)
-                                    # Remove rerun to prevent state conflicts
-                                
-                                st.markdown("</div>", unsafe_allow_html=True)
-                    
-                    # Show status if no allocations, nested blocks, or chains
-                    if not branch.get('else_allocations') and not branch.get('else_nested_blocks') and not branch.get('else_nested_chains'):
-                        st.write("**No allocations, nested blocks, or chains in ELSE yet**")
-                    
-                    st.markdown('</div>', unsafe_allow_html=True)
-            
+# Clear all preconditions button
+if st.session_state.preconditions:
+    if st.sidebar.button("🗑️ Clear All Preconditions", type="secondary"):
+        st.session_state.preconditions = []
+        st.rerun()
+
+# Input fields with help tooltips
+signal_ticker = st.sidebar.text_input("Signal Ticker", value="QQQ", help="The ticker that generates RSI signals. This is the stock/ETF whose RSI we'll use to decide when to buy/sell the target ticker.")
+
+# RSI Period selection
+rsi_period = st.sidebar.number_input("RSI Period (Days)", min_value=1, max_value=50, value=10, 
+                                    help="How many days to look back when calculating RSI. 10 is more sensitive to recent changes than the standard 14. Lower numbers make RSI more responsive to recent market movements.")
+
+# RSI Calculation Method - Fixed to Wilder's method
+rsi_method = "wilders"
+
+# Conditional target ticker default based on RSI condition
+comparison = st.sidebar.selectbox("RSI Condition", 
+                               ["greater_than", "less_than"], 
+                               format_func=lambda x: "RSI ≥ threshold" if x == "greater_than" else "RSI ≤ threshold",
+                               help="Choose when to buy: 'RSI ≥ threshold' means buy when RSI is high (overbought), 'RSI ≤ threshold' means buy when RSI is low (oversold).")
+
+# Set default target ticker based on RSI condition
+if comparison == "less_than":
+    default_target = "TQQQ"
+else:
+    default_target = "VIXY"
+
+target_ticker = st.sidebar.text_input("Target Ticker", value=default_target, help="The ticker to buy/sell based on the signal ticker's RSI. This is what you'll actually be trading.")
+
+# Benchmark selection
+benchmark_options = ["SPY", "BIL", "TQQQ"]
+benchmark_ticker = st.sidebar.selectbox("Benchmark", 
+                                       benchmark_options, 
+                                       format_func=lambda x: {
+                                           "SPY": "SPY (S&P 500)",
+                                           "BIL": "BIL (Cash Equivalent)", 
+                                           "TQQQ": "TQQQ (3x Nasdaq-100)"
+                                       }.get(x, x),
+                                       help="Choose your benchmark for comparison. This is what your signal will be compared against under the RSI conditions you specify.")
+
+# Allow custom benchmark input
+use_custom_benchmark = st.sidebar.checkbox("Use custom benchmark ticker", help="Check this to specify a custom ticker symbol instead of using the selected benchmark above.")
+
+if use_custom_benchmark:
+    custom_benchmark = st.sidebar.text_input("Custom Benchmark Ticker", 
+                                            placeholder="e.g., QQQ, VTI, etc.",
+                                            help="Enter a custom ticker symbol to use as benchmark.")
+else:
+    custom_benchmark = ""
+
+# Set default RSI threshold based on condition
+if comparison == "less_than":
+    default_threshold = 40.0
+    st.sidebar.write("Buy signals: Signal RSI ≤ threshold")
+else:
+    default_threshold = 60.0
+    st.sidebar.write("Buy signals: Signal RSI ≥ threshold")
+
+rsi_threshold = st.sidebar.number_input("RSI Threshold", min_value=0.0, max_value=100.0, value=float(default_threshold), step=0.5, help="The RSI threshold to test. For 'RSI ≤ threshold', try 20-40. For 'RSI ≥ threshold', try 60-80.")
+
+# RSI Range options
+st.sidebar.subheader("📊 RSI Range Options")
+use_custom_range = st.sidebar.checkbox("Use custom RSI range", help="Check this to specify a custom range of RSI values to test instead of the default range.")
+
+# Set default ranges based on condition
+if comparison == "less_than":
+    default_min, default_max = 0.0, 50.0  # Test from 0 to 50 for less than conditions
+else:
+    default_min, default_max = 50.0, 100.0  # Test from 50 to 100 for greater than conditions
+
+if use_custom_range:
+    col1, col2 = st.sidebar.columns(2)
+    with col1:
+        rsi_min = st.sidebar.number_input("RSI Range Min", min_value=0.0, max_value=100.0, value=float(default_min), step=0.5, help="The lowest RSI threshold to test.")
+    with col2:
+        rsi_max = st.sidebar.number_input("RSI Range Max", min_value=0.0, max_value=100.0, value=float(default_max), step=0.5, help="The highest RSI threshold to test.")
+    
+    if rsi_min >= rsi_max:
+        st.sidebar.error("RSI Min must be less than RSI Max")
+else:
+    rsi_min, rsi_max = default_min, default_max
+
+# Date range selection
+st.sidebar.subheader("📅 Date Range")
+use_date_range = st.sidebar.checkbox("Use custom date range", help="Check this to specify your own start and end dates. If unchecked, the app will use all available data.")
+
+if use_date_range:
+    col1, col2 = st.sidebar.columns(2)
+    with col1:
+        start_date = st.date_input("Start Date", value=datetime(2020, 1, 1), help="The first date to include in your analysis. Earlier dates give more data but may not reflect current market conditions.")
+    with col2:
+        end_date = st.date_input("End Date", value=datetime.now(), help="The last date to include in your analysis. More recent dates may be more relevant to current market conditions.")
+    
+    if start_date >= end_date:
+        st.sidebar.error("Start date must be before end date")
+        start_date, end_date = None, None
+else:
+    start_date, end_date = None, None
+    st.sidebar.info("Using maximum available data")
+
+# Exclude date windows
+st.sidebar.subheader("🚫 Exclude Date Windows")
+use_exclusions = st.sidebar.checkbox("Exclude specific date windows", help="Check this to exclude specific periods like the COVID crash from your analysis.")
+
+if use_exclusions:
+    # Initialize exclusions in session state if not exists
+    if 'date_exclusions' not in st.session_state:
+        st.session_state.date_exclusions = []
+    
+    # Display existing exclusions
+    if st.session_state.date_exclusions:
+        st.sidebar.write("**Current Exclusions:**")
+        for i, exclusion in enumerate(st.session_state.date_exclusions):
+            with st.sidebar.container():
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.write(f"• {exclusion['start']} to {exclusion['end']}")
+                with col2:
+                    if st.button(f"🗑️", key=f"remove_exclusion_{i}"):
+                        st.session_state.date_exclusions.pop(i)
+                        st.rerun()
+    
+    # Add new exclusion
+    with st.sidebar.expander("➕ Add Exclusion Window", expanded=False):
+        st.write("**Add a new date exclusion:**")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            exclusion_start = st.date_input("Exclusion Start Date", 
+                                          value=datetime(2020, 2, 20), 
+                                          key="exclusion_start",
+                                          help="Start date of the period to exclude.")
+        with col2:
+            exclusion_end = st.date_input("Exclusion End Date", 
+                                        value=datetime(2020, 4, 7), 
+                                        key="exclusion_end",
+                                        help="End date of the period to exclude.")
+        
+        # Add exclusion button
+        if st.button("➕ Add Exclusion", key="add_exclusion"):
+            if exclusion_start < exclusion_end:
+                new_exclusion = {
+                    'start': exclusion_start,
+                    'end': exclusion_end
+                }
+                st.session_state.date_exclusions.append(new_exclusion)
+                st.rerun()
             else:
-                # Regular branch container
-                total_branch_weight = sum(alloc.get('weight', 0) for alloc in branch.get('allocations', [{'weight': 100}]))
-                st.markdown(f"""
-                <div class="branch-container">
-                    <div class="branch-header">
-                        <span>🎯 Branch {branch_idx + 1}</span>
-                        <span>Total Weight: {total_branch_weight}%</span>
-                    </div>
-                """, unsafe_allow_html=True)
-                
-                # Block operations menu
-                col_menu, col_spacer = st.columns([1, 9])
-                with col_menu:
-                    block_menu_action = st.selectbox(
-                        '',
-                        ["", "Copy", "Paste", "Delete", "Save as Reference"],
-                        key=f"branch_menu_{branch_idx}",
-                        label_visibility="collapsed"
-                    )
-                    if block_menu_action == "Copy":
-                        st.session_state.copied_block = copy.deepcopy(branch)
-                        st.success("Block copied!")
-                    elif block_menu_action == "Paste":
-                        if st.session_state.copied_block:
-                            st.session_state.strategy_branches.insert(branch_idx+1, copy.deepcopy(st.session_state.copied_block))
-                            st.success("Block pasted!")
-                            st.rerun()
-                        else:
-                            st.warning("⚠️ No block in clipboard")
-                    elif block_menu_action == "Delete":
-                        st.session_state.strategy_branches.pop(branch_idx)
-                        st.rerun()
-                    elif block_menu_action == "Save as Reference":
-                        ref_name = st.text_input("Reference Block Name:", key=f"ref_name_{branch_idx}")
-                        if st.button("💾 Save", key=f"save_ref_{branch_idx}"):
-                            if ref_name:
-                                save_reference_block(branch, ref_name)
-                                st.success(f"✅ Block saved as '{ref_name}'!")
-                                st.rerun()
-                            else:
-                                st.error("Please provide a name.")
-                
-                # Simple add button for the branch - sleeker interface
-                if st.button("➕", key=f"add_to_branch_{branch_idx}"):
-                    # Show options in a popup-like interface
-                    st.markdown("**Add to Branch:**")
-                    col_a, col_b, col_c = st.columns(3)
-                    with col_a:
-                        if st.button("📊 Add Signal", key=f"add_branch_signal_{branch_idx}"):
-                            if 'signals' not in branch:
-                                branch['signals'] = []
-                            branch['signals'].append({'signal': '', 'negated': False, 'operator': 'AND'})
-                            st.rerun()
-                    with col_b:
-                        if st.button("💰 Add Allocation", key=f"add_branch_allocation_{branch_idx}"):
-                            if 'allocations' not in branch:
-                                branch['allocations'] = []
-                            branch['allocations'].append({'allocation': '', 'weight': 100})
-                            st.rerun()
-                    with col_c:
-                        if st.button("📋 Add Block", key=f"add_branch_block_{branch_idx}"):
-                            st.info("Add Block functionality coming soon!")
-                
-                # Display existing signals
-                if branch.get('signals'):
-                    st.markdown('<div class="condition-block">', unsafe_allow_html=True)
-                    for signal_idx, signal_config in enumerate(branch['signals']):
-                        col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
-                        
-                        with col1:
-                            signal_config['signal'] = st.selectbox(
-                                f"Signal {signal_idx + 1}", 
-                                [""] + [s['name'] for s in st.session_state.signals], 
-                                key=f"branch_{branch_idx}_signal_{signal_idx}"
-                            )
-                        
-                        with col2:
-                            signal_config['negated'] = st.checkbox("NOT", key=f"branch_{branch_idx}_negated_{signal_idx}")
-                        
-                        with col3:
-                            if signal_idx > 0:  # Don't show operator for first signal
-                                signal_config['operator'] = st.selectbox(
-                                    "Logic", 
-                                    ["AND", "OR"], 
-                                    key=f"branch_{branch_idx}_operator_{signal_idx}"
-                                )
-                            else:
-                                st.write("")  # Empty space for alignment
-                        
-                        with col4:
-                            if st.button("🗑️", key=f"remove_branch_{branch_idx}_signal_{signal_idx}"):
-                                branch['signals'].pop(signal_idx)
-                                st.rerun()
-                    
-                    st.markdown('</div>', unsafe_allow_html=True)
-                
-                # Display existing allocations
-                if branch.get('allocations'):
-                    st.markdown('<div class="then-block">', unsafe_allow_html=True)
-                    
-                    for alloc_idx, allocation_config in enumerate(branch['allocations']):
-                        col1, col2, col3 = st.columns([2, 1, 1])
-                        with col1:
-                            allocation_config['allocation'] = st.selectbox(
-                                f"Allocation {alloc_idx + 1}", 
-                                list(st.session_state.output_allocations.keys()),
-                                key=f"branch_{branch_idx}_allocation_{alloc_idx}"
-                            )
-                        with col2:
-                            allocation_config['weight'] = st.number_input(
-                                "Weight %",
-                                min_value=0,
-                                max_value=100,
-                                value=allocation_config.get('weight', 100),
-                                key=f"branch_{branch_idx}_weight_{alloc_idx}"
-                            )
-                        with col3:
-                            if len(branch['allocations']) > 1:  # Don't allow removing the last allocation
-                                if st.button("🗑️", key=f"remove_regular_{branch_idx}_{alloc_idx}_{id(allocation_config)}_delete"):
-                                    branch['allocations'].pop(alloc_idx)
-                                    st.rerun()
-                            else:
-                                st.write("")  # Empty space for alignment
-                    
-                    # Show total weight for this branch
-                    total_branch_weight = sum(alloc.get('weight', 0) for alloc in branch['allocations'])
-                    if total_branch_weight != 100:
-                        if total_branch_weight > 100:
-                            st.error(f"⚠️ Branch total weight: {total_branch_weight}% (exceeds 100%)")
-                        else:
-                            st.warning(f"ℹ️ Branch total weight: {total_branch_weight}% ({(100-total_branch_weight):.1f}% unallocated)")
-                    else:
-                        st.success(f"✅ Branch total weight: {total_branch_weight}%")
-                    
-                    st.markdown('</div>', unsafe_allow_html=True)
-                
-                # Delete entire branch
-                if st.button("🗑️ Delete Branch", key=f"delete_branch_{branch_idx}"):
-                    st.session_state.strategy_branches.pop(branch_idx)
-                    st.rerun()
+                st.error("Start date must be before end date")
     
-    st.markdown('</div>', unsafe_allow_html=True)
+    # Clear all exclusions button
+    if st.session_state.date_exclusions:
+        if st.sidebar.button("🗑️ Clear All Exclusions", type="secondary"):
+            st.session_state.date_exclusions = []
+            st.rerun()
+else:
+    # Clear exclusions if feature is disabled
+    if 'date_exclusions' in st.session_state:
+        st.session_state.date_exclusions = []
 
-# Tab 4: Backtest
-with tab4:
-    st.header("📈 Backtest Results")
-    
-    # Check if backtest was triggered from strategy builder
-    if st.session_state.get('run_backtest', False):
-        st.session_state.run_backtest = False  # Reset the trigger
-        
-        if not st.session_state.strategy_branches:
-            st.error("Please create at least one strategy branch first.")
-        elif not st.session_state.output_allocations:
-            st.error("Please create at least one allocation block first.")
-        else:
-            with st.spinner("Running backtest..."):
-                try:
-                    # Get backtest parameters from session state or use defaults
-                    start_date = st.session_state.get('backtest_start_date', datetime.now() - timedelta(days=365))
-                    end_date = st.session_state.get('backtest_end_date', datetime.now())
-                    benchmark_ticker = st.session_state.get('backtest_benchmark', 'SPY')
-                    
-                    # Collect all tickers needed
-                    all_tickers = set()
-                    
-                    # Add benchmark ticker
-                    all_tickers.add(benchmark_ticker)
-                    
-                    # Add tickers from allocations
-                    for allocation in st.session_state.output_allocations.values():
-                        for ticker_config in allocation['tickers']:
-                            all_tickers.add(ticker_config['ticker'])
-                    
-                    # Add tickers from signals
-                    for signal in st.session_state.signals:
-                        if signal['type'] == 'Custom Indicator':
-                            all_tickers.add(signal['signal_ticker1'])
-                            all_tickers.add(signal['signal_ticker2'])
-                        elif signal['type'] == 'Static RSI':
-                            all_tickers.add(signal['signal_ticker'])
-                        elif signal['type'] == 'RSI Comparison':
-                            all_tickers.add(signal['signal_ticker'])
-                            all_tickers.add(signal['comparison_ticker'])
-                    
-                    # Fetch data for all tickers
-                    data = {}
-                    for ticker in all_tickers:
-                        ticker_data = get_stock_data(ticker, start_date, end_date)
-                        if not ticker_data.empty:
-                            data[ticker] = ticker_data
-                    
-                    if not data:
-                        st.error("No data available for the specified tickers and date range.")
-                        st.stop()
-                    
-                    # Calculate signals
-                    signal_results = {}
-                    for signal in st.session_state.signals:
-                        signal_name = signal['name']
-                        
-                        if signal['type'] == 'Custom Indicator':
-                            # Get indicator values
-                            ticker1_data = data.get(signal['signal_ticker1'])
-                            ticker2_data = data.get(signal['signal_ticker2'])
-                            
-                            if ticker1_data is not None and ticker2_data is not None:
-                                indicator1_values = calculate_indicator(ticker1_data, signal['indicator1'], signal['days1'])
-                                indicator2_values = calculate_indicator(ticker2_data, signal['indicator2'], signal['days2'])
-                                
-                                # Evaluate condition
-                                signal_results[signal_name] = evaluate_signal_condition(
-                                    indicator1_values, indicator2_values, signal['operator']
-                                )
-                        
-                        elif signal['type'] == 'Static RSI':
-                            ticker_data = data.get(signal['signal_ticker'])
-                            if ticker_data is not None:
-                                rsi_values = calculate_rsi(ticker_data, signal['rsi_period'])
-                                if signal['comparison'] == 'less_than':
-                                    signal_results[signal_name] = rsi_values < signal['rsi_threshold']
-                                else:
-                                    signal_results[signal_name] = rsi_values > signal['rsi_threshold']
-                        
-                        elif signal['type'] == 'RSI Comparison':
-                            ticker1_data = data.get(signal['signal_ticker'])
-                            ticker2_data = data.get(signal['comparison_ticker'])
-                            
-                            if ticker1_data is not None and ticker2_data is not None:
-                                rsi1_values = calculate_rsi(ticker1_data, signal['rsi_period'])
-                                rsi2_values = calculate_rsi(ticker2_data, signal['rsi_period'])
-                                
-                                if signal['comparison_operator'] == 'less_than':
-                                    signal_results[signal_name] = rsi1_values < rsi2_values
-                                else:
-                                    signal_results[signal_name] = rsi1_values > rsi2_values
-                    
-                    # Calculate strategy signals
-                    strategy_signals = pd.Series(False, index=list(data.values())[0].index)
-                    
-                    for branch in st.session_state.strategy_branches:
-                        if branch.get('type') == 'if_else':
-                            # Handle If/Else logic
-                            if_signals = branch.get('signals', [])
-                            if_allocations = branch.get('allocations', [])
-                            else_allocations = branch.get('else_allocations', [])
-                            
-                            # Evaluate IF conditions
-                            if_result = pd.Series(True, index=strategy_signals.index)
-                            for signal_config in if_signals:
-                                signal_name = signal_config.get('signal', '')
-                                if signal_name and signal_name in signal_results:
-                                    signal_result = signal_results[signal_name]
-                                    if signal_config.get('negated', False):
-                                        signal_result = ~signal_result
-                                    
-                                    if signal_config.get('operator', 'AND') == 'AND':
-                                        if_result = if_result & signal_result
-                                    else:
-                                        if_result = if_result | signal_result
-                            
-                            # Apply allocations based on IF result
-                            # Check if IF condition is met (any True values in the series)
-                            if_condition_met = if_result.any()
-                            
-                            if if_condition_met:
-                                # Use IF allocations when IF condition is met
-                                for alloc_config in if_allocations:
-                                    allocation_name = alloc_config.get('allocation', '')
-                                    if allocation_name in st.session_state.output_allocations:
-                                        allocation = st.session_state.output_allocations[allocation_name]
-                                        weight = alloc_config.get('weight', 100) / 100.0
-                                        
-                                        # Calculate equity curve for this allocation
-                                        alloc_equity = calculate_multi_ticker_equity_curve(
-                                            if_result, allocation, data
-                                        )
-                                
-                                # Add IF signals to strategy
-                                strategy_signals = strategy_signals | if_result
-                            else:
-                                # Use ELSE allocations and chains only when IF condition is NOT met
-                                else_allocation_weight = branch.get('else_allocation_weight', 0) / 100.0
-                                else_chain_weight = branch.get('else_chain_weight', 100) / 100.0
-                                
-                                # Create ELSE signals (inverse of IF signals)
-                                else_signals = ~if_result
-                                
-                                # Process ELSE allocations with proper weight isolation
-                                if else_allocations and else_allocation_weight > 0:
-                                    for alloc_config in else_allocations:
-                                        allocation_name = alloc_config.get('allocation', '')
-                                        if allocation_name in st.session_state.output_allocations:
-                                            allocation = st.session_state.output_allocations[allocation_name]
-                                            weight = (alloc_config.get('weight', 100) / 100.0) * else_allocation_weight
-                                            
-                                            # Calculate equity curve for this allocation using ELSE signals
-                                            alloc_equity = calculate_multi_ticker_equity_curve(
-                                                else_signals, allocation, data
-                                            )
-                                
-                                # Process ELSE chains (nested IF/THEN/ELSE chains) with proper isolation
-                                if branch.get('else_nested_chains') and else_chain_weight > 0:
-                                    for chain in branch['else_nested_chains']:
-                                        if chain['type'] == 'nested_if_else_chain':
-                                            for chain_block in chain.get('chain_blocks', []):
-                                                # Process each chain block (simplified - would need more complex logic)
-                                                # This is a placeholder for the nested chain processing
-                                                pass
-                                
-                                # Add ELSE signals to strategy (only when IF condition is not met)
-                                strategy_signals = strategy_signals | else_signals
-                        else:
-                            # Regular branch logic
-                            branch_signals = pd.Series(True, index=strategy_signals.index)
-                            
-                            for signal_config in branch.get('signals', []):
-                                signal_name = signal_config.get('signal', '')
-                                if signal_name and signal_name in signal_results:
-                                    signal_result = signal_results[signal_name]
-                                    if signal_config.get('negated', False):
-                                        signal_result = ~signal_result
-                                    
-                                    if signal_config.get('operator', 'AND') == 'AND':
-                                        branch_signals = branch_signals & signal_result
-                                    else:
-                                        branch_signals = branch_signals | signal_result
-                            
-                            # Apply allocations
-                            for alloc_config in branch.get('allocations', []):
-                                allocation_name = alloc_config.get('allocation', '')
-                                if allocation_name in st.session_state.output_allocations:
-                                    allocation = st.session_state.output_allocations[allocation_name]
-                                    weight = alloc_config.get('weight', 100) / 100.0
-                                    
-                                    # Calculate equity curve for this allocation
-                                    alloc_equity = calculate_multi_ticker_equity_curve(
-                                        branch_signals, allocation, data
-                                    )
-                                    
-                                    # Add to strategy signals
-                                    strategy_signals = strategy_signals | branch_signals
-                    
-                    # Calculate benchmark equity curve
-                    benchmark_data = data.get(benchmark_ticker)
-                    if benchmark_data is not None:
-                        benchmark_equity = calculate_equity_curve(strategy_signals, benchmark_data)
-                        benchmark_returns = benchmark_data.pct_change()
-                        benchmark_metrics = calculate_metrics(benchmark_equity, benchmark_returns)
-                        
-                        # Display results
-                        st.subheader("📊 Backtest Results")
-                        
-                        # Strategy info
-                        st.info(f"📋 Strategy: '{st.session_state.strategy_name}' | Period: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')} | Benchmark: {benchmark_ticker}")
-                        
-                        # Performance metrics
-                        col1, col2, col3, col4 = st.columns(4)
-                        
-                        with col1:
-                            st.metric("Total Return", f"{benchmark_metrics.get('total_return', 0):.2%}")
-                            st.metric("Annualized Return", f"{benchmark_metrics.get('annualized_return', 0):.2%}")
-                        
-                        with col2:
-                            st.metric("Sharpe Ratio", f"{benchmark_metrics.get('sharpe_ratio', 0):.2f}")
-                            st.metric("Sortino Ratio", f"{benchmark_metrics.get('sortino_ratio', 0):.2f}")
-                        
-                        with col3:
-                            st.metric("Max Drawdown", f"{benchmark_metrics.get('max_drawdown', 0):.2%}")
-                            st.metric("Calmar Ratio", f"{benchmark_metrics.get('calmar_ratio', 0):.2f}")
-                        
-                        with col4:
-                            st.metric("Win Rate", f"{benchmark_metrics.get('win_rate', 0):.2%}")
-                            st.metric("Total Trades", benchmark_metrics.get('total_trades', 0))
-                        
-                        # Equity curve chart
-                        st.subheader("📈 Equity Curve")
-                        
-                        fig = go.Figure()
-                        
-                        # Strategy equity curve
-                        fig.add_trace(go.Scatter(
-                            x=benchmark_equity.index,
-                            y=benchmark_equity.values,
-                            mode='lines',
-                            name=f'Strategy → {benchmark_ticker}',
-                            line=dict(color='blue', width=2)
-                        ))
-                        
-                        # Benchmark equity curve
-                        benchmark_buy_hold = (1 + benchmark_returns).cumprod()
-                        fig.add_trace(go.Scatter(
-                            x=benchmark_buy_hold.index,
-                            y=benchmark_buy_hold.values,
-                            mode='lines',
-                            name=f'{benchmark_ticker} Buy & Hold',
-                            line=dict(color='gray', width=1, dash='dash')
-                        ))
-                        
-                        fig.update_layout(
-                            title="Strategy vs Benchmark Performance",
-                            xaxis_title="Date",
-                            yaxis_title="Equity",
-                            hovermode='x unified',
-                            template='plotly_white'
-                        )
-                        
-                        st.plotly_chart(fig, use_container_width=True)
-                        
-                        # Cache statistics
-                        cache_stats = get_cache_stats()
-                        st.info(f"💾 Cache Performance: {cache_stats['hits']} hits, {cache_stats['misses']} misses ({cache_stats['hit_rate']:.1f}% hit rate)")
-                    
-                    else:
-                        st.error(f"No data available for benchmark ticker: {benchmark_ticker}")
+# Add the Run Analysis button to the sidebar
+st.sidebar.markdown("---")
+
+# Determine which benchmark to use
+final_benchmark_ticker = custom_benchmark.strip() if custom_benchmark.strip() else benchmark_ticker
+
+if st.sidebar.button("🚀 Run RSI Analysis", type="primary", use_container_width=True):
+    if (not use_date_range or (start_date and end_date and start_date < end_date)) and (not use_custom_range or (rsi_min and rsi_max and rsi_min < rsi_max)):
+        try:
+            exclusions = st.session_state.get('date_exclusions', []) if use_exclusions else None
+            results_df, benchmark, data_messages = run_rsi_analysis(signal_ticker, target_ticker, rsi_threshold, comparison, start_date, end_date, rsi_period, rsi_method, final_benchmark_ticker, use_quantstats, st.session_state.get('preconditions', []), exclusions)
+            
+            if results_df is not None and benchmark is not None and not results_df.empty:
+                # Store analysis results in session state
+                st.session_state['results_df'] = results_df
+                st.session_state['benchmark'] = benchmark
+                st.session_state['signal_data'] = get_stock_data(signal_ticker, start_date, end_date, exclusions)
+                st.session_state['benchmark_data'] = get_stock_data(final_benchmark_ticker, start_date, end_date, exclusions)
+                st.session_state['rsi_period'] = rsi_period
+                st.session_state['comparison'] = comparison
+                st.session_state['benchmark_ticker'] = final_benchmark_ticker
+                st.session_state['analysis_completed'] = True
+                st.session_state['data_messages'] = data_messages
                 
-                except Exception as e:
-                    st.error(f"Error during backtest: {str(e)}")
-                    st.exception(e)
+                st.sidebar.success("✅ Analysis completed successfully!")
+                
+        except Exception as e:
+            st.sidebar.error(f"❌ Error during analysis: {str(e)}")
     else:
-        st.info("💡 Go to the Strategy Builder tab to build and run your strategy!") 
+        if use_date_range and (not start_date or not end_date or start_date >= end_date):
+            st.sidebar.error("Please ensure start date is before end date")
+        if use_custom_range and (not rsi_min or not rsi_max or rsi_min >= rsi_max):
+            st.sidebar.error("Please ensure RSI Min is less than RSI Max")
+
+# Main content
+col1, col2 = st.columns([2, 1])
+
+with col1:
+    st.subheader("⚙️ Analysis Configuration")
+    
+    # Display preconditions first
+    if st.session_state.get('preconditions'):
+        st.write("**Preconditions:**")
+        for i, precondition in enumerate(st.session_state.preconditions):
+            comparison_symbol = "≤" if precondition['comparison'] == "less_than" else "≥"
+            st.write(f"  • {precondition['signal_ticker']} RSI {comparison_symbol} {precondition['threshold']}")
+    
+    st.write(f"**Signal Ticker:** {signal_ticker} (generates RSI signals)")
+    st.write(f"**Target Ticker:** {target_ticker} (buy/sell based on signals)")
+    
+    # Display benchmark information
+    if custom_benchmark.strip():
+        benchmark_display = custom_benchmark.strip()
+        benchmark_description = "Custom Benchmark"
+    else:
+        benchmark_display = benchmark_ticker
+        benchmark_description = {
+            "SPY": "S&P 500",
+            "BIL": "Cash Equivalent", 
+            "TQQQ": "3x Nasdaq-100"
+        }.get(benchmark_ticker, benchmark_ticker)
+    
+    st.write(f"**Benchmark:** {benchmark_display} ({benchmark_description})")
+    st.write(f"**RSI Period:** {rsi_period}-day RSI")
+    if use_custom_range:
+        st.write(f"**RSI Condition:** {signal_ticker} RSI {'≤' if comparison == 'less_than' else '≥'} {rsi_threshold} (testing {rsi_min} to {rsi_max})")
+    else:
+        st.write(f"**RSI Condition:** {signal_ticker} RSI {'≤' if comparison == 'less_than' else '≥'} {rsi_threshold} (testing {rsi_min} to {rsi_max})")
+    
+    if use_date_range and start_date and end_date:
+        st.write(f"**Date Range:** {start_date} to {end_date}")
+    else:
+        st.write(f"**Date Range:** Maximum available data")
+    
+    # Display exclusions
+    if use_exclusions and st.session_state.get('date_exclusions'):
+        st.write("**Excluded Periods:**")
+        for exclusion in st.session_state.date_exclusions:
+            st.write(f"  • {exclusion['start']} to {exclusion['end']}")
+
+with col2:
+    st.subheader("📋 Signal Logic")
+    
+    # Build the signal logic description
+    if st.session_state.get('preconditions'):
+        st.write("**Preconditions (ALL must be true):**")
+        for precondition in st.session_state.preconditions:
+            comparison_symbol = "≤" if precondition['comparison'] == "less_than" else "≥"
+            st.write(f"  • {precondition['signal_ticker']} RSI {comparison_symbol} {precondition['threshold']}")
+        st.write("**Main Signal:**")
+    
+    if comparison == "less_than":
+        st.info(f"🔵 BUY {target_ticker} when {signal_ticker} {rsi_period}-day RSI ≤ threshold\n\n📈 SELL {target_ticker} when {signal_ticker} {rsi_period}-day RSI > threshold")
+    else:
+        st.info(f"🔵 BUY {target_ticker} when {signal_ticker} {rsi_period}-day RSI ≥ threshold\n\n📈 SELL {target_ticker} when {signal_ticker} {rsi_period}-day RSI < threshold")
+
+# Check if we have stored analysis results
+if 'analysis_completed' in st.session_state and st.session_state['analysis_completed']:
+    # Display stored results
+    results_df = st.session_state['results_df']
+    benchmark = st.session_state['benchmark']
+    
+    st.success("✅ Analysis completed successfully!")
+    
+    # Check for data quality issues
+    insufficient_data_count = results_df.get('insufficient_data', pd.Series([False] * len(results_df))).sum()
+    low_trade_count = (results_df['Total_Trades'] < 5).sum()
+    extreme_rsi_count = 0
+    
+    # Count extreme RSI values (very high or very low depending on comparison)
+    if st.session_state.get('comparison') == 'greater_than':
+        extreme_rsi_count = (results_df['RSI_Threshold'] >= 85).sum()
+    else:
+        extreme_rsi_count = (results_df['RSI_Threshold'] <= 15).sum()
+    
+    if insufficient_data_count > 0 or low_trade_count > 0 or extreme_rsi_count > 0:
+        st.warning("⚠️ **Data Quality Warnings:**")
+        if insufficient_data_count > 0:
+            st.write(f"• {insufficient_data_count} RSI thresholds had insufficient data for reliable statistical testing")
+        if low_trade_count > 0:
+            st.write(f"• {low_trade_count} RSI thresholds generated fewer than 5 trades")
+        if extreme_rsi_count > 0:
+            st.write(f"• {extreme_rsi_count} RSI thresholds are at extreme values (may have limited historical occurrences)")
+        st.write("**Recommendation:** Focus on RSI thresholds with more trades and higher confidence levels for more reliable results.")
+    
+    # Display results table
+    st.subheader("📊 RSI Analysis Results")
+    st.info("💡 **What this shows:** This table displays all the RSI thresholds tested and their performance metrics. Each row represents a different RSI level and shows how well that strategy performed.")
+    
+    # Format the dataframe for display
+    display_df = results_df.copy()
+    
+    # Check if required columns exist before formatting
+    required_columns = ['Win_Rate', 'Avg_Return', 'Median_Return', 'Benchmark_Avg_Return', 'Benchmark_Median_Return', 'Total_Return', 'annualized_return', 
+                      'Sortino_Ratio', 'Avg_Hold_Days', 'Return_Std', 'Best_Return', 
+                      'Worst_Return', 'Final_Equity', 'confidence_level', 'significant', 'effect_size']
+    
+    missing_columns = [col for col in required_columns if col not in results_df.columns]
+    if missing_columns:
+        st.error(f"Missing columns in results: {missing_columns}")
+        st.stop()
+    
+    # Format the columns for display
+    display_df['Win_Rate'] = display_df['Win_Rate'].apply(lambda x: f"{x:.1%}" if isinstance(x, (int, float)) else x)
+    display_df['Avg_Return'] = display_df['Avg_Return'].apply(lambda x: f"{x:.3%}" if isinstance(x, (int, float)) else x)
+    display_df['Median_Return'] = display_df['Median_Return'].apply(lambda x: f"{x:.3%}" if isinstance(x, (int, float)) else x)
+    display_df['Benchmark_Avg_Return'] = display_df['Benchmark_Avg_Return'].apply(lambda x: f"{x:.3%}" if isinstance(x, (int, float)) else x)
+    display_df['Benchmark_Median_Return'] = display_df['Benchmark_Median_Return'].apply(lambda x: f"{x:.3%}" if isinstance(x, (int, float)) else x)
+    display_df['Total_Return'] = display_df['Total_Return'].apply(lambda x: f"{x:.3%}" if isinstance(x, (int, float)) else x)
+    display_df['Annualized_Return'] = display_df['annualized_return'].apply(lambda x: f"{x:.3%}" if isinstance(x, (int, float)) else x)
+    display_df['Sortino_Ratio'] = display_df['Sortino_Ratio'].apply(lambda x: f"{x:.2f}" if isinstance(x, (int, float)) and not np.isinf(x) else "∞" if isinstance(x, (int, float)) and np.isinf(x) else x)
+    display_df['Sharpe_Ratio'] = display_df['sharpe_ratio'].apply(lambda x: f"{x:.2f}" if isinstance(x, (int, float)) and not np.isinf(x) else "∞" if isinstance(x, (int, float)) and np.isinf(x) else x)
+    display_df['Calmar_Ratio'] = display_df['calmar_ratio'].apply(lambda x: f"{x:.2f}" if isinstance(x, (int, float)) and not np.isinf(x) else "∞" if isinstance(x, (int, float)) and np.isinf(x) else x)
+    display_df['Max_Drawdown'] = display_df['max_drawdown'].apply(lambda x: f"{x:.3%}" if isinstance(x, (int, float)) else x)
+    display_df['VaR_95'] = display_df['var_95'].apply(lambda x: f"{x:.3%}" if isinstance(x, (int, float)) else x)
+    display_df['Avg_Hold_Days'] = display_df['Avg_Hold_Days'].apply(lambda x: f"{x:.1f}" if isinstance(x, (int, float)) else x)
+    display_df['Return_Std'] = display_df['Return_Std'].apply(lambda x: f"{x:.3%}" if isinstance(x, (int, float)) else x)
+    display_df['Best_Return'] = display_df['Best_Return'].apply(lambda x: f"{x:.3%}" if isinstance(x, (int, float)) else x)
+    display_df['Worst_Return'] = display_df['Worst_Return'].apply(lambda x: f"{x:.3%}" if isinstance(x, (int, float)) else x)
+    display_df['Final_Equity'] = display_df['Final_Equity'].apply(lambda x: f"{x:.3f}" if isinstance(x, (int, float)) else x)
+    display_df['Confidence_Level'] = display_df['confidence_level'].apply(lambda x: f"{x:.1f}%" if isinstance(x, (int, float)) else x)
+    display_df['Significant'] = display_df['significant'].apply(lambda x: "✓" if x else "✗")
+    display_df['Effect_Size'] = display_df['effect_size'].apply(lambda x: f"{x:.2f}" if isinstance(x, (int, float)) else x)
+    
+    # Add p-value to display columns
+    display_df['P_Value'] = display_df['p_value'].apply(lambda x: f"{x:.4f}" if isinstance(x, (int, float)) else x)
+    
+    # Drop the equity_curve and trades columns for display
+    display_cols = ['RSI_Threshold', 'Total_Trades', 'Win_Rate', 'Avg_Return', 'Median_Return', 'Benchmark_Avg_Return', 'Benchmark_Median_Return',
+                   'Total_Return', 'Annualized_Return', 'Sortino_Ratio', 'Sharpe_Ratio', 'Calmar_Ratio', 'Final_Equity', 'Avg_Hold_Days', 
+                   'Return_Std', 'Best_Return', 'Worst_Return', 'Max_Drawdown', 'VaR_95', 'Confidence_Level', 'Significant', 'Effect_Size', 'P_Value']
+    
+    # Check if all display columns exist
+    missing_display_cols = [col for col in display_cols if col not in display_df.columns]
+    if missing_display_cols:
+        st.error(f"Missing display columns: {missing_display_cols}")
+        st.stop()
+    
+    # Add filter options for the results table
+    with st.expander("📊 Table of Results", expanded=False):
+        st.subheader("🔍 Filter Results")
+    
+        # Create filter columns
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            rsi_min_filter = st.number_input(
+                "Min RSI Threshold:",
+                min_value=float(display_df['RSI_Threshold'].min()),
+                max_value=float(display_df['RSI_Threshold'].max()),
+                value=float(display_df['RSI_Threshold'].min()),
+                step=0.5,
+                help="Minimum RSI threshold to include in results."
+            )
+            rsi_max_filter = st.number_input(
+                "Max RSI Threshold:",
+                min_value=float(display_df['RSI_Threshold'].min()),
+                max_value=float(display_df['RSI_Threshold'].max()),
+                value=float(display_df['RSI_Threshold'].max()),
+                step=0.5,
+                help="Maximum RSI threshold to include in results."
+            )
+        with col2:
+            confidence_min_filter = st.number_input(
+                "Min Confidence Level (%):",
+                min_value=0.0,
+                max_value=100.0,
+                value=0.0,
+                step=1.0,
+                help="Minimum confidence level to include in results."
+            )
+            confidence_max_filter = st.number_input(
+                "Max Confidence Level (%):",
+                min_value=0.0,
+                max_value=100.0,
+                value=100.0,
+                step=1.0,
+                help="Maximum confidence level to include in results."
+            )
+        with col3:
+            min_trades_filter = st.number_input(
+                "Min Total Trades:",
+                min_value=0,
+                value=0,
+                help="Minimum number of trades to include in results."
+            )
+            min_win_rate_filter = st.number_input(
+                "Min Win Rate (%):",
+                min_value=0.0,
+                max_value=100.0,
+                value=0.0,
+                step=1.0,
+                help="Minimum win rate percentage to include in results."
+            )
+        with col4:
+            min_avg_return_filter = st.number_input(
+                "Min Avg Return (%):",
+                min_value=-100.0,
+                max_value=100.0,
+                value=-100.0,
+                step=0.1,
+                help="Minimum average return percentage to include in results."
+            )
+            min_total_return_filter = st.number_input(
+                "Min Total Return (%):",
+                min_value=-100.0,
+                max_value=100.0,
+                value=-100.0,
+                step=0.1,
+                help="Minimum total return percentage to include in results."
+            )
+        col5, col6, col7, col8 = st.columns(4)
+        with col5:
+            min_annualized_return_filter = st.number_input(
+                "Min Annualized Return (%):",
+                min_value=-100.0,
+                max_value=100.0,
+                value=-100.0,
+                step=0.1,
+                help="Minimum annualized return percentage to include in results."
+            )
+        with col6:
+            min_sortino_filter = st.number_input(
+                "Min Sortino Ratio:",
+                min_value=-10.0,
+                max_value=10.0,
+                value=-10.0,
+                step=0.1,
+                help="Minimum Sortino ratio to include in results."
+            )
+        with col7:
+            significance_filter = st.selectbox(
+                "Significance:",
+                ["All", "Significant Only", "Non-Significant Only"],
+                help="Filter by statistical significance."
+            )
+            max_p_value_filter = st.number_input(
+                "Max P-Value:",
+                min_value=0.0,
+                max_value=1.0,
+                value=1.0,
+                step=0.001,
+                help="Maximum p-value to include in results (lower = more significant)."
+            )
+        with col8:
+            if st.button("Clear All Filters", type="secondary"):
+                st.rerun()
+        
+        # Apply filters to the display dataframe (outside of columns)
+        filtered_df = display_df.copy()
+        filtered_df = filtered_df[
+            (filtered_df['RSI_Threshold'] >= rsi_min_filter) & 
+            (filtered_df['RSI_Threshold'] <= rsi_max_filter)
+        ]
+        filtered_df = filtered_df[
+            (filtered_df['Confidence_Level'].str.replace('%', '').astype(float) >= confidence_min_filter) & 
+            (filtered_df['Confidence_Level'].str.replace('%', '').astype(float) <= confidence_max_filter)
+        ]
+        filtered_df = filtered_df[filtered_df['Total_Trades'] >= min_trades_filter]
+        filtered_df = filtered_df[
+            filtered_df['Win_Rate'].str.replace('%', '').astype(float) >= min_win_rate_filter
+        ]
+        filtered_df = filtered_df[
+            filtered_df['Avg_Return'].str.replace('%', '').astype(float) >= min_avg_return_filter
+        ]
+        filtered_df = filtered_df[
+            filtered_df['Total_Return'].str.replace('%', '').astype(float) >= min_total_return_filter
+        ]
+        filtered_df = filtered_df[
+            filtered_df['Annualized_Return'].str.replace('%', '').astype(float) >= min_annualized_return_filter
+        ]
+        filtered_df = filtered_df[
+            filtered_df['Sortino_Ratio'].apply(lambda x: float(x) if x != "∞" else 999) >= min_sortino_filter
+        ]
+        if significance_filter == "Significant Only":
+            filtered_df = filtered_df[filtered_df['Significant'] == "✓"]
+        elif significance_filter == "Non-Significant Only":
+            filtered_df = filtered_df[filtered_df['Significant'] == "✗"]
+        filtered_df = filtered_df[
+            filtered_df['P_Value'].astype(float) <= max_p_value_filter
+        ]
+        
+        # Display the filtered results table (outside of columns)
+        st.subheader(f"📊 RSI Analysis Results ({len(filtered_df)} signals)")
+        st.dataframe(filtered_df[display_cols], use_container_width=True)
+
+    # Find best strategies (needed for subsequent sections)
+    best_sortino_idx = filtered_df['Sortino_Ratio'].idxmax()
+    best_annualized_idx = filtered_df['annualized_return'].idxmax()
+    best_winrate_idx = filtered_df['Win_Rate'].idxmax()
+    best_total_return_idx = filtered_df['Total_Return'].idxmax()
+    
+    # Statistical Significance Analysis
+    with st.expander("📊 Statistical Significance Analysis", expanded=True):
+        st.subheader("📊 Statistical Significance Analysis")
+        stored_benchmark_ticker = st.session_state.get('benchmark_ticker', 'SPY')
+        benchmark_description = {
+            "SPY": "S&P 500",
+            "BIL": "Cash Equivalent", 
+            "TQQQ": "3x Nasdaq-100"
+        }.get(stored_benchmark_ticker, "Custom Benchmark")
+        benchmark_name = f"{stored_benchmark_ticker} ({benchmark_description})"
+        
+        # Use all signals for the chart (including those with 0 trades)
+        valid_signals = filtered_df.copy()
+        
+        # Add summary of statistical analysis
+        if not valid_signals.empty:
+            signals_with_trades = valid_signals[valid_signals['Total_Trades'] > 0]
+            significant_count = len(valid_signals[valid_signals['significant'] == True])
+            total_signals = len(valid_signals)
+            signals_with_trades_count = len(signals_with_trades)
+            st.success(f"📊 **Analysis Summary:** Found {significant_count} statistically significant signals out of {total_signals} total signals ({signals_with_trades_count} with trades).")
+        else:
+            st.warning("⚠️ **No signals found.** This means none of the RSI thresholds generated any results during the analysis period.")
+        
+        if not valid_signals.empty:
+            # Create significance summary
+            significant_signals = valid_signals[valid_signals['significant'] == True]
+            
+            # Confidence Level vs RSI Threshold Analysis
+            st.subheader("📊 Confidence Level vs RSI Threshold Analysis")
+            st.info(f"💡 **What This Section Shows:** This section determines whether your signal's performance is statistically significant - meaning the results are likely not due to chance. It compares your signal against {benchmark_name} under the same conditions to see if your target ticker choice is actually better.")
+            
+            # Create scatter plot for confidence vs RSI threshold
+            fig_confidence_rsi = go.Figure()
+            
+            # Add points for significant signals (green)
+            significant_data = valid_signals[valid_signals['significant'] == True]
+            if not significant_data.empty:
+                fig_confidence_rsi.add_trace(go.Scatter(
+                    x=significant_data['RSI_Threshold'],
+                    y=significant_data['confidence_level'],
+                    mode='markers',
+                    name='Significant Signals (≥95%)',
+                    marker=dict(
+                        color='green',
+                        size=abs(significant_data['effect_size']) * 20 + 5,  # Scale effect size for visibility
+                        sizemin=5,
+                        sizemode='area',
+                        opacity=0.7
+                    ),
+                    hovertemplate='<b>RSI %{x}</b><br>' +
+                                'Confidence: %{y:.1f}%<br>' +
+                                'Effect Size: %{marker.size:.1f}<br>' +
+                                'Significant: ✓<extra></extra>'
+                ))
+            
+            # Add points for borderline significant signals (yellow)
+            borderline_data = valid_signals[(valid_signals['confidence_level'] >= 85) & (valid_signals['confidence_level'] < 95)]
+            if not borderline_data.empty:
+                fig_confidence_rsi.add_trace(go.Scatter(
+                    x=borderline_data['RSI_Threshold'],
+                    y=borderline_data['confidence_level'],
+                    mode='markers',
+                    name='Borderline Signals (85-95%)',
+                    marker=dict(
+                        color='yellow',
+                        size=abs(borderline_data['effect_size']) * 20 + 5,  # Scale effect size for visibility
+                        sizemin=5,
+                        sizemode='area',
+                        opacity=0.7
+                    ),
+                    hovertemplate='<b>RSI %{x}</b><br>' +
+                                'Confidence: %{y:.1f}%<br>' +
+                                'Effect Size: %{marker.size:.1f}<br>' +
+                                'Borderline: ⚠<extra></extra>'
+                ))
+            
+            # Add points for non-significant signals (red)
+            non_significant_data = valid_signals[valid_signals['confidence_level'] < 85]
+            if not non_significant_data.empty:
+                fig_confidence_rsi.add_trace(go.Scatter(
+                    x=non_significant_data['RSI_Threshold'],
+                    y=non_significant_data['confidence_level'],
+                    mode='markers',
+                    name='Non-Significant Signals (<85%)',
+                    marker=dict(
+                        color='red',
+                        size=abs(non_significant_data['effect_size']) * 20 + 5,  # Scale effect size for visibility
+                        sizemin=5,
+                        sizemode='area',
+                        opacity=0.7
+                    ),
+                    hovertemplate='<b>RSI %{x}</b><br>' +
+                                'Confidence: %{y:.1f}%<br>' +
+                                'Effect Size: %{marker.size:.1f}<br>' +
+                                'Significant: ✗<extra></extra>'
+                ))
+            
+            # Add reference lines
+            fig_confidence_rsi.add_hline(y=95, line_dash="dash", line_color="red", 
+                                       annotation_text="95% Confidence")
+            fig_confidence_rsi.add_hline(y=85, line_dash="dash", line_color="yellow", 
+                                       annotation_text="85% Confidence")
+            
+            fig_confidence_rsi.update_layout(
+                title="Confidence Level vs RSI Threshold (Point Size = Effect Size)",
+                xaxis_title="RSI Threshold",
+                yaxis_title="Confidence Level (%)",
+                hovermode='closest',
+                showlegend=True,
+                xaxis=dict(range=[0, 100]),  # Set x-axis range to show full RSI scale
+                yaxis=dict(range=[0, 100])  # Set y-axis range to show full confidence scale
+            )
+            
+            st.plotly_chart(fig_confidence_rsi, use_container_width=True, key="confidence_rsi_chart")
+            
+                    # Add explanation for the new chart
+        with st.expander("📚 Understanding Confidence vs RSI Threshold"):
+            st.write(f"""
+
+            **📊 Improved Statistical Analysis:**
+            The confidence levels now show more realistic variation across RSI thresholds. The analysis properly calculates statistical significance for both outperformance and underperformance, avoiding artificial binary outcomes.
+            
+            **⚠️ Note on Extreme RSI Values:**
+            At the extreme ends of RSI thresholds (very low or very high values), there are often not enough historical events to generate statistically confident results. This is why confidence levels may drop off at these extremes - the sample size becomes too small for reliable statistical analysis.
+            
+            **What This Chart Tells You:**
+            
+            **📊 X-Axis (RSI Threshold):**
+            - Shows different RSI levels tested
+            - Helps identify which RSI ranges are most effective
+            
+            **📈 Y-Axis (Confidence Level):**
+            - Higher values = stronger statistical evidence
+            - Above 95% = highly significant (strong evidence)
+            - 80-95% = borderline significant (moderate evidence)
+            - 60-80% = weak evidence
+            - Below 60% = very weak or no evidence
+            
+            **🎯 Interpretation:**
+            - **High confidence (95%+)**: Very strong evidence the signal works
+            - **Moderate confidence (80-95%)**: Good evidence, worth considering
+            - **Low confidence (<80%)**: Weak evidence, results may be due to chance
+            - **Extreme RSI values**: Often show low confidence due to insufficient historical data
+
+            """)
+        
+        # Total Return vs Confidence Level Analysis
+        with st.expander("📊 Total Return vs Confidence Level Analysis", expanded=False):
+            st.subheader("📊 Total Return vs Confidence Level Analysis")
+            st.info(f"💡 **What this shows:** This scatter plot shows the relationship between total return performance and statistical confidence. Each point represents a signal - the position shows how much money the signal made (total return) and how confident we are in the results (confidence level).")
+            
+            # Create scatter plot for total return vs confidence level
+            fig_total_return = go.Figure()
+            
+            # Add points for significant signals (green)
+            significant_data = valid_signals[valid_signals['significant'] == True]
+            if not significant_data.empty:
+                fig_total_return.add_trace(go.Scatter(
+                    x=significant_data['confidence_level'],
+                    y=significant_data['Total_Return'],
+                    mode='markers',
+                    name='Significant Signals',
+                    marker=dict(color='green', size=8),
+                    hovertemplate='<b>RSI %{text}</b><br>' +
+                                'Total Return: %{y:.3%}<br>' +
+                                'Confidence: %{x:.1f}%<br>' +
+                                'Significant: ✓<extra></extra>',
+                    text=[f"{row['RSI_Threshold']}" for _, row in significant_data.iterrows()]
+                ))
+            
+            # Add points for non-significant signals (red)
+            non_significant_data = valid_signals[valid_signals['significant'] == False]
+            if not non_significant_data.empty:
+                fig_total_return.add_trace(go.Scatter(
+                    x=non_significant_data['confidence_level'],
+                    y=non_significant_data['Total_Return'],
+                    mode='markers',
+                    name='Non-Significant Signals',
+                    marker=dict(color='red', size=8),
+                    hovertemplate='<b>RSI %{text}</b><br>' +
+                                'Total Return: %{y:.3%}<br>' +
+                                'Confidence: %{x:.1f}%<br>' +
+                                'Significant: ✗<extra></extra>',
+                    text=[f"{row['RSI_Threshold']}" for _, row in non_significant_data.iterrows()]
+                ))
+            
+            # Add reference lines
+            fig_total_return.add_hline(y=0, line_dash="dash", line_color="gray", 
+                                     annotation_text="No Return")
+            fig_total_return.add_vline(x=95, line_dash="dash", line_color="red", 
+                                     annotation_text="95% Confidence")
+            
+            fig_total_return.update_layout(
+                title="Total Return vs Confidence Level",
+                xaxis_title="Confidence Level (%)",
+                yaxis_title="Total Return (%)",
+                hovermode='closest'
+            )
+            
+            st.plotly_chart(fig_total_return, use_container_width=True, key="total_return_chart")
+        
+        # Sortino Ratio vs Confidence Level Analysis
+        with st.expander("📊 Sortino Ratio vs Confidence Level Analysis", expanded=False):
+            st.subheader("📊 Sortino Ratio vs Confidence Level Analysis")
+            st.info(f"💡 **What this shows:** This scatter plot shows the relationship between risk-adjusted returns (Sortino ratio) and statistical confidence. Each point represents a signal - the position shows how good the risk-adjusted returns are (Sortino ratio) and how confident we are in the results (confidence level).")
+            
+            # Create scatter plot for sortino ratio vs confidence level
+            fig_sortino = go.Figure()
+            
+            # Add points for significant signals (green)
+            significant_data = valid_signals[valid_signals['significant'] == True]
+            if not significant_data.empty:
+                fig_sortino.add_trace(go.Scatter(
+                    x=significant_data['confidence_level'],
+                    y=significant_data['Sortino_Ratio'],
+                    mode='markers',
+                    name='Significant Signals',
+                    marker=dict(color='green', size=8),
+                    hovertemplate='<b>RSI %{text}</b><br>' +
+                                'Sortino Ratio: %{y:.2f}<br>' +
+                                'Confidence: %{x:.1f}%<br>' +
+                                'Significant: ✓<extra></extra>',
+                    text=[f"{row['RSI_Threshold']}" for _, row in significant_data.iterrows()]
+                ))
+            
+            # Add points for non-significant signals (red)
+            non_significant_data = valid_signals[valid_signals['significant'] == False]
+            if not non_significant_data.empty:
+                fig_sortino.add_trace(go.Scatter(
+                    x=non_significant_data['confidence_level'],
+                    y=non_significant_data['Sortino_Ratio'],
+                    mode='markers',
+                    name='Non-Significant Signals',
+                    marker=dict(color='red', size=8),
+                    hovertemplate='<b>RSI %{text}</b><br>' +
+                                'Sortino Ratio: %{y:.2f}<br>' +
+                                'Confidence: %{x:.1f}%<br>' +
+                                'Significant: ✗<extra></extra>',
+                    text=[f"{row['RSI_Threshold']}" for _, row in non_significant_data.iterrows()]
+                ))
+            
+            # Add reference lines
+            fig_sortino.add_hline(y=0, line_dash="dash", line_color="gray", 
+                                    annotation_text="No Risk-Adjusted Return")
+            fig_sortino.add_vline(x=95, line_dash="dash", line_color="red", 
+                                    annotation_text="95% Confidence")
+            
+            fig_sortino.update_layout(
+                title="Sortino Ratio vs Confidence Level",
+                xaxis_title="Confidence Level (%)",
+                yaxis_title="Sortino Ratio",
+                hovermode='closest'
+            )
+            
+            st.plotly_chart(fig_sortino, use_container_width=True, key="sortino_chart")
+        
+        # Download results
+        st.subheader("📥 Download Results")
+        st.info("💡 **What this does:** Download your analysis results as a CSV file that you can open in Excel or other spreadsheet programs. This includes all the performance metrics for every RSI threshold tested.")
+        # Use the original column names from results_df for CSV download
+        download_cols = ['RSI_Threshold', 'Total_Trades', 'Win_Rate', 'Avg_Return', 'Median_Return', 'Benchmark_Avg_Return', 'Benchmark_Median_Return',
+                       'Total_Return', 'annualized_return', 'Sortino_Ratio', 'sharpe_ratio', 'calmar_ratio', 'Final_Equity', 'Avg_Hold_Days', 
+                       'Return_Std', 'Best_Return', 'Worst_Return', 'max_drawdown', 'var_95', 'beta', 'alpha', 'information_ratio', 'confidence_level', 'significant', 'effect_size']
+        csv = st.session_state['results_df'][download_cols].to_csv(index=False)
+        filename_suffix = f"_{start_date}_{end_date}" if use_date_range and start_date and end_date else "_max_range"
+        st.download_button(
+            label="📥 Download Results as CSV",
+            data=csv,
+            file_name=f"rsi_analysis_{signal_ticker}_{target_ticker}{filename_suffix}_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime="text/csv"
+        )
+        
+        # RSI vs Sortino Ratio Chart
+        st.subheader("📊 RSI Threshold vs Sortino Ratio")
+        st.info("💡 **What this shows:** This chart displays how the Sortino ratio (risk-adjusted return) varies across different RSI thresholds. Higher Sortino ratios indicate better risk-adjusted performance. Look for peaks in the chart to identify optimal RSI thresholds.")
+        
+        fig_sortino_rsi = go.Figure()
+        
+        # Add points for significant signals (green)
+        significant_data = valid_signals[valid_signals['significant'] == True]
+        if not significant_data.empty:
+            fig_sortino_rsi.add_trace(go.Scatter(
+                x=significant_data['RSI_Threshold'],
+                y=significant_data['Sortino_Ratio'],
+                mode='markers',
+                name='Significant Signals',
+                marker=dict(color='green', size=8),
+                line=dict(width=0),  # Explicitly disable lines
+                hovertemplate='<b>RSI %{x}</b><br>' +
+                            'Sortino Ratio: %{y:.2f}<br>' +
+                            'Significant: ✓<extra></extra>'
+            ))
+        
+        # Add points for non-significant signals (red)
+        non_significant_data = valid_signals[valid_signals['significant'] == False]
+        if not non_significant_data.empty:
+            fig_sortino_rsi.add_trace(go.Scatter(
+                x=non_significant_data['RSI_Threshold'],
+                y=non_significant_data['Sortino_Ratio'],
+                mode='markers',
+                name='Non-Significant Signals',
+                marker=dict(color='red', size=8),
+                line=dict(width=0),  # Explicitly disable lines
+                hovertemplate='<b>RSI %{x}</b><br>' +
+                            'Sortino Ratio: %{y:.2f}<br>' +
+                            'Significant: ✗<extra></extra>'
+            ))
+        
+        # Add reference line at y=0
+        fig_sortino_rsi.add_hline(y=0, line_dash="dash", line_color="gray", 
+                                 annotation_text="No Risk-Adjusted Return")
+        
+        fig_sortino_rsi.update_layout(
+            title="Sortino Ratio vs RSI Threshold",
+            xaxis_title="RSI Threshold",
+            yaxis_title="Sortino Ratio",
+            hovermode='closest',
+            xaxis=dict(range=[0, 100]),
+            showlegend=True
+        )
+        
+        st.plotly_chart(fig_sortino_rsi, use_container_width=True, key="sortino_rsi_chart")
+        
+        # RSI vs Cumulative Return Chart
+        st.subheader("📊 RSI Threshold vs Cumulative Return")
+        st.info("💡 **What this shows:** This chart displays how the total cumulative return varies across different RSI thresholds. Higher cumulative returns may indicate better overall performance. Look for peaks in the chart to identify optimal RSI thresholds.")
+        
+        # Use original numerical data for consistency
+        original_filtered_data = st.session_state['results_df'][st.session_state['results_df']['RSI_Threshold'].isin(filtered_df['RSI_Threshold'])]
+        original_significant_data = original_filtered_data[original_filtered_data['significant'] == True]
+        original_non_significant_data = original_filtered_data[original_filtered_data['significant'] == False]
+        
+        fig_return_rsi = go.Figure()
+        
+        # Add points for significant signals (green)
+        if not original_significant_data.empty:
+            fig_return_rsi.add_trace(go.Scatter(
+                x=original_significant_data['RSI_Threshold'],
+                y=original_significant_data['Total_Return'],
+                mode='markers',
+                name='Significant Signals',
+                marker=dict(color='green', size=8),
+                line=dict(width=0),  # Explicitly disable lines
+                hovertemplate='<b>RSI %{x}</b><br>' +
+                            'Cumulative Return: %{y:.3%}<br>' +
+                            'Significant: ✓<extra></extra>'
+            ))
+        
+        # Add points for non-significant signals (red)
+        if not original_non_significant_data.empty:
+            fig_return_rsi.add_trace(go.Scatter(
+                x=original_non_significant_data['RSI_Threshold'],
+                y=original_non_significant_data['Total_Return'],
+                mode='markers',
+                name='Non-Significant Signals',
+                marker=dict(color='red', size=8),
+                line=dict(width=0),  # Explicitly disable lines
+                hovertemplate='<b>RSI %{x}</b><br>' +
+                            'Cumulative Return: %{y:.3%}<br>' +
+                            'Significant: ✗<extra></extra>'
+            ))
+        
+        # Add reference line at y=0
+        fig_return_rsi.add_hline(y=0, line_dash="dash", line_color="gray", 
+                                annotation_text="No Return")
+        
+        fig_return_rsi.update_layout(
+            title="Cumulative Return vs RSI Threshold",
+            xaxis_title="RSI Threshold",
+            yaxis_title="Cumulative Return (%)",
+            hovermode='closest',
+            xaxis=dict(range=[0, 100]),
+            yaxis=dict(tickformat='.1%'),
+            showlegend=True
+        )
+        
+        st.plotly_chart(fig_return_rsi, use_container_width=True, key="return_rsi_chart")
+        
+        # RSI vs Max Drawdown Chart
+        st.subheader("📊 RSI Threshold vs Max Drawdown")
+        st.info("💡 **What this shows:** This chart displays how the maximum drawdown (worst single trade loss) varies across different RSI thresholds. Lower drawdown values indicate better risk management. Look for valleys in the chart to identify RSI thresholds with lower risk.")
+        
+        fig_drawdown_rsi = go.Figure()
+        
+        # Add points for significant signals (green)
+        if not significant_data.empty:
+            fig_drawdown_rsi.add_trace(go.Scatter(
+                x=significant_data['RSI_Threshold'],
+                y=significant_data['Worst_Return'],
+                mode='markers',
+                name='Significant Signals',
+                marker=dict(color='green', size=8),
+                line=dict(width=0),  # Explicitly disable lines
+                hovertemplate='<b>RSI %{x}</b><br>' +
+                            'Max Drawdown: %{y:.1f}<br>' +
+                            'Significant: ✓<extra></extra>'
+            ))
+        
+        # Add points for non-significant signals (red)
+        if not non_significant_data.empty:
+            fig_drawdown_rsi.add_trace(go.Scatter(
+                x=non_significant_data['RSI_Threshold'],
+                y=non_significant_data['Worst_Return'],
+                mode='markers',
+                name='Non-Significant Signals',
+                marker=dict(color='red', size=8),
+                line=dict(width=0),  # Explicitly disable lines
+                hovertemplate='<b>RSI %{x}</b><br>' +
+                            'Max Drawdown: %{y:.1f}<br>' +
+                            'Significant: ✗<extra></extra>'
+            ))
+        
+        # Add reference line at y=0
+        fig_drawdown_rsi.add_hline(y=0, line_dash="dash", line_color="gray", 
+                                  annotation_text="No Loss")
+        
+        fig_drawdown_rsi.update_layout(
+            title="Max Drawdown vs RSI Threshold",
+            xaxis_title="RSI Threshold",
+            yaxis_title="Max Drawdown (%)",
+            hovermode='closest',
+            xaxis=dict(range=[0, 100]),
+            showlegend=True
+        )
+        
+        st.plotly_chart(fig_drawdown_rsi, use_container_width=True, key="drawdown_rsi_chart")
+        
+        # Top significant signals
+        if len(significant_signals) > 0:
+            st.subheader("🏆 Top Statistically Significant Signals")
+            
+            # Sort by total return (highest cumulative return) instead of confidence level
+            # Use the original results_df for sorting since it has numerical values
+            original_significant_signals = st.session_state['results_df'][st.session_state['results_df']['significant'] == True].copy()
+            top_significant = original_significant_signals.nlargest(5, 'Total_Return')
+            
+            # Multiple Signal Comparison for Significant Signals
+            st.subheader("📊 Highest Cumulative Return Significant Signals Comparison")
+            st.info(f"💡 **What this shows:** This chart compares the top 5 signals with the highest cumulative returns among statistically significant signals against {benchmark_name} buy-and-hold. Each line represents a different RSI threshold that showed significant outperformance. The signals are ranked by total return, showing the highest cumulative return signals first.")
+            
+            # Create comparison chart with all significant signals
+            fig_comparison = go.Figure()
+            
+            # Add benchmark buy-and-hold
+            fig_comparison.add_trace(go.Scatter(
+                x=benchmark.index,
+                y=benchmark.values,
+                mode='lines',
+                name=f"{benchmark_name} Buy & Hold",
+                line=dict(color='red', width=2, dash='dash')
+            ))
+            
+            # Add significant signals with their corresponding benchmark curves
+            colors = ['blue', 'green', 'purple', 'orange', 'brown', 'pink', 'gray', 'olive']
+            for i, (idx, row) in enumerate(top_significant.iterrows()):
+                # Debug: Check if equity curve exists
+                if 'equity_curve' in row and row['equity_curve'] is not None:
+                    color = colors[i % len(colors)]
+                    
+                    # Add strategy equity curve
+                    fig_comparison.add_trace(go.Scatter(
+                        x=row['equity_curve'].index,
+                        y=row['equity_curve'].values,
+                        mode='lines',
+                        name=f"RSI {row['RSI_Threshold']} Strategy (Cumulative: {row['Total_Return']:.3%}, Annualized: {row['annualized_return']:.3%})",
+                        line=dict(color=color, width=2)
+                    ))
+                    
+                    # Add corresponding benchmark equity curve under same conditions
+                    # We need to calculate the benchmark equity curve for this specific RSI threshold
+                    signal_data = st.session_state.get('signal_data')
+                    benchmark_data = st.session_state.get('benchmark_data')
+                    rsi_period = st.session_state.get('rsi_period', 14)
+                    comparison = st.session_state.get('comparison', 'less_than')
+                    
+                    if signal_data is not None and benchmark_data is not None:
+                        # Calculate RSI for the signal
+                        signal_rsi = calculate_rsi(signal_data, window=rsi_period, method="wilders")
+                        
+                        # Generate buy signals for benchmark (same as strategy)
+                        if comparison == "less_than":
+                            benchmark_signals = (signal_rsi <= row['RSI_Threshold']).astype(int)
+                        else:  # greater_than
+                            benchmark_signals = (signal_rsi >= row['RSI_Threshold']).astype(int)
+                        
+                        # Calculate benchmark equity curve using benchmark prices (same logic as strategy)
+                        benchmark_equity_curve = pd.Series(1.0, index=benchmark_data.index)
+                        current_equity = 1.0
+                        in_position = False
+                        entry_equity = 1.0
+                        entry_price = None
+                        
+                        for date in benchmark_data.index:
+                            current_signal = benchmark_signals[date] if date in benchmark_signals.index else 0
+                            current_price = benchmark_data[date]
+                            
+                            if current_signal == 1 and not in_position:
+                                # Enter position
+                                in_position = True
+                                entry_equity = current_equity
+                                entry_price = current_price
+                                
+                            elif current_signal == 0 and in_position:
+                                # Exit position
+                                trade_return = (current_price - entry_price) / entry_price
+                                current_equity = entry_equity * (1 + trade_return)
+                                in_position = False
+                            
+                            # Update equity curve
+                            if in_position:
+                                current_equity = entry_equity * (current_price / entry_price)
+                            
+                            benchmark_equity_curve[date] = current_equity
+                        
+                        # Handle case where we're still in position at the end
+                        if in_position:
+                            final_price = benchmark_data.iloc[-1]
+                            trade_return = (final_price - entry_price) / entry_price
+                            current_equity = entry_equity * (1 + trade_return)
+                            benchmark_equity_curve.iloc[-1] = current_equity
+                        
+                        # Add benchmark equity curve under same conditions
+                        fig_comparison.add_trace(go.Scatter(
+                            x=benchmark_equity_curve.index,
+                            y=benchmark_equity_curve.values,
+                            mode='lines',
+                            name=f"RSI {row['RSI_Threshold']} Benchmark (same conditions)",
+                            line=dict(color=color, width=1, dash='dot'),
+                            visible='legendonly'  # Hidden by default
+                        ))
+                else:
+                    st.warning(f"No equity curve found for RSI {row['RSI_Threshold']}")
+            
+            # Find the shortest time period among visible curves for default scaling
+            shortest_period = None
+            shortest_duration = float('inf')
+            
+            # Check strategy curves (these are always visible)
+            for i, (idx, row) in enumerate(top_significant.iterrows()):
+                if 'equity_curve' in row and row['equity_curve'] is not None:
+                    curve_duration = (row['equity_curve'].index[-1] - row['equity_curve'].index[0]).days
+                    if curve_duration < shortest_duration:
+                        shortest_duration = curve_duration
+                        shortest_period = row['equity_curve']
+            
+            # If no strategy curves found, use benchmark
+            if shortest_period is None:
+                shortest_period = benchmark
+            
+            fig_comparison.update_layout(
+                title=f"Highest Cumulative Return Significant Signals Comparison vs {benchmark_name}",
+                xaxis_title="Date",
+                yaxis_title="Equity Value",
+                hovermode='x unified',
+                legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01),
+                xaxis=dict(range=[shortest_period.index[0], shortest_period.index[-1]])  # Scale to shortest period
+            )
+            st.plotly_chart(fig_comparison, use_container_width=True, key="most_profitable_comparison")
+            
+            # Highest Sortino Significant Signals Comparison
+            st.subheader("📊 Highest Sortino Significant Signals Comparison")
+            st.info(f"💡 **What this shows:** This chart compares the top 5 signals with the highest Sortino ratios (best risk-adjusted returns) among statistically significant signals against {benchmark_name} buy-and-hold. Each line represents a different RSI threshold that showed significant outperformance with excellent risk-adjusted performance. The signals are ranked by Sortino ratio, showing the best risk-adjusted returns first.")
+            
+            # Sort by Sortino ratio (best risk-adjusted returns) instead of annualized return
+            # Use the original results_df for sorting since it has numerical values
+            original_significant_signals = st.session_state['results_df'][st.session_state['results_df']['significant'] == True].copy()
+            top_sortino_significant = original_significant_signals.nlargest(5, 'Sortino_Ratio')
+            
+            # Create comparison chart with highest Sortino signals
+            fig_sortino_comparison = go.Figure()
+            
+            # Add benchmark buy-and-hold
+            fig_sortino_comparison.add_trace(go.Scatter(
+                x=benchmark.index,
+                y=benchmark.values,
+                mode='lines',
+                name=f"{benchmark_name} Buy & Hold",
+                line=dict(color='red', width=2, dash='dash')
+            ))
+            
+            # Add significant signals with highest Sortino ratios and their corresponding benchmark curves
+            colors = ['blue', 'green', 'purple', 'orange', 'brown', 'pink', 'gray', 'olive']
+            for i, (idx, row) in enumerate(top_sortino_significant.iterrows()):
+                # Debug: Check if equity curve exists
+                if 'equity_curve' in row and row['equity_curve'] is not None:
+                    color = colors[i % len(colors)]
+                    
+                    # Add strategy equity curve
+                    fig_sortino_comparison.add_trace(go.Scatter(
+                        x=row['equity_curve'].index,
+                        y=row['equity_curve'].values,
+                        mode='lines',
+                        name=f"RSI {row['RSI_Threshold']} Strategy (Cumulative: {row['Total_Return']:.3%}, Annualized: {row['annualized_return']:.3%}, Sortino: {row['Sortino_Ratio']:.2f})",
+                        line=dict(color=color, width=2)
+                    ))
+                    
+                    # Add corresponding benchmark equity curve under same conditions
+                    # We need to calculate the benchmark equity curve for this specific RSI threshold
+                    signal_data = st.session_state.get('signal_data')
+                    benchmark_data = st.session_state.get('benchmark_data')
+                    rsi_period = st.session_state.get('rsi_period', 14)
+                    comparison = st.session_state.get('comparison', 'less_than')
+                    
+                    if signal_data is not None and benchmark_data is not None:
+                        # Calculate RSI for the signal
+                        signal_rsi = calculate_rsi(signal_data, window=rsi_period, method="wilders")
+                        
+                        # Generate buy signals for benchmark (same as strategy)
+                        if comparison == "less_than":
+                            benchmark_signals = (signal_rsi <= row['RSI_Threshold']).astype(int)
+                        else:  # greater_than
+                            benchmark_signals = (signal_rsi >= row['RSI_Threshold']).astype(int)
+                        
+                        # Calculate benchmark equity curve using benchmark prices (same logic as strategy)
+                        benchmark_equity_curve = pd.Series(1.0, index=benchmark_data.index)
+                        current_equity = 1.0
+                        in_position = False
+                        entry_equity = 1.0
+                        entry_price = None
+                        
+                        for date in benchmark_data.index:
+                            current_signal = benchmark_signals[date] if date in benchmark_signals.index else 0
+                            current_price = benchmark_data[date]
+                            
+                            if current_signal == 1 and not in_position:
+                                # Enter position
+                                in_position = True
+                                entry_equity = current_equity
+                                entry_price = current_price
+                                
+                            elif current_signal == 0 and in_position:
+                                # Exit position
+                                trade_return = (current_price - entry_price) / entry_price
+                                current_equity = entry_equity * (1 + trade_return)
+                                in_position = False
+                            
+                            # Update equity curve
+                            if in_position:
+                                current_equity = entry_equity * (current_price / entry_price)
+                            
+                            benchmark_equity_curve[date] = current_equity
+                        
+                        # Handle case where we're still in position at the end
+                        if in_position:
+                            final_price = benchmark_data.iloc[-1]
+                            trade_return = (final_price - entry_price) / entry_price
+                            current_equity = entry_equity * (1 + trade_return)
+                            benchmark_equity_curve.iloc[-1] = current_equity
+                        
+                        # Add benchmark equity curve under same conditions
+                        fig_sortino_comparison.add_trace(go.Scatter(
+                            x=benchmark_equity_curve.index,
+                            y=benchmark_equity_curve.values,
+                            mode='lines',
+                            name=f"RSI {row['RSI_Threshold']} Benchmark (same conditions)",
+                            line=dict(color=color, width=1, dash='dot'),
+                            visible='legendonly'  # Hidden by default
+                        ))
+                else:
+                    st.warning(f"No equity curve found for RSI {row['RSI_Threshold']}")
+            
+            # Find the shortest time period among visible curves for default scaling
+            shortest_period = None
+            shortest_duration = float('inf')
+            
+            # Check strategy curves (these are always visible)
+            for i, (idx, row) in enumerate(top_sortino_significant.iterrows()):
+                if 'equity_curve' in row and row['equity_curve'] is not None:
+                    curve_duration = (row['equity_curve'].index[-1] - row['equity_curve'].index[0]).days
+                    if curve_duration < shortest_duration:
+                        shortest_duration = curve_duration
+                        shortest_period = row['equity_curve']
+            
+            # If no strategy curves found, use benchmark
+            if shortest_period is None:
+                shortest_period = benchmark
+            
+            fig_sortino_comparison.update_layout(
+                title=f"Highest Sortino Significant Signals Comparison vs {benchmark_name}",
+                xaxis_title="Date",
+                yaxis_title="Equity Value",
+                hovermode='x unified',
+                legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01),
+                xaxis=dict(range=[shortest_period.index[0], shortest_period.index[-1]])  # Scale to shortest period
+            )
+            st.plotly_chart(fig_sortino_comparison, use_container_width=True, key="highest_sortino_comparison")
+            
+        else:
+            st.warning("No signals reached statistical significance (p < 0.05)")
+        
+        # Target vs Benchmark Return Comparison Analysis
+        st.subheader("📊 Target vs Benchmark Return Comparison")
+        st.info(f"💡 **What this shows:** This section compares the average returns of holding the target ticker versus the benchmark ticker under the same RSI conditions. It shows the **difference** (delta) and **ratio** between target and benchmark performance, helping you understand if your target ticker choice is actually better than the benchmark when the same signals are applied.")
+        
+        # Calculate delta and ratio for all signals
+        original_filtered_data = st.session_state['results_df'][st.session_state['results_df']['RSI_Threshold'].isin(filtered_df['RSI_Threshold'])]
+        
+        # Calculate delta (target return - benchmark return)
+        original_filtered_data['Return_Delta'] = original_filtered_data['Avg_Return'] - original_filtered_data['Benchmark_Avg_Return']
+        
+        # Calculate ratio (target return / benchmark return, avoiding division by zero)
+        original_filtered_data['Return_Ratio'] = np.where(
+            original_filtered_data['Benchmark_Avg_Return'] != 0,
+            original_filtered_data['Avg_Return'] / original_filtered_data['Benchmark_Avg_Return'],
+            np.where(original_filtered_data['Avg_Return'] > 0, np.inf, np.where(original_filtered_data['Avg_Return'] < 0, -np.inf, 1))
+        )
+        
+        # Return Delta vs RSI Threshold Chart
+        st.subheader("📊 Return Delta vs RSI Threshold")
+        st.info("💡 **What this shows:** This chart displays the **difference** between target ticker average return and benchmark average return across different RSI thresholds. Positive values mean the target outperforms the benchmark, negative values mean the benchmark outperforms the target.")
+        
+        fig_delta_rsi = go.Figure()
+        
+        # Add points for significant signals (green)
+        significant_data = original_filtered_data[original_filtered_data['significant'] == True]
+        if not significant_data.empty:
+            fig_delta_rsi.add_trace(go.Scatter(
+                x=significant_data['RSI_Threshold'],
+                y=significant_data['Return_Delta'],
+                mode='markers',
+                name='Significant Signals',
+                marker=dict(color='green', size=8),
+                hovertemplate='<b>RSI %{x}</b><br>' +
+                            'Return Delta: %{y:.3%}<br>' +
+                            'Target Avg: %{customdata[0]:.3%}<br>' +
+                            'Benchmark Avg: %{customdata[1]:.3%}<br>' +
+                            'Significant: ✓<extra></extra>',
+                customdata=significant_data[['Avg_Return', 'Benchmark_Avg_Return']].values
+            ))
+        
+        # Add points for non-significant signals (red)
+        non_significant_data = original_filtered_data[original_filtered_data['significant'] == False]
+        if not non_significant_data.empty:
+            fig_delta_rsi.add_trace(go.Scatter(
+                x=non_significant_data['RSI_Threshold'],
+                y=non_significant_data['Return_Delta'],
+                mode='markers',
+                name='Non-Significant Signals',
+                marker=dict(color='red', size=8),
+                hovertemplate='<b>RSI %{x}</b><br>' +
+                            'Return Delta: %{y:.3%}<br>' +
+                            'Target Avg: %{customdata[0]:.3%}<br>' +
+                            'Benchmark Avg: %{customdata[1]:.3%}<br>' +
+                            'Significant: ✗<extra></extra>',
+                customdata=non_significant_data[['Avg_Return', 'Benchmark_Avg_Return']].values
+            ))
+        
+        # Add reference line at y=0
+        fig_delta_rsi.add_hline(y=0, line_dash="dash", line_color="gray", 
+                               annotation_text="No Difference")
+        
+        fig_delta_rsi.update_layout(
+            title="Return Delta (Target - Benchmark) vs RSI Threshold",
+            xaxis_title="RSI Threshold",
+            yaxis_title="Return Delta (%)",
+            hovermode='closest',
+            xaxis=dict(range=[0, 100]),
+            yaxis=dict(tickformat='.1%'),
+            showlegend=True
+        )
+        
+        st.plotly_chart(fig_delta_rsi, use_container_width=True, key="delta_rsi_chart")
+        
+        # Return Ratio vs RSI Threshold Chart
+        st.subheader("📊 Return Ratio vs RSI Threshold")
+        st.info("💡 **What this shows:** This chart displays the **ratio** between target ticker average return and benchmark average return across different RSI thresholds. Values > 1 mean the target outperforms the benchmark, values < 1 mean the benchmark outperforms the target.")
+        
+        fig_ratio_rsi = go.Figure()
+        
+        # Filter out infinite values for display
+        finite_data = original_filtered_data[np.isfinite(original_filtered_data['Return_Ratio'])]
+        
+        # Add points for significant signals (green)
+        significant_finite = finite_data[finite_data['significant'] == True]
+        if not significant_finite.empty:
+            fig_ratio_rsi.add_trace(go.Scatter(
+                x=significant_finite['RSI_Threshold'],
+                y=significant_finite['Return_Ratio'],
+                mode='markers',
+                name='Significant Signals',
+                marker=dict(color='green', size=8),
+                hovertemplate='<b>RSI %{x}</b><br>' +
+                            'Return Ratio: %{y:.2f}x<br>' +
+                            'Target Avg: %{customdata[0]:.3%}<br>' +
+                            'Benchmark Avg: %{customdata[1]:.3%}<br>' +
+                            'Significant: ✓<extra></extra>',
+                customdata=significant_finite[['Avg_Return', 'Benchmark_Avg_Return']].values
+            ))
+        
+        # Add points for non-significant signals (red)
+        non_significant_finite = finite_data[finite_data['significant'] == False]
+        if not non_significant_finite.empty:
+            fig_ratio_rsi.add_trace(go.Scatter(
+                x=non_significant_finite['RSI_Threshold'],
+                y=non_significant_finite['Return_Ratio'],
+                mode='markers',
+                name='Non-Significant Signals',
+                marker=dict(color='red', size=8),
+                hovertemplate='<b>RSI %{x}</b><br>' +
+                            'Return Ratio: %{y:.2f}x<br>' +
+                            'Target Avg: %{customdata[0]:.3%}<br>' +
+                            'Benchmark Avg: %{customdata[1]:.3%}<br>' +
+                            'Significant: ✗<extra></extra>',
+                customdata=non_significant_finite[['Avg_Return', 'Benchmark_Avg_Return']].values
+            ))
+        
+        # Add reference line at y=1
+        fig_ratio_rsi.add_hline(y=1, line_dash="dash", line_color="gray", 
+                               annotation_text="Equal Performance")
+        
+        fig_ratio_rsi.update_layout(
+            title="Return Ratio (Target / Benchmark) vs RSI Threshold",
+            xaxis_title="RSI Threshold",
+            yaxis_title="Return Ratio (x)",
+            hovermode='closest',
+            xaxis=dict(range=[0, 100]),
+            showlegend=True
+        )
+        
+        st.plotly_chart(fig_ratio_rsi, use_container_width=True, key="ratio_rsi_chart")
+        
+        # Summary statistics for delta and ratio
+        st.subheader("📊 Return Comparison Summary")
+        
+        # Calculate summary statistics
+        positive_delta_count = len(original_filtered_data[original_filtered_data['Return_Delta'] > 0])
+        negative_delta_count = len(original_filtered_data[original_filtered_data['Return_Delta'] < 0])
+        total_signals = len(original_filtered_data)
+        
+        significant_positive_delta = len(significant_data[significant_data['Return_Delta'] > 0])
+        significant_negative_delta = len(significant_data[significant_data['Return_Delta'] < 0])
+        total_significant = len(significant_data)
+        
+        # Display summary metrics
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric(
+                label="Target Outperforms Benchmark",
+                value=f"{positive_delta_count}/{total_signals}",
+                delta=f"{(positive_delta_count/total_signals)*100:.1f}% of signals"
+            )
+        
+        with col2:
+            st.metric(
+                label="Significant Outperformance",
+                value=f"{significant_positive_delta}/{total_significant}",
+                delta=f"{(significant_positive_delta/total_significant)*100:.1f}% of significant signals"
+            )
+        
+        with col3:
+            avg_delta = original_filtered_data['Return_Delta'].mean()
+            st.metric(
+                label="Average Return Delta",
+                value=f"{avg_delta:.3%}",
+                delta="Target vs Benchmark"
+            )
+        
+        # Show best and worst performing signals
+        best_delta_idx = original_filtered_data['Return_Delta'].idxmax()
+        worst_delta_idx = original_filtered_data['Return_Delta'].idxmin()
+        
+        st.write("**🏆 Best Performing Signal:**")
+        best_row = original_filtered_data.loc[best_delta_idx]
+        st.write(f"  • RSI {best_row['RSI_Threshold']}: Target {best_row['Avg_Return']:.3%} vs Benchmark {best_row['Benchmark_Avg_Return']:.3%} = **{best_row['Return_Delta']:.3%}** delta")
+        
+        st.write("**📉 Worst Performing Signal:**")
+        worst_row = original_filtered_data.loc[worst_delta_idx]
+        st.write(f"  • RSI {worst_row['RSI_Threshold']}: Target {worst_row['Avg_Return']:.3%} vs Benchmark {worst_row['Benchmark_Avg_Return']:.3%} = **{worst_row['Return_Delta']:.3%}** delta")
+        
+        # Note: QuantStats detailed reports removed to avoid import issues
+        # Basic QuantStats metrics are still available in the main results table
+
+    # Statistical interpretation guide
+    with st.expander("📚 Statistical Significance Guide"):
+        st.write("""
+        **Understanding Statistical Significance:**
+        
+        - **Confidence Level**: Percentage confidence that the signal outperforms the benchmark **under the same RSI conditions**
+        - **P-value**: Probability of getting these results by chance (lower is better)
+        - **Effect Size**: Magnitude of the difference (Cohen's d)
+        - **Significant**: P-value < 0.05 (95% confidence level)
+        
+        **What This Measures:**
+        The confidence level compares your signal (buying/selling the target ticker based on signal RSI) 
+        vs. buying/selling the benchmark based on the **same signal RSI conditions**. This ensures a fair comparison 
+        of whether your target ticker choice is better than the benchmark when the same RSI signals are applied.
+        
+        **Interpretation:**
+        - ✓ **Significant**: Strong evidence your target ticker beats the benchmark under these RSI conditions
+        - ✗ **Not Significant**: Results could be due to chance
+        - **Effect Size**: 
+          - Small: 0.2-0.5
+          - Medium: 0.5-0.8  
+          - Large: > 0.8
+        
+        **Key Metrics Explained:**
+        
+        **📊 Performance Metrics:**
+        - **Total Return**: How much money you would have made (or lost) over the entire period
+        - **Annualized Return**: The yearly return rate, useful for comparing signals over different time periods
+        - **Win Rate**: Percentage of trades that were profitable
+        - **Total Trades**: Number of buy/sell transactions the signal made
+        - **Sortino Ratio**: Risk-adjusted return measure (higher is better, focuses on downside risk)
+        - **Avg Hold Days**: Average number of days the signal held each position
+        
+        **📈 Statistical Metrics:**
+        - **Confidence Level**: How certain we are that the signal beats the benchmark (higher % = more certain)
+        - **P-value**: Probability the results happened by chance (lower = more significant)
+        - **Effect Size**: How much better/worse the signal is compared to the benchmark
+        - **T-statistic**: Statistical measure of the difference between signal and benchmark
+        - **Power**: How likely the test is to detect a real difference if one exists
+        
+        **🎯 What to Look For:**
+        - **High Confidence (>95%)**: Very strong evidence the signal works
+        - **Low P-value (<0.05)**: Results are statistically significant
+        - **Positive Effect Size**: Signal outperforms the benchmark
+        - **High Win Rate**: Signal wins more often than it loses
+        - **Good Sortino Ratio**: Signal has good risk-adjusted returns
+        """)
+
+st.write("---")
+st.write("💡 **Tip:** Try different ticker combinations and RSI conditions to find optimal signal thresholds")
+
+
+
+# Display data quality messages at the bottom
+if 'data_messages' in st.session_state and st.session_state['data_messages']:
+    st.write("---")
+    st.subheader("📊 Data Quality Information")
+    for message in st.session_state['data_messages']:
+        st.info(message)
+
+# Footer
+st.write("---")
+st.markdown("""
+<div style='text-align: center; padding: 20px; color: #666;'>
+    <strong>RSI Threshold Validation Tool</strong><br>
+    Questions? Reach out to @Gobi on Discord
+</div>
+""", unsafe_allow_html=True)
