@@ -1611,10 +1611,6 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
             mime="text/csv"
         )
         
-        # Target vs Benchmark Return Comparison Analysis
-        st.subheader("📊 Target vs Benchmark Return Comparison")
-        st.info(f"💡 **What this shows:** This section compares the average returns of holding the target ticker versus the benchmark ticker under the same RSI conditions. It shows the **difference** (delta) between target and benchmark performance, helping you understand if your target ticker choice is actually better than the benchmark when the same signals are applied.")
-        
         # Calculate delta for all signals
         original_filtered_data = st.session_state['results_df'][st.session_state['results_df']['RSI_Threshold'].isin(filtered_df['RSI_Threshold'])]
         
@@ -1623,7 +1619,7 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
         
         # Return Delta (Average) vs RSI Threshold Chart
         st.subheader("📊 Return Delta (Average) vs RSI Threshold")
-        st.info("💡 **What this shows:** This chart displays the **difference** between target ticker **average** return and benchmark **average** return across different RSI thresholds. Positive values mean the target outperforms the benchmark, negative values mean the benchmark outperforms the target.")
+        st.info("💡 **What this shows:** This chart compares the **average** returns of holding the target ticker versus the benchmark ticker under the same RSI conditions. It displays the **difference** between target ticker **average** return and benchmark **average** return across different RSI thresholds. Positive values mean the target outperforms the benchmark, negative values mean the benchmark outperforms the target.")
         
         fig_delta_rsi = go.Figure()
         
@@ -1679,7 +1675,7 @@ if 'analysis_completed' in st.session_state and st.session_state['analysis_compl
         
         # Return Delta (Median) vs RSI Threshold Chart
         st.subheader("📊 Return Delta (Median) vs RSI Threshold")
-        st.info("💡 **What this shows:** This chart displays the **difference** between target ticker **median** return and benchmark **median** return across different RSI thresholds. Median returns are less affected by extreme outliers than averages, providing a more robust measure of typical performance.")
+        st.info("💡 **What this shows:** This chart compares the **median** returns of holding the target ticker versus the benchmark ticker under the same RSI conditions. It displays the **difference** between target ticker **median** return and benchmark **median** return across different RSI thresholds. Median returns are less affected by extreme outliers than averages, providing a more robust measure of typical performance.")
         
         # Calculate median delta
         original_filtered_data['Median_Return_Delta'] = original_filtered_data['Median_Return'] - original_filtered_data['Benchmark_Median_Return']
