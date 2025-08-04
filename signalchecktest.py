@@ -189,13 +189,26 @@ class SignalDiscovery:
             for date, row in test_data.iterrows():
                 current_price = row['Close']
                 
-                # Generate trading signal (example: MA crossover)
+                # Generate trading signal based on available columns
                 signal = 0
-                if pd.notna(row.get('MA_20')) and pd.notna(row.get('MA_50')):
-                    if row.get('MA_20', 0) > row.get('MA_50', 0):
+                
+                # Check for RSI signal
+                if 'RSI' in row and pd.notna(row['RSI']):
+                    if row['RSI'] < 30:  # Oversold
+                        signal = 1  # Buy signal
+                    elif row['RSI'] > 70:  # Overbought
+                        signal = -1  # Sell signal
+                
+                # Check for MA crossover signal
+                elif 'Fast_MA' in row and 'Slow_MA' in row and pd.notna(row['Fast_MA']) and pd.notna(row['Slow_MA']):
+                    if row['Fast_MA'] > row['Slow_MA']:
                         signal = 1  # Buy signal
                     else:
                         signal = -1  # Sell signal
+                
+                # Check for combined RSI + MA signal
+                elif 'Signal' in row and pd.notna(row['Signal']):
+                    signal = row['Signal']
                 
                 # Execute trades
                 if signal == 1 and position <= 0:  # Buy
@@ -325,6 +338,11 @@ class SignalDiscovery:
         best_score = float('-inf')
         best_config = None
         
+        # Validate inputs
+        if not data or not tickers:
+            st.error("No data or tickers provided for optimization")
+            return None, []
+        
         # Generate allocation combinations
         allocation_combinations = self.generate_random_allocations(tickers, num_iterations)
         
@@ -332,6 +350,8 @@ class SignalDiscovery:
         rsi_periods = [10, 14, 20]
         ma_periods = [20, 50, 100]
         signal_combinations = self.generate_signal_combinations(rsi_periods, ma_periods)
+        
+        st.info(f"Testing {len(allocation_combinations)} allocation combinations and {len(signal_combinations)} signal combinations")
         
         progress_bar = st.progress(0)
         results_summary = []
@@ -342,8 +362,16 @@ class SignalDiscovery:
                     # Generate signals with current config
                     signals = self.generate_signals_optimized(data, signal_config)
                     
+                    # Check if signals were generated successfully
+                    if not signals:
+                        continue
+                    
                     # Run backtest
                     backtest_results = self.backtest_strategy(signals, allocations)
+                    
+                    # Check if backtest results are valid
+                    if not backtest_results:
+                        continue
                     
                     # Calculate overall performance
                     total_return = 0
@@ -351,10 +379,14 @@ class SignalDiscovery:
                     portfolio_history = pd.DataFrame()
                     
                     for ticker, result in backtest_results.items():
-                        if not result['portfolio_history'].empty:
-                            total_return += result['return_pct'] * (allocations.get(ticker, 0) / 100)
-                            total_trades += len(result['trades'])
+                        if result and 'portfolio_history' in result and not result['portfolio_history'].empty:
+                            total_return += result.get('return_pct', 0) * (allocations.get(ticker, 0) / 100)
+                            total_trades += len(result.get('trades', []))
                             portfolio_history = pd.concat([portfolio_history, result['portfolio_history']])
+                    
+                    # Only proceed if we have valid portfolio history
+                    if portfolio_history.empty:
+                        continue
                     
                     # Calculate performance metrics
                     metrics = self.calculate_performance_metrics(portfolio_history)
@@ -392,6 +424,7 @@ class SignalDiscovery:
                         }
                 
                 except Exception as e:
+                    st.warning(f"Error in optimization iteration: {str(e)}")
                     continue
                 
                 # Update progress
