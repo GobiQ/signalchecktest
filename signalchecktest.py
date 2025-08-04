@@ -285,6 +285,11 @@ def main():
     )
     tickers = [t.strip().upper() for t in ticker_input.split('\n') if t.strip()]
     
+    # Validate tickers
+    if not tickers:
+        st.sidebar.warning("Please enter at least one ticker symbol")
+        tickers = ["AAPL"]  # Default fallback
+    
     # Signal Configuration
     st.sidebar.subheader("🎯 Signal Configuration")
     
@@ -329,16 +334,23 @@ def main():
     allocations = {}
     remaining_allocation = 100.0
     
-    for ticker in tickers:
+    # Create a stable list of tickers for allocation
+    ticker_list = list(tickers)
+    
+    for i, ticker in enumerate(ticker_list):
         max_allocation = min(remaining_allocation, 100.0)
-        allocation = st.sidebar.slider(
-            f"{ticker} allocation %",
-            0.0, max_allocation, 
-            min(25.0, max_allocation),
-            key=f"alloc_{ticker}"
-        )
-        allocations[ticker] = allocation
-        remaining_allocation -= allocation
+        try:
+            allocation = st.sidebar.slider(
+                f"{ticker} allocation %",
+                0.0, max_allocation, 
+                min(25.0, max_allocation),
+                key=f"alloc_{i}_{ticker}"
+            )
+            allocations[ticker] = allocation
+            remaining_allocation -= allocation
+        except Exception as e:
+            st.error(f"Error creating slider for {ticker}: {str(e)}")
+            allocations[ticker] = 0.0
     
     st.sidebar.write(f"Remaining allocation: {remaining_allocation:.1f}%")
     
