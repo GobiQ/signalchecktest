@@ -694,14 +694,17 @@ def main():
                     st.error("SignalDiscovery object is missing optimize_strategy method")
                     return
                 
-                best_result, all_results = st.session_state.signal_discovery.optimize_strategy(
-                    data=data, 
-                    tickers=tickers, 
-                    num_iterations=num_iterations, 
-                    optimization_metric=optimization_metric, 
-                    rsi_periods=rsi_periods, 
-                    ma_periods=ma_periods
-                )
+                # Try with a simpler call first
+                try:
+                    best_result, all_results = st.session_state.signal_discovery.optimize_strategy(
+                        data, tickers, num_iterations, optimization_metric, rsi_periods, ma_periods
+                    )
+                except TypeError as e:
+                    st.error(f"TypeError: {str(e)}")
+                    # Fallback to basic optimization without custom periods
+                    best_result, all_results = st.session_state.signal_discovery.optimize_strategy(
+                        data, tickers, num_iterations, optimization_metric
+                    )
                 
                 if best_result is None:
                     st.error("No valid strategies found. Try different parameters.")
