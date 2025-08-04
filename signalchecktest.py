@@ -32,11 +32,33 @@ class SignalDiscovery:
             try:
                 stock = yf.Ticker(ticker)
                 df = stock.history(start=start_date, end=end_date)
-                if not df.empty:
-                    data[ticker] = df
-                    st.success(f"✅ Fetched data for {ticker}")
-                else:
+                
+                # Validate data
+                if df.empty:
                     st.error(f"❌ No data found for {ticker}")
+                    continue
+                
+                # Check for minimum data requirements
+                if len(df) < 50:  # Need at least 50 data points
+                    st.warning(f"⚠️ Insufficient data for {ticker} ({len(df)} points)")
+                    continue
+                
+                # Check for required columns
+                required_columns = ['Open', 'High', 'Low', 'Close', 'Volume']
+                missing_columns = [col for col in required_columns if col not in df.columns]
+                if missing_columns:
+                    st.error(f"❌ Missing columns for {ticker}: {missing_columns}")
+                    continue
+                
+                # Clean data
+                df = df.dropna()
+                if len(df) < 50:
+                    st.warning(f"⚠️ Insufficient data after cleaning for {ticker}")
+                    continue
+                
+                data[ticker] = df
+                st.success(f"✅ Fetched data for {ticker} ({len(df)} points)")
+                
             except Exception as e:
                 st.error(f"❌ Error fetching {ticker}: {str(e)}")
             
@@ -66,7 +88,11 @@ class SignalDiscovery:
         all_signals = {}
         
         for ticker, df in data.items():
+            if df.empty:
+                continue
+                
             signals = pd.DataFrame(index=df.index)
+            signals['Close'] = df['Close']
             
             # Calculate RSI
             rsi_10 = self.calculate_rsi(df['Close'], 10)
@@ -78,8 +104,14 @@ class SignalDiscovery:
                 signals[ma_name] = ma_values
                 signals[f'{ma_name}_Signal'] = df['Close'] > ma_values
             
-            signals['Close'] = df['Close']
-            all_signals[ticker] = signals
+            # Generate trading signals based on RSI and MA
+            signals['RSI_Signal'] = ((rsi_10 < 30).astype(int) - (rsi_10 > 70).astype(int))
+            
+            # MA crossover signals
+            if 'MA_20' in signals.columns and 'MA_50' in signals.columns:
+                signals['MA_Signal'] = (signals['MA_20'] > signals['MA_50']).astype(int)
+            
+            all_signals[ticker] = signals.dropna()
         
         # Generate comparison signals
         for config in signal_config:
@@ -193,22 +225,26 @@ class SignalDiscovery:
                 signal = 0
                 
                 # Check for RSI signal
-                if 'RSI' in row and pd.notna(row['RSI']):
-                    if row['RSI'] < 30:  # Oversold
-                        signal = 1  # Buy signal
-                    elif row['RSI'] > 70:  # Overbought
-                        signal = -1  # Sell signal
+                if 'RSI_Signal' in row and pd.notna(row['RSI_Signal']):
+                    signal = row['RSI_Signal']
                 
                 # Check for MA crossover signal
-                elif 'Fast_MA' in row and 'Slow_MA' in row and pd.notna(row['Fast_MA']) and pd.notna(row['Slow_MA']):
-                    if row['Fast_MA'] > row['Slow_MA']:
+                elif 'MA_Signal' in row and pd.notna(row['MA_Signal']):
+                    signal = row['MA_Signal']
+                
+                # Check for RSI direct values
+                elif 'RSI_10' in row and pd.notna(row['RSI_10']):
+                    if row['RSI_10'] < 30:  # Oversold
+                        signal = 1  # Buy signal
+                    elif row['RSI_10'] > 70:  # Overbought
+                        signal = -1  # Sell signal
+                
+                # Check for MA crossover using MA columns
+                elif 'MA_20' in row and 'MA_50' in row and pd.notna(row['MA_20']) and pd.notna(row['MA_50']):
+                    if row['MA_20'] > row['MA_50']:
                         signal = 1  # Buy signal
                     else:
                         signal = -1  # Sell signal
-                
-                # Check for combined RSI + MA signal
-                elif 'Signal' in row and pd.notna(row['Signal']):
-                    signal = row['Signal']
                 
                 # Execute trades
                 if signal == 1 and position <= 0:  # Buy
@@ -259,33 +295,63 @@ class SignalDiscovery:
         if portfolio_history.empty:
             return {}
         
-        returns = portfolio_history['portfolio_value'].pct_change().dropna()
-        
-        if len(returns) == 0:
+        try:
+            # Ensure portfolio_history has required columns
+            if 'portfolio_value' not in portfolio_history.columns:
+                return {}
+            
+            # Remove any infinite or NaN values
+            portfolio_history = portfolio_history.replace([np.inf, -np.inf], np.nan).dropna()
+            
+            if len(portfolio_history) < 2:
+                return {}
+            
+            returns = portfolio_history['portfolio_value'].pct_change().dropna()
+            
+            if len(returns) == 0:
+                return {}
+            
+            # Calculate metrics with error handling
+            initial_value = portfolio_history['portfolio_value'].iloc[0]
+            final_value = portfolio_history['portfolio_value'].iloc[-1]
+            
+            if initial_value <= 0:
+                return {}
+            
+            total_return = (final_value / initial_value - 1) * 100
+            
+            # Sharpe ratio (assuming 0% risk-free rate)
+            if returns.std() > 0:
+                sharpe_ratio = returns.mean() / returns.std() * np.sqrt(252)
+            else:
+                sharpe_ratio = 0
+            
+            # Maximum drawdown
+            try:
+                cumulative = (1 + returns).cumprod()
+                running_max = cumulative.expanding().max()
+                drawdown = (cumulative - running_max) / running_max
+                max_drawdown = drawdown.min() * 100
+            except:
+                max_drawdown = 0
+            
+            # Win rate (positive return periods)
+            win_rate = (returns > 0).mean() * 100
+            
+            # Volatility
+            volatility = returns.std() * np.sqrt(252) * 100 if returns.std() > 0 else 0
+            
+            return {
+                'total_return': total_return,
+                'sharpe_ratio': sharpe_ratio,
+                'max_drawdown': max_drawdown,
+                'win_rate': win_rate,
+                'volatility': volatility
+            }
+            
+        except Exception as e:
+            st.warning(f"Error calculating performance metrics: {str(e)}")
             return {}
-        
-        # Calculate metrics
-        total_return = (portfolio_history['portfolio_value'].iloc[-1] / portfolio_history['portfolio_value'].iloc[0] - 1) * 100
-        
-        # Sharpe ratio (assuming 0% risk-free rate)
-        sharpe_ratio = returns.mean() / returns.std() * np.sqrt(252) if returns.std() > 0 else 0
-        
-        # Maximum drawdown
-        cumulative = (1 + returns).cumprod()
-        running_max = cumulative.expanding().max()
-        drawdown = (cumulative - running_max) / running_max
-        max_drawdown = drawdown.min() * 100
-        
-        # Win rate (positive return periods)
-        win_rate = (returns > 0).mean() * 100
-        
-        return {
-            'total_return': total_return,
-            'sharpe_ratio': sharpe_ratio,
-            'max_drawdown': max_drawdown,
-            'win_rate': win_rate,
-            'volatility': returns.std() * np.sqrt(252) * 100
-        }
     
     def generate_random_allocations(self, tickers, num_combinations=10):
         """Generate random allocation combinations that sum to 100%"""
@@ -332,7 +398,7 @@ class SignalDiscovery:
         
         return combinations
     
-    def optimize_strategy(self, data, tickers, num_iterations=100, optimization_metric='Total Return'):
+    def optimize_strategy(self, data, tickers, num_iterations=100, optimization_metric='Total Return', rsi_periods=None, ma_periods=None):
         """Optimize strategy by testing different allocations and signal combinations"""
         best_result = None
         best_score = float('-inf')
@@ -346,9 +412,12 @@ class SignalDiscovery:
         # Generate allocation combinations
         allocation_combinations = self.generate_random_allocations(tickers, num_iterations)
         
-        # Generate signal combinations
-        rsi_periods = [10, 14, 20]
-        ma_periods = [20, 50, 100]
+        # Use provided periods or defaults
+        if rsi_periods is None:
+            rsi_periods = [10, 14, 20]
+        if ma_periods is None:
+            ma_periods = [20, 50, 100]
+            
         signal_combinations = self.generate_signal_combinations(rsi_periods, ma_periods)
         
         st.info(f"Testing {len(allocation_combinations)} allocation combinations and {len(signal_combinations)} signal combinations")
@@ -430,6 +499,11 @@ class SignalDiscovery:
                 # Update progress
                 progress = (i * len(signal_combinations) + j + 1) / (len(allocation_combinations) * len(signal_combinations))
                 progress_bar.progress(progress)
+                
+                # Memory cleanup every 10 iterations
+                if (i * len(signal_combinations) + j + 1) % 10 == 0:
+                    import gc
+                    gc.collect()
         
         return best_result, results_summary
     
@@ -615,7 +689,7 @@ def main():
                     return
                 
                 best_result, all_results = st.session_state.signal_discovery.optimize_strategy(
-                    data, tickers, num_iterations, optimization_metric
+                    data, tickers, num_iterations, optimization_metric, rsi_periods, ma_periods
                 )
                 
                 if best_result is None:
