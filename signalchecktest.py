@@ -354,13 +354,13 @@ class SignalDiscovery:
             return {}
     
     def generate_random_allocations(self, tickers, num_combinations=10):
-        """Generate random allocation combinations that sum to 100%"""
+        """Generate single-ticker allocation combinations (100% to one ticker)"""
         allocations_list = []
         
         for _ in range(num_combinations):
-            # Generate random weights
-            weights = np.random.dirichlet(np.ones(len(tickers)))
-            allocations = {ticker: weight * 100 for ticker, weight in zip(tickers, weights)}
+            # Randomly select one ticker to allocate 100% to
+            selected_ticker = np.random.choice(tickers)
+            allocations = {ticker: 100.0 if ticker == selected_ticker else 0.0 for ticker in tickers}
             allocations_list.append(allocations)
         
         return allocations_list
@@ -442,16 +442,21 @@ class SignalDiscovery:
                     if not backtest_results:
                         continue
                     
-                    # Calculate overall performance
+                    # Calculate overall performance (single ticker allocation)
                     total_return = 0
                     total_trades = 0
                     portfolio_history = pd.DataFrame()
+                    allocated_ticker = None
                     
                     for ticker, result in backtest_results.items():
-                        if result and 'portfolio_history' in result and not result['portfolio_history'].empty:
-                            total_return += result.get('return_pct', 0) * (allocations.get(ticker, 0) / 100)
-                            total_trades += len(result.get('trades', []))
-                            portfolio_history = pd.concat([portfolio_history, result['portfolio_history']])
+                        allocation_pct = allocations.get(ticker, 0)
+                        if allocation_pct > 0:  # This is the allocated ticker
+                            allocated_ticker = ticker
+                            if result and 'portfolio_history' in result and not result['portfolio_history'].empty:
+                                total_return = result.get('return_pct', 0)  # Direct return since 100% allocation
+                                total_trades = len(result.get('trades', []))
+                                portfolio_history = result['portfolio_history']
+                            break
                     
                     # Only proceed if we have valid portfolio history
                     if portfolio_history.empty:
@@ -479,7 +484,8 @@ class SignalDiscovery:
                         'total_return': total_return,
                         'metrics': metrics,
                         'total_trades': total_trades,
-                        'score': score
+                        'score': score,
+                        'allocated_ticker': allocated_ticker
                     }
                     results_summary.append(result_summary)
                     
@@ -689,7 +695,12 @@ def main():
                     return
                 
                 best_result, all_results = st.session_state.signal_discovery.optimize_strategy(
-                    data, tickers, num_iterations, optimization_metric, rsi_periods, ma_periods
+                    data=data, 
+                    tickers=tickers, 
+                    num_iterations=num_iterations, 
+                    optimization_metric=optimization_metric, 
+                    rsi_periods=rsi_periods, 
+                    ma_periods=ma_periods
                 )
                 
                 if best_result is None:
@@ -756,8 +767,12 @@ def main():
                 with col4:
                     st.metric("Win Rate", f"{best_result['metrics'].get('win_rate', 0):.1f}%")
                 
-                # Display best allocations
-                st.subheader("Optimal Allocations")
+                # Display best allocation
+                st.subheader("Optimal Allocation")
+                allocated_ticker = best_result.get('allocated_ticker', 'Unknown')
+                st.success(f"**Best Strategy:** 100% allocation to {allocated_ticker}")
+                
+                # Show allocation breakdown
                 allocation_df = pd.DataFrame([
                     {'Ticker': ticker, 'Allocation %': allocation}
                     for ticker, allocation in best_result['allocations'].items()
@@ -795,7 +810,9 @@ def main():
                 # Create results dataframe
                 results_data = []
                 for result in all_results:
+                    allocated_ticker = result.get('allocated_ticker', 'Unknown')
                     results_data.append({
+                        'Ticker': allocated_ticker,
                         'Total Return (%)': f"{result['total_return']:.2f}",
                         'Sharpe Ratio': f"{result['metrics'].get('sharpe_ratio', 0):.2f}",
                         'Max Drawdown (%)': f"{result['metrics'].get('max_drawdown', 0):.2f}",
@@ -814,8 +831,10 @@ def main():
                     
                     top_results_data = []
                     for i, result in enumerate(sorted_results, 1):
+                        allocated_ticker = result.get('allocated_ticker', 'Unknown')
                         top_results_data.append({
                             'Rank': i,
+                            'Ticker': allocated_ticker,
                             'Total Return (%)': f"{result['total_return']:.2f}",
                             'Signal Type': result['signal_config']['type'],
                             'Sharpe Ratio': f"{result['metrics'].get('sharpe_ratio', 0):.2f}"
